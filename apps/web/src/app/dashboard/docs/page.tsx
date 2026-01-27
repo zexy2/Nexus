@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
@@ -77,70 +77,6 @@ interface Document {
   isFavorite: boolean;
   tags?: string[];
 }
-
-// Sample documents
-const sampleDocuments: Document[] = [
-  {
-    id: "1",
-    title: "Proje Planı 2025",
-    iconEmoji: "📋",
-    content: "Bu döküman 2025 yılı için stratejik hedeflerimizi içermektedir...",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 30),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7),
-    createdBy: "Kullanıcı",
-    isAI: false,
-    isFavorite: true,
-    tags: ["proje", "planlama"],
-  },
-  {
-    id: "2",
-    title: "API Dökümantasyonu",
-    iconEmoji: "🔌",
-    content: "RESTful API endpoint'leri ve kullanım örnekleri...",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 14),
-    createdBy: "Araştırma Ajanı",
-    isAI: true,
-    isFavorite: false,
-    tags: ["api", "teknik"],
-  },
-  {
-    id: "3",
-    title: "Kullanıcı Araştırması",
-    iconEmoji: "👥",
-    content: "Kullanıcı görüşmeleri ve feedback analizi...",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
-    createdBy: "Kullanıcı",
-    isAI: false,
-    isFavorite: true,
-    tags: ["kullanıcı", "araştırma"],
-  },
-  {
-    id: "4",
-    title: "Haftalık Rapor",
-    iconEmoji: "📊",
-    content: "Bu haftanın performans metrikleri ve KPI'lar...",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2),
-    createdBy: "Raporlama Ajanı",
-    isAI: true,
-    isFavorite: false,
-    tags: ["rapor", "haftalık"],
-  },
-  {
-    id: "5",
-    title: "Toplantı Notları",
-    iconEmoji: "📝",
-    content: "Sprint planning toplantısı notları ve aksiyonlar...",
-    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 48),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48),
-    createdBy: "Kullanıcı",
-    isAI: false,
-    isFavorite: false,
-    tags: ["toplantı", "sprint"],
-  },
-];
 
 // Emoji picker options
 const emojiOptions = [
@@ -508,12 +444,45 @@ export default function DocsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocEmoji, setNewDocEmoji] = useState("📄");
-  const [documents, setDocuments] = useState<Document[]>(sampleDocuments);
-  const [isLoading, setIsLoading] = useState(false);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const { documentsView, setDocumentsView } = useUIStore();
+
+  // Fetch documents from API on mount
+  const fetchDocuments = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch("/api/docs");
+      if (res.ok) {
+        const data = await res.json();
+        setDocuments(
+          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null }) => ({
+            id: d.id,
+            title: d.title,
+            iconEmoji: d.iconEmoji || "📄",
+            updatedAt: new Date(d.updatedAt),
+            createdAt: new Date(d.updatedAt),
+            createdBy: d.createdBy || "User",
+            isAI: false,
+            isFavorite: false,
+          }))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to fetch documents:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Load documents on mount
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   // Filter and sort documents
   const filteredDocuments = useMemo(() => {
@@ -546,28 +515,51 @@ export default function DocsPage() {
   }, [documents, searchQuery, sortBy, showFavoritesOnly]);
 
   // Handlers
-  const handleCreateDocument = useCallback(() => {
+  const handleCreateDocument = useCallback(async () => {
     if (!newDocTitle.trim()) {
       showToast.warning("Lütfen döküman adı girin");
       return;
     }
 
-    const newDoc: Document = {
-      id: Date.now().toString(),
-      title: newDocTitle,
-      iconEmoji: newDocEmoji,
-      updatedAt: new Date(),
-      createdAt: new Date(),
-      createdBy: "Kullanıcı",
-      isAI: false,
-      isFavorite: false,
-    };
+    try {
+      setIsCreating(true);
+      const res = await fetch("/api/docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newDocTitle,
+          iconEmoji: newDocEmoji,
+        }),
+      });
 
-    setDocuments((prev) => [newDoc, ...prev]);
-    setNewDocTitle("");
-    setNewDocEmoji("📄");
-    setIsCreateOpen(false);
-    showToast.success("Döküman oluşturuldu");
+      if (!res.ok) {
+        throw new Error("Failed to create document");
+      }
+
+      const data = await res.json();
+      
+      const newDoc: Document = {
+        id: data.id,
+        title: data.title,
+        iconEmoji: data.iconEmoji || newDocEmoji,
+        updatedAt: new Date(data.updatedAt),
+        createdAt: new Date(data.updatedAt),
+        createdBy: data.createdBy || "User",
+        isAI: false,
+        isFavorite: false,
+      };
+
+      setDocuments((prev) => [newDoc, ...prev]);
+      setNewDocTitle("");
+      setNewDocEmoji("📄");
+      setIsCreateOpen(false);
+      showToast.success("Döküman oluşturuldu");
+    } catch (error) {
+      console.error("Failed to create document:", error);
+      showToast.error("Döküman oluşturulamadı");
+    } finally {
+      setIsCreating(false);
+    }
   }, [newDocTitle, newDocEmoji]);
 
   const handleDuplicate = useCallback((id: string) => {

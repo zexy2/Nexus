@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       );
     }
     
-    const { title, content } = body;
+    const { title, content, iconEmoji } = body;
     
     // Validate title length
     if (title && typeof title === "string" && title.length > 500) {
@@ -124,6 +124,7 @@ export async function POST(req: Request) {
       .values({
         workspaceId: workspace.id,
         title: title || "Untitled",
+        iconEmoji: iconEmoji || "📄",
         content: contentToSave,
         createdBy: userId,
       })

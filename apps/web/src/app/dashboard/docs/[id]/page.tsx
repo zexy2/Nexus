@@ -6,7 +6,6 @@ import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -343,7 +342,6 @@ export default function DocDetailPage() {
     <div className="flex flex-col h-screen">
       {/* Header */}
       <header className="flex items-center gap-4 border-b px-6 py-3">
-        <SidebarTrigger />
         <Link href="/dashboard/docs">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="size-4" />
