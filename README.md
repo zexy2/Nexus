@@ -97,7 +97,7 @@ nexus/
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/nexus.git
+git clone https://github.com/zexy2/nexus.git
 cd nexus
 
 # Install dependencies
