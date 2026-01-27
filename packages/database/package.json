@@ -1,0 +1,38 @@
+{
+  "name": "@nexus/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./schema": {
+      "import": "./dist/schema/index.js",
+      "types": "./dist/schema/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.41.0",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@nexus/typescript-config": "workspace:*",
+    "@types/node": "^25.0.9",
+    "drizzle-kit": "^0.30.6",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3"
+  }
+}

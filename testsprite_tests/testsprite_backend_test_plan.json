@@ -1,0 +1,52 @@
+[
+  {
+    "id": "TC001",
+    "title": "testuserauthenticationwithemailpasswordandoauth",
+    "description": "Verify user authentication functionality including login and registration using email/password and OAuth providers such as GitHub and Google, ensuring session persistence and secure handling."
+  },
+  {
+    "id": "TC002",
+    "title": "testdocumentmanagementwithrichtexteditorandaiasistance",
+    "description": "Validate document creation, editing, and saving features with the rich text editor supporting headings, lists, code blocks, inline AI writing commands, and auto-save functionality."
+  },
+  {
+    "id": "TC003",
+    "title": "testkanbantaskmanagementwithdraganddroppriorityandassignment",
+    "description": "Test the Kanban-style task board for creating, prioritizing, assigning tasks to AI agents or users, setting due dates, and drag-and-drop task movement between columns."
+  },
+  {
+    "id": "TC004",
+    "title": "testaiagentsworkflowexecutionandhistorytracking",
+    "description": "Ensure AI agents (Supervisor, Researcher, Writer, Coder, Project Manager) can execute workflows with real-time progress updates, history tracking, output viewing, and support retry and cancel operations."
+  },
+  {
+    "id": "TC005",
+    "title": "testaichatinterfacewithmultipleagentmodesandmessagefunctionality",
+    "description": "Verify AI chat interface supports multiple agent modes, maintains message history, and provides copy and retry options for AI-generated responses."
+  },
+  {
+    "id": "TC006",
+    "title": "testusersettingsprofileaimodelapikeynotificationsandappearance",
+    "description": "Check user settings functionality including profile updates, AI model configuration, API key management with encryption, notification preferences, theme selection, and sync options."
+  },
+  {
+    "id": "TC007",
+    "title": "testglobalcommandpaletteforquicknavigationandactions",
+    "description": "Validate the global command palette allows users to quickly navigate through the application and perform actions efficiently with keyboard shortcuts and search capabilities."
+  },
+  {
+    "id": "TC008",
+    "title": "testlandingpagecontentdisplayandresponsiveness",
+    "description": "Verify the marketing landing page displays hero section, stats, bento gallery, features, testimonials, and footer correctly and is responsive across devices."
+  },
+  {
+    "id": "TC009",
+    "title": "testdashboarddisplayofstatsagentactivitydocumentsandtasks",
+    "description": "Ensure the main dashboard correctly displays user stats, AI agent activity, recent documents, priority tasks, and quick action buttons in the bento grid layout."
+  },
+  {
+    "id": "TC010",
+    "title": "testsecurityfeaturesincludingapikeyencryptionhttpsandcsrfprotection",
+    "description": "Test security features such as encrypted API keys, HTTPS enforcement, secure cookies, CSRF protection, input sanitization, and rate limiting to protect user data and application integrity."
+  }
+]

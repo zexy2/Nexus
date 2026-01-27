@@ -1,0 +1,53 @@
+{
+  "name": "@nexus/workflows",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client.js",
+      "types": "./dist/client.d.ts"
+    },
+    "./activities": {
+      "import": "./dist/activities.js",
+      "types": "./dist/activities.d.ts"
+    },
+    "./workflows": {
+      "import": "./dist/workflows.js",
+      "types": "./dist/workflows.d.ts"
+    },
+    "./worker": {
+      "import": "./dist/worker.js",
+      "types": "./dist/worker.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "worker": "tsx src/worker.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.11.7",
+    "@temporalio/client": "^1.11.7",
+    "@temporalio/worker": "^1.11.7",
+    "@temporalio/workflow": "^1.11.7",
+    "@nexus/agents": "workspace:*",
+    "postgres": "^3.4.4",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@nexus/typescript-config": "workspace:*",
+    "@types/node": "^22.15.7",
+    "tsup": "^8.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.4"
+  }
+}

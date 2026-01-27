@@ -1,0 +1,80 @@
+# Docker Compose for Nexus Development
+# Includes PostgreSQL with pgvector and Temporal.io
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: nexus-postgres
+    environment:
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexusdev
+      POSTGRES_DB: nexus
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Temporal Server (all-in-one development image)
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: nexus-temporal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=nexus
+      - POSTGRES_PWD=nexusdev
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7233/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: nexus-temporal-ui
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+    ports:
+      - "8080:8080"
+
+  # Zero Sync Server - runs as Node.js service outside Docker
+  # Use: npx zero-cache --upstream-db="postgresql://nexus:nexusdev@localhost:5432/nexus"
+  # Zero is installed via npm in the project and runs alongside Next.js
+
+  # Jaeger - Distributed Tracing
+  jaeger:
+    image: jaegertracing/all-in-one:1.54
+    container_name: nexus-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: nexus-network
