@@ -97,8 +97,8 @@ nexus/
 
 ```bash
 # Clone the repository
-git clone https://github.com/zexy2/nexus.git
-cd nexus
+git clone https://github.com/zexy2/Nexus.git
+cd Nexus
 
 # Install dependencies
 pnpm install
