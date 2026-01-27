@@ -1,264 +1,184 @@
-# 🌟 Nexus
+# Nexus
 
-> **Yerel-Öncelikli, Otonom Çoklu-Ajan Orkestrasyonu ve İşbirliği Platformu**
+> Local-First, Multi-Agent AI Orchestration Platform
 
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![Local-First](https://img.shields.io/badge/Local--First-Custom%20Sync-purple)](docs/adr/001-local-first-architecture.md)
-[![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-green)](https://langchain-ai.github.io/langgraph/)
-[![Temporal](https://img.shields.io/badge/Temporal-Durable--Execution-orange)](https://temporal.io/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+## Overview
 
-## 📋 Proje Özeti
+Nexus is a full-stack productivity platform that combines three modern architectural paradigms:
 
-**Nexus**, modern yazılım mimarisinin üç temel paradigmasını birleştiren bir tam yığın (Full Stack) portföy projesidir:
+- **Local-First Architecture** — Instant UI with optimistic updates, offline support, and sync
+- **Multi-Agent AI** — Autonomous agent orchestration using LangGraph for complex task execution
+- **Durable Execution** — Fault-tolerant workflows with Temporal.io
 
-1. **🏠 Yerel-Öncelikli Mimari (Local-First)** - Zero Sync ile 0ms gecikme, çevrimdışı çalışma
-2. **🤖 Ajanik Yapay Zeka (Multi-Agent AI)** - LangGraph ile otonom ajan orkestrasyonu
-3. **🔒 Dayanıklı Yürütme (Durable Execution)** - Temporal.io ile hata toleransı
+## Architecture
 
-Bu proje, bir mezun adayın "kod yazabildiğini" değil, **"sistem tasarlayabildiğini"** kanıtlamak için tasarlanmıştır.
-
----
-
-## 🏗️ Mimari Genel Bakış
-
-```mermaid
-flowchart TB
-    subgraph UI["🖥️ KULLANICI ARAYÜZÜ"]
-        NextJS["Next.js 16 + Tailwind v4 + Shadcn/ui"]
-    end
-
-    subgraph LocalFirst["🏠 YEREL-ÖNCELİKLİ VERİ KATMANI"]
-        direction LR
-        IndexedDB["IndexedDB<br/>(Client)"]
-        WebSocket["WebSocket<br/>(Sync)"]
-        PostgreSQL["PostgreSQL<br/>(Server)"]
-        IndexedDB <-->|CRDT| WebSocket <--> PostgreSQL
-    end
-
-    subgraph Agents["🤖 AI AJAN ORKESTRASYONU - LangGraph"]
-        Supervisor["SUPERVISOR<br/>(Yönetici)"]
-        Research["🔍 Research<br/>Agent"]
-        Writer["✍️ Writer<br/>Agent"]
-        Coder["💻 Coder<br/>Agent"]
-        TaskAgent["📋 Task<br/>Agent"]
-        
-        Supervisor --> Research
-        Supervisor --> Writer
-        Supervisor --> Coder
-        Supervisor --> TaskAgent
-    end
-
-    subgraph Temporal["🔒 DAYANIKLI YÜRÜTME - Temporal.io"]
-        direction LR
-        Start["Workflow<br/>Start"]
-        Act1["Activity 1<br/>(Research)"]
-        Act2["Activity 2<br/>(Write)"]
-        ActN["Activity N<br/>(Notify)"]
-        Saga["Saga Pattern<br/>+ Compensation"]
-        
-        Start --> Act1 --> Act2 --> ActN
-        Act1 -.->|Hata| Saga
-    end
-
-    UI --> LocalFirst
-    LocalFirst --> Agents
-    Agents --> Temporal
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Client Layer                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐              │
+│  │  React UI   │  │  IndexedDB  │  │  WebSocket  │              │
+│  │  (Next.js)  │  │  (Offline)  │  │   (Sync)    │              │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘              │
+└─────────┼────────────────┼────────────────┼─────────────────────┘
+          │                │                │
+┌─────────┼────────────────┼────────────────┼─────────────────────┐
+│         ▼                ▼                ▼     API Layer       │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              Next.js API Routes + BetterAuth            │    │
+│  └─────────────────────────┬───────────────────────────────┘    │
+└─────────────────────────────┼───────────────────────────────────┘
+                              │
+┌─────────────────────────────┼───────────────────────────────────┐
+│                             ▼        Service Layer              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  LangGraph   │  │   Temporal   │  │   Drizzle    │          │
+│  │   Agents     │  │  Workflows   │  │     ORM      │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────┼───────────────────────────────────┐
+│                             ▼        Data Layer                 │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │           PostgreSQL + pgvector (Embeddings)            │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-> ⚠️ **Not:** Local-First senkronizasyonu için **custom Zero Sync Engine** implementasyonu kullanılmaktadır.
-> Bu implementasyon, Zero/Rocicorp konseptlerinden esinlenmiş olup, resmi `@rocicorp/zero` SDK'sı değildir.
-> IndexedDB + REST API tabanlı optimistic updates ve offline-first pattern'ları içerir.
+## Tech Stack
 
----
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| Frontend | Next.js 15, React 19, Tailwind CSS | App Router, Server Components |
+| Database | PostgreSQL 16, pgvector, Drizzle ORM | Relational data + vector search |
+| Auth | BetterAuth | Session management, OAuth providers |
+| AI | LangGraph, Gemini, OpenAI | Multi-agent orchestration |
+| Workflows | Temporal.io | Durable execution, saga patterns |
+| Monorepo | Turborepo, pnpm | Build optimization |
 
-## 🛠️ Teknoloji Yığını
-
-| Katman                   | Teknoloji               | Seçim Gerekçesi                             |
-| ------------------------ | ----------------------- | ------------------------------------------- |
-| **Frontend**             | Next.js 16 (App Router) | RSC, Server Actions, Vercel AI SDK uyumu    |
-| **Styling**              | Tailwind v4 + Shadcn/ui | Modern tasarım sistemi, tam özelleştirme    |
-| **Veri Senkronizasyonu** | Zero Sync               | 0ms gecikme, offline-first, CRDT            |
-| **Veritabanı**           | PostgreSQL + pgvector   | İlişkisel veri + vektör arama (RAG)         |
-| **AI Orkestrasyonu**     | LangGraph               | Çoklu ajan, döngüsel akışlar, state machine |
-| **İş Akışı Motoru**      | Temporal.io             | Saga pattern, hata toleransı, durability    |
-| **Monorepo**             | Turborepo + pnpm        | Hızlı build, workspace yönetimi             |
-
----
-
-## 📁 Proje Yapısı
+## Project Structure
 
 ```
 nexus/
 ├── apps/
-│   └── web/                    # Next.js 16 uygulaması
+│   └── web/                 # Next.js application
 │       ├── src/
-│       │   ├── app/            # App Router sayfaları
-│       │   ├── components/     # React bileşenleri
-│       │   ├── hooks/          # Custom hooks (Zero queries)
-│       │   └── lib/            # Utilities, Zero client
-│       └── package.json
-│
+│       │   ├── app/         # App Router pages & API routes
+│       │   ├── components/  # React components
+│       │   ├── hooks/       # Custom React hooks
+│       │   └── lib/         # Utilities & configurations
+│       └── e2e/             # Playwright tests
 ├── packages/
-│   ├── database/               # Drizzle ORM şeması
-│   │   └── src/schema/         # PostgreSQL tabloları
-│   ├── zero-schema/            # Zero Sync şeması
-│   │   └── src/                # Tablolar, ilişkiler, izinler
-│   └── typescript-config/      # Paylaşılan TS config
-│
-├── turbo.json                  # Turborepo yapılandırması
-├── pnpm-workspace.yaml         # Workspace tanımı
-└── package.json                # Root package
+│   ├── agents/              # LangGraph agent implementations
+│   ├── database/            # Drizzle schema & migrations
+│   ├── workflows/           # Temporal workflow definitions
+│   └── zero-schema/         # Sync engine schema
+├── docs/
+│   ├── adr/                 # Architecture Decision Records
+│   ├── API.md               # API documentation
+│   └── PRD.md               # Product requirements
+└── scripts/                 # Database & utility scripts
 ```
 
----
+## Getting Started
 
-## ✨ Özellikler
+### Prerequisites
 
-### 🏠 Local-First (Yerel-Öncelikli)
-- **Çevrimdışı Çalışma**: İnternet olmadan tam fonksiyonellik
-- **0ms Gecikme**: Tüm işlemler önce yerel veritabanında
-- **Otomatik Senkronizasyon**: Bağlantı geldiğinde otomatik sync
-- **CRDT Çakışma Çözümü**: Aynı anda düzenleme desteği
-
-### 🤖 Multi-Agent AI
-- **Supervisor Pattern**: Merkezi ajan koordinasyonu
-- **Uzman Ajanlar**: Researcher, Writer, Coder, Project Manager
-- **Human-in-the-Loop**: Kritik işlemlerde insan onayı
-- **RAG Entegrasyonu**: Döküman ve web araması
-
-### 📄 Döküman Yönetimi
-- **Rich Text Editor**: BlockNote entegrasyonu
-- **Gerçek Zamanlı İşbirliği**: CRDT ile çakışmasız düzenleme
-- **AI Destekli Yazım**: Ajan tarafından içerik oluşturma
-- **Hiyerarşik Yapı**: Alt döküman desteği
-
-### ✅ Görev Yönetimi
-- **Kanban Board**: Sürükle-bırak görev yönetimi
-- **AI Görev Atama**: Ajanlar otomatik görev oluşturabilir
-- **Öncelik Sistemi**: Low, Medium, High, Urgent
-- **Due Date Tracking**: Tarih takibi
-
----
-
-## 🚀 Kurulum
-
-### Gereksinimler
 - Node.js 20+
-- pnpm 10+
-- PostgreSQL 15+ (pgvector extension)
-- Docker (Temporal için)
+- pnpm 9+
+- Docker & Docker Compose
+- PostgreSQL 16 (via Docker)
 
-### Adımlar
+### Installation
 
 ```bash
-# 1. Repository'yi klonla
-git clone https://github.com/username/nexus.git
+# Clone the repository
+git clone https://github.com/YOUR_USERNAME/nexus.git
 cd nexus
 
-# 2. Bağımlılıkları yükle
+# Install dependencies
 pnpm install
 
-# 3. Environment variables
+# Copy environment file
 cp .env.example .env.local
-# DATABASE_URL, OPENAI_API_KEY, vb. ayarla
 
-# 4. Veritabanı migration
-pnpm --filter @nexus/database db:push
+# Start infrastructure (PostgreSQL, Temporal, Jaeger)
+docker-compose up -d
 
-# 5. Geliştirme sunucusunu başlat
+# Run database migrations
+pnpm db:push
+
+# Start development server
 pnpm dev
 ```
 
----
+### Environment Variables
 
-## 🎯 Mimari Kararlar (ADR)
-
-### Neden Custom Local-First Sync (REST API yerine)?
-- **Problem**: Geleneksel API'ler ağ gecikmesi yaratır, offline çalışmıyor
-- **Çözüm**: Zero Sync konseptinden esinlenen custom senkronizasyon motoru
-- **Implementasyon**: IndexedDB + REST API + Optimistic Updates
-- **Trade-off**: Resmi Zero SDK yerine custom implementasyon (daha fazla kontrol, ama daha fazla bakım)
-- **Detay**: [ADR-001: Local-First Architecture](docs/adr/001-local-first-architecture.md)
-
-### Neden LangGraph (tek LLM çağrısı yerine)?
-- **Problem**: Karmaşık görevler tek bir LLM ile çözülemez
-- **Çözüm**: Uzman ajanların orkestrasyonu (Supervisor Pattern)
-- **Trade-off**: Daha yüksek maliyet, ancak daha kaliteli çıktı
-- **Detay**: [ADR-002: Multi-Agent LangGraph](docs/adr/002-multi-agent-langgraph.md)
-
-### Neden Temporal (basit queue yerine)?
-- **Problem**: Uzun süreli işlemler sunucu çökmelerinde kaybolur
-- **Çözüm**: Temporal durumu kalıcı olarak saklar (Durable Execution)
-- **Trade-off**: Ek altyapı, ancak garantili yürütme
-- **Detay**: [ADR-003: Durable Execution](docs/adr/003-durable-execution-temporal.md)
-
----
-
-## 📊 Veritabanı Şeması
-
-```mermaid
-erDiagram
-    users ||--o{ workspaces : owns
-    users ||--o{ workspace_members : belongs_to
-    workspaces ||--o{ workspace_members : has
-    workspaces ||--o{ docs : contains
-    workspaces ||--o{ tasks : contains
-    workspaces ||--o{ agent_executions : tracks
-    docs ||--o{ docs : parent_child
-    docs ||--o{ tasks : references
-    agent_executions ||--o{ chat_messages : logs
-```
-
----
-
-## 🔮 Uygulanan Özellikler
-
-- [x] **Yjs Real-time Collaboration** - WebSocket tabanlı eş zamanlı döküman düzenleme
-- [x] **OpenTelemetry Tracing** - Jaeger ile dağıtık izlenebilirlik
-- [x] **Temporal Workflows** - Dayanıklı iş akışları ve worker'lar
-- [x] **Corrective RAG (CRAG)** - Öz-düzeltici retrieval mekanizması
-- [x] **Zero Sync Client** - Optimistic updates ve offline-first hooks
-- [x] **Tavily Web Search** - AI-optimized web araştırması
-- [x] **Multi-Agent System** - Supervisor, Research, Writer, Coder ajanları
-
-## 🚀 Hızlı Başlangıç
+See [.env.example](.env.example) for required configuration. Key variables:
 
 ```bash
-# Bağımlılıkları yükle
-pnpm install
+# Database
+DATABASE_URL=postgresql://...
 
-# Veritabanını başlat
-docker compose up -d postgres
+# Authentication
+BETTER_AUTH_SECRET=...
 
-# Geliştirme sunucusunu başlat
-pnpm dev
-
-# Collaboration sunucusunu başlat (opsiyonel)
-cd apps/web && pnpm collab
-
-# Jaeger izleme sunucusunu başlat (opsiyonel)
-docker compose up -d jaeger
-# http://localhost:16686 adresinden trace'leri görüntüle
+# AI Provider (at least one required)
+GEMINI_API_KEY=...
+OPENAI_API_KEY=...
 ```
 
----
+## Features
 
-## 📝 Lisans
+### Document Editor
+- Rich text editing with TipTap
+- AI-assisted writing (streaming)
+- Real-time collaboration
+- Offline support with auto-sync
 
-MIT License - Bu proje bir portföy projesidir.
+### Task Management
+- Kanban board with drag-and-drop
+- Priority and assignment tracking
+- Agent-assisted task breakdown
 
----
+### AI Agents
+- **Supervisor** — Routes tasks to specialized agents
+- **Research** — Web search and information gathering
+- **Writer** — Content generation and editing
+- **Coder** — Code generation and analysis
+- **Task** — Task decomposition and planning
 
-## 👤 Geliştirici
+### Workflows
+- Durable multi-step execution
+- Automatic retry and compensation
+- Human-in-the-loop approvals
 
-Bu proje, modern yazılım mimarisi paradigmalarını (Local-First, Agentic AI, Durable Execution) tek bir projede birleştirerek, 2026 standartlarında bir tam yığın mühendislik yetkinliği sergilemek amacıyla geliştirilmiştir.
+## Documentation
 
-**Anahtar Yetkinlikler:**
-- Dağıtık Sistemler (Distributed Systems)
-- Çoklu Ajan AI Sistemleri (Multi-Agent AI)
-- Yerel-Öncelikli Mimariler (Local-First)
-- Dayanıklı Yürütme (Durable Execution)
-- Modern TypeScript/React Ekosistemi
+- [Architecture Decision Records](docs/adr/)
+- [API Documentation](docs/API.md)
+- [Product Requirements](docs/PRD.md)
+
+## Development
+
+```bash
+# Run tests
+pnpm test
+
+# Run linting
+pnpm lint
+
+# Type checking
+pnpm type-check
+
+# Build for production
+pnpm build
+```
+
+## License
+
+MIT

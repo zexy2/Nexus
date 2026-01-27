@@ -1,187 +1,68 @@
-# Contributing to Nexus
+# Contributing
 
-Nexus'a katkıda bulunmak istediğiniz için teşekkürler! 🎉
+Thank you for considering contributing to Nexus!
 
-## 🚀 Hızlı Başlangıç
+## Development Setup
 
-### Geliştirme Ortamını Kurma
-
-1. **Repository'yi Fork'layın ve Klonlayın**
 ```bash
+# Fork and clone the repository
 git clone https://github.com/YOUR_USERNAME/nexus.git
 cd nexus
-```
 
-2. **Bağımlılıkları Kurun**
-```bash
+# Install dependencies
 pnpm install
-```
 
-3. **Environment Variables**
-```bash
+# Copy environment file and configure
 cp .env.example .env.local
-```
 
-4. **Veritabanını Başlatın**
-```bash
+# Start infrastructure
 docker-compose up -d
-pnpm db:push
-```
 
-5. **Geliştirme Sunucusunu Başlatın**
-```bash
+# Start development server
 pnpm dev
 ```
 
-## 📋 Katkıda Bulunma Süreci
+## Branch Naming
 
-### 1. Issue Açın veya Mevcut Bir Issue Seçin
+- `feature/description` — New features
+- `fix/description` — Bug fixes
+- `docs/description` — Documentation updates
+- `refactor/description` — Code refactoring
 
-- Yeni bir özellik veya bug fix için önce issue açın
-- `good first issue` etiketli issue'lar yeni başlayanlar için uygundur
-- Issue'yu üstlendiğinizi belirtin
+## Commit Messages
 
-### 2. Branch Oluşturun
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```bash
-# Feature için
-git checkout -b feature/your-feature-name
-
-# Bug fix için
-git checkout -b fix/bug-description
-
-# Docs için
-git checkout -b docs/what-you-are-documenting
+```
+feat: add document export functionality
+fix: resolve sync conflict in offline mode
+docs: update API documentation
+refactor: simplify agent routing logic
 ```
 
-### 3. Değişikliklerinizi Yapın
+## Pull Request Process
 
-- Küçük, odaklı commit'ler yapın
-- Conventional Commits formatını kullanın:
-  - `feat:` - Yeni özellik
-  - `fix:` - Bug düzeltmesi
-  - `docs:` - Dokümantasyon
-  - `style:` - Kod formatı (fonksiyonelliği etkilemez)
-  - `refactor:` - Refactoring
-  - `test:` - Test ekleme/düzeltme
-  - `chore:` - Build, tooling değişiklikleri
+1. Create a feature branch from `main`
+2. Make your changes with appropriate tests
+3. Run `pnpm lint` and `pnpm test`
+4. Submit a PR with a clear description
 
-### 4. Testleri Çalıştırın
+## Code Style
+
+- TypeScript strict mode enabled
+- ESLint + Prettier for formatting
+- Functional components with hooks
+- Tailwind CSS for styling
+
+## Testing
 
 ```bash
-# Unit testler
+# Unit tests
 pnpm test
 
-# Lint
-pnpm lint
+# E2E tests
+pnpm test:e2e
 
-# Type check
+# Type checking
 pnpm type-check
-
-# E2E testler (Playwright kurulu olmalı)
-pnpm --filter @nexus/web test:e2e
 ```
-
-### 5. Pull Request Açın
-
-- Main branch'e PR açın
-- PR template'i doldurun
-- Reviewer bekleyin
-
-## 🎨 Kod Standartları
-
-### TypeScript
-
-- Strict mode aktif
-- `any` kullanmaktan kaçının
-- Tüm public fonksiyonlara JSDoc yazın
-
-```typescript
-/**
- * Kullanıcı dokümanlarını getirir
- * @param userId - Kullanıcı ID'si
- * @returns Doküman listesi
- */
-export async function getUserDocuments(userId: string): Promise<Document[]> {
-  // ...
-}
-```
-
-### React
-
-- Functional component'lar kullanın
-- Custom hook'ları `use` prefix'i ile adlandırın
-- Component'ları küçük tutun (<200 satır)
-
-### CSS/Styling
-
-- Tailwind CSS kullanın
-- Custom CSS'ten kaçının
-- Dark mode desteği ekleyin
-
-### Testing
-
-- Her yeni özellik için test yazın
-- Coverage düşürmekten kaçının
-- Integration testleri önemseyin
-
-## 📁 Proje Yapısı
-
-```
-nexus/
-├── apps/
-│   └── web/              # Next.js frontend
-│       ├── src/
-│       │   ├── app/      # App router pages
-│       │   ├── components/
-│       │   ├── hooks/
-│       │   └── lib/
-│       └── e2e/          # Playwright tests
-├── packages/
-│   ├── agents/           # LangGraph agents
-│   ├── database/         # Drizzle schema
-│   ├── workflows/        # Temporal workflows
-│   └── zero-schema/      # Zero sync schema
-└── docs/                 # Documentation
-```
-
-## 🔧 Araçlar
-
-- **pnpm** - Package manager
-- **Turborepo** - Monorepo build system
-- **Vitest** - Unit testing
-- **Playwright** - E2E testing
-- **ESLint** - Linting
-- **Prettier** - Formatting
-
-## 🐛 Bug Report
-
-Bug report açarken şunları ekleyin:
-
-1. Beklenen davranış
-2. Gerçekleşen davranış
-3. Reproduce adımları
-4. Environment (OS, Node version, browser)
-5. Ekran görüntüsü/video (varsa)
-
-## 💡 Feature Request
-
-Feature request açarken:
-
-1. Problem tanımı
-2. Önerilen çözüm
-3. Alternatifler
-4. Ek bağlam
-
-## 📞 İletişim
-
-- GitHub Issues - Bug ve feature request'ler için
-- GitHub Discussions - Sorular ve tartışmalar için
-
-## 📜 Lisans
-
-Katkıda bulunarak, katkılarınızın proje lisansı altında lisanslanacağını kabul etmiş olursunuz.
-
----
-
-Katkılarınız için teşekkürler! 🙏

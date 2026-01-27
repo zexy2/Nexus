@@ -7,11 +7,11 @@ services:
     image: pgvector/pgvector:pg16
     container_name: nexus-postgres
     environment:
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexusdev
-      POSTGRES_DB: nexus
+      POSTGRES_USER: ${POSTGRES_USER:-nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-nexus}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -31,8 +31,8 @@ services:
     environment:
       - DB=postgres12
       - DB_PORT=5432
-      - POSTGRES_USER=nexus
-      - POSTGRES_PWD=nexusdev
+      - POSTGRES_USER=${POSTGRES_USER:-nexus}
+      - POSTGRES_PWD=${POSTGRES_PASSWORD:-changeme}
       - POSTGRES_SEEDS=postgres
     ports:
       - "7233:7233"

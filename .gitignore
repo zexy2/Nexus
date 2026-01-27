@@ -1,56 +1,97 @@
-# Dependencies
+# ==============================================
+# DEPENDENCIES
+# ==============================================
 node_modules/
 .pnpm-store/
+.yarn/
 
-# Build outputs
+# ==============================================
+# BUILD OUTPUTS
+# ==============================================
 .next/
 dist/
 build/
+out/
 .turbo/
+*.tsbuildinfo
 
-# Environment - CRITICAL: Never commit these!
+# ==============================================
+# ENVIRONMENT FILES - NEVER COMMIT!
+# ==============================================
 .env
 .env.*
+!.env.example
 .env.local
 .env.*.local
 .env.development
 .env.production
 .env.test
 
-# IDE - Exclude sensitive config files
+# ==============================================
+# IDE & EDITOR
+# ==============================================
 .vscode/*
 !.vscode/settings.json
 !.vscode/extensions.json
+!.vscode/*.example
 .idea/
+*.swp
+*.swo
+*~
 
-# SENSITIVE FILES - Never commit!
+# ==============================================
+# SECRETS & CREDENTIALS - CRITICAL!
+# ==============================================
 cookies.txt
 *.cookie
 *.cookies
 *.session
-mcp.json
-.vscode/mcp.json
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-npm-debug.log*
-pnpm-debug.log*
-
-# Testing
-coverage/
-testsprite_tests/tmp/
-*.lock
-
-# Misc
-*.tsbuildinfo
-
-# Secrets & Keys - Extra protection
 *.pem
 *.key
 *.cert
+*.p12
 secrets.json
 credentials.json
+mcp.json
+.vscode/mcp.json
+serviceAccount*.json
+*-credentials.json
+
+# ==============================================
+# OS FILES
+# ==============================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ==============================================
+# LOGS & DEBUG
+# ==============================================
+*.log
+logs/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log
+
+# ==============================================
+# TESTING
+# ==============================================
+coverage/
+.nyc_output/
+testsprite_tests/tmp/
+playwright-report/
+test-results/
+
+# ==============================================
+# TEMPORARY FILES
+# ==============================================
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/
