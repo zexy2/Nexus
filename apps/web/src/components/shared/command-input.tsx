@@ -27,7 +27,7 @@ import {
   commandQueue, 
   type OfflineCommand, 
   type CommandStatus 
-} from '@/lib/offline-commands';
+} from '@/lib/sync/offline-commands';
 import {
   Dialog,
   DialogContent,

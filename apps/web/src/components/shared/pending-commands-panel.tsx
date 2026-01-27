@@ -23,7 +23,7 @@ import {
   commandStore,
   type OfflineCommand,
   type CommandStatus,
-} from '@/lib/offline-commands';
+} from '@/lib/sync/offline-commands';
 
 interface PendingCommandsPanelProps {
   className?: string;

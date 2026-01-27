@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 // Dynamic import for the document editor (avoid SSR issues with Tiptap)
 const DocumentEditor = dynamic(
   () =>
-    import("@/components/document-editor").then((mod) => mod.DocumentEditor),
+    import("@/components/editor").then((mod) => mod.DocumentEditor),
   {
     ssr: false,
     loading: () => (

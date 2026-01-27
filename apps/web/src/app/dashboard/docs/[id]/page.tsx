@@ -51,7 +51,7 @@ const EditorWrapper = dynamic(
 
 // Dynamic import for Collaborative Editor (with real-time sync)
 const CollaborativeEditorWrapper = dynamic(
-  () => import("@/components/collaborative-editor").then((mod) => mod.CollaborativeEditorWrapper),
+  () => import("@/components/editor/collaborative-editor").then((mod) => mod.CollaborativeEditorWrapper),
   {
     ssr: false,
     loading: () => (
