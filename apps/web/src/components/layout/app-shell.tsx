@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'framer-motion';
 import { signOut, useSession } from '@/lib/auth-client';
-import { useZeroStatus } from '@/lib/zero';
+import { useZeroStatus } from '@/lib/sync/zero';
 import { useSidebar } from '@/components/ui/sidebar';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
@@ -40,8 +40,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { CommandPalette } from '@/components/command-palette';
-import { CommandInput } from '@/components/command-input';
+import { CommandPalette } from '@/components/shared/command-palette';
+import { CommandInput } from '@/components/shared/command-input';
 
 // Navigation items with enhanced metadata
 const navItems = [

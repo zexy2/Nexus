@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CommandSearch } from "@/components/command-search";
+import { CommandSearch } from "@/components/shared/command-search";
 import { signOut, useSession } from "@/lib/auth-client";
 import {
   Bot,

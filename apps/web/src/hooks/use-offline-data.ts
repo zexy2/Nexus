@@ -17,7 +17,7 @@ import {
   syncPendingChanges,
   isOnline,
   onConnectivityChange,
-} from "@/lib/offline";
+} from "@/lib/sync/offline";
 
 type StoreName = "docs" | "tasks";
 

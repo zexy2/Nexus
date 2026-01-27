@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FloatingAIWidget } from "./floating-ai-widget";
 import { AgentMarginComments, type AgentComment } from "./agent-margin-comments";
 import { AgentCursors, type AgentCursor } from "./agent-cursors";
-import { useAIWrite, useAIWriteSession, useAIWriteChunks } from "@/lib/ai-write";
+import { useAIWrite, useAIWriteSession, useAIWriteChunks } from "@/lib/ai/ai-write";
 import { cn } from "@/lib/utils";
 import { Pause, Play, Sparkles, Loader2 } from "lucide-react";
 

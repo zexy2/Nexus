@@ -7,7 +7,7 @@
  * Displays pending changes, online/offline state, and last sync time.
  */
 
-import { useZeroStatus } from "@/lib/zero";
+import { useZeroStatus } from "@/lib/sync/zero";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { 

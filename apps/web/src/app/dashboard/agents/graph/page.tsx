@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { AgentGraph } from '@/components/agent-graph';
+import { AgentGraph } from '@/components/agents/agent-graph';
 
 export const metadata: Metadata = {
   title: 'Agent Graph | Nexus',
