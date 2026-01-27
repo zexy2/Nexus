@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+.next/
+dist/
+build/
+.turbo/
+
+# Environment - CRITICAL: Never commit these!
+.env
+.env.*
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# IDE - Exclude sensitive config files
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+
+# SENSITIVE FILES - Never commit!
+cookies.txt
+*.cookie
+*.cookies
+*.session
+mcp.json
+.vscode/mcp.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+testsprite_tests/tmp/
+*.lock
+
+# Misc
+*.tsbuildinfo
+
+# Secrets & Keys - Extra protection
+*.pem
+*.key
+*.cert
+secrets.json
+credentials.json
