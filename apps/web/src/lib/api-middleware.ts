@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "./auth";
 import { headers } from "next/headers";
+import { checkPersistentRateLimit } from "./production-guardrails";
 
 // ===========================================
 // TYPES
@@ -33,77 +34,12 @@ interface RateLimitConfig {
   keyPrefix?: string;    // Optional prefix for the key
 }
 
-interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
-}
-
 // ===========================================
-// RATE LIMITER (In-Memory)
+// RATE LIMITER
 // ===========================================
-
-// In-memory store for rate limiting
-// For production: use Redis or similar
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-
-// Cleanup old entries periodically
-const CLEANUP_INTERVAL = 60 * 1000; // 1 minute
-let lastCleanup = Date.now();
-
-function cleanupRateLimitStore() {
-  const now = Date.now();
-  if (now - lastCleanup < CLEANUP_INTERVAL) return;
-  
-  lastCleanup = now;
-  for (const [key, data] of rateLimitStore.entries()) {
-    if (data.resetAt < now) {
-      rateLimitStore.delete(key);
-    }
-  }
-}
-
-/**
- * Check rate limit for a given key
- */
-export function checkRateLimit(
-  key: string,
-  config: RateLimitConfig
-): RateLimitResult {
-  cleanupRateLimitStore();
-  
-  const now = Date.now();
-  const fullKey = config.keyPrefix ? `${config.keyPrefix}:${key}` : key;
-  const existing = rateLimitStore.get(fullKey);
-  
-  // If no existing record or window expired, create new
-  if (!existing || existing.resetAt < now) {
-    const resetAt = now + config.windowMs;
-    rateLimitStore.set(fullKey, { count: 1, resetAt });
-    return {
-      allowed: true,
-      remaining: config.maxRequests - 1,
-      resetAt,
-    };
-  }
-  
-  // Increment counter
-  existing.count++;
-  
-  if (existing.count > config.maxRequests) {
-    return {
-      allowed: false,
-      remaining: 0,
-      resetAt: existing.resetAt,
-    };
-  }
-  
-  return {
-    allowed: true,
-    remaining: config.maxRequests - existing.count,
-    resetAt: existing.resetAt,
-  };
-}
+// Rate limiting is backed by the persistent (database) limiter in
+// production-guardrails.ts so limits survive restarts and apply across all
+// serverless instances. See `applyRateLimit` below.
 
 /**
  * Get client IP from request
@@ -228,12 +164,13 @@ export const RATE_LIMITS = {
  * Apply rate limiting to a request
  * Returns error response if limit exceeded
  */
-export function applyRateLimit(
+export async function applyRateLimit(
   request: NextRequest,
   config: RateLimitConfig
-): { allowed: true } | { allowed: false; response: NextResponse } {
+): Promise<{ allowed: true } | { allowed: false; response: NextResponse }> {
   const clientIP = getClientIP(request);
-  const result = checkRateLimit(clientIP, config);
+  const bucket = config.keyPrefix || "default";
+  const result = await checkPersistentRateLimit(clientIP, bucket, config.maxRequests, config.windowMs);
   
   if (!result.allowed) {
     return {
@@ -241,14 +178,18 @@ export function applyRateLimit(
       response: NextResponse.json(
         {
           error: "Too Many Requests",
+          code: "RATE_LIMIT_EXCEEDED",
           message: `Rate limit exceeded. Try again after ${Math.ceil((result.resetAt - Date.now()) / 1000)} seconds.`,
+          limit: result.limit,
+          remaining: result.remaining,
+          resetAt: result.resetAt,
           retryAfter: Math.ceil((result.resetAt - Date.now()) / 1000),
         },
         {
           status: 429,
           headers: {
             "Retry-After": String(Math.ceil((result.resetAt - Date.now()) / 1000)),
-            "X-RateLimit-Limit": String(config.maxRequests),
+            "X-RateLimit-Limit": String(result.limit),
             "X-RateLimit-Remaining": "0",
             "X-RateLimit-Reset": String(result.resetAt),
           },
@@ -281,7 +222,7 @@ export async function protectRoute(
   
   // Check rate limit first (cheaper operation)
   if (rateLimit) {
-    const rateLimitResult = applyRateLimit(request, rateLimit);
+    const rateLimitResult = await applyRateLimit(request, rateLimit);
     if (!rateLimitResult.allowed) {
       return { success: false, response: rateLimitResult.response };
     }
