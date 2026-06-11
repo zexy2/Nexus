@@ -2,13 +2,14 @@
 /**
  * Workspace RAG context for chat.
  *
- * Default path uses Corrective RAG (crag.ts). When USE_CRAG=false, falls back
- * to a simple keyword-scoring retrieval over recent docs and tasks.
+ * Retrieval order: semantic (pgvector) when OpenAI embeddings are configured →
+ * Corrective RAG → keyword scoring. All paths are workspace-scoped.
  */
 import { db } from "@/lib/db";
 import { docs, tasks } from "@nexus/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { correctiveRAG } from "@/lib/ai/crag";
+import { isEmbeddingsAvailable, semanticSearch, buildSemanticContext } from "@/lib/ai/embeddings";
 
 // Extract text from BlockNote JSON content
 export function extractTextFromContent(content: any): string {
@@ -49,8 +50,23 @@ export function searchScore(query: string, text: string): number {
   return score / words.length;
 }
 
-// Get RAG context from workspace documents - Uses CRAG (Corrective RAG)
+// Get RAG context from workspace documents.
+// Prefers semantic (pgvector) retrieval when embeddings are configured, and
+// falls back to Corrective RAG / keyword scoring otherwise.
 export async function getRAGContext(query: string, workspaceId: string): Promise<string> {
+  // 1) Semantic retrieval via pgvector (when OpenAI embeddings are available).
+  if (isEmbeddingsAvailable()) {
+    try {
+      const hits = await semanticSearch(query, workspaceId, { limit: 3, minSimilarity: 0.2 });
+      if (hits.length > 0) {
+        return await buildSemanticContext(hits);
+      }
+      // No vector hits (e.g. docs not embedded yet) — fall through to keyword.
+    } catch (e) {
+      console.error("[RAG] Semantic search failed, falling back:", e);
+    }
+  }
+
   const USE_CRAG = process.env.USE_CRAG !== "false"; // Default to true
 
   try {

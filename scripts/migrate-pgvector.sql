@@ -20,20 +20,26 @@ ALTER TABLE vectors
   ADD COLUMN IF NOT EXISTS embedding vector(1536);
 
 -- ==========================================
--- 4. Create IVFFlat indexes for fast similarity search
--- Note: Run these AFTER you have some data in the tables
--- IVFFlat requires at least (lists * 39) rows to work effectively
+-- 4. Approximate-nearest-neighbour indexes for fast similarity search
+--
+-- Semantic RAG (cosine distance, the `<=>` operator) works WITHOUT an index
+-- via sequential scan — fine for small workspaces. Add an index for scale.
+--
+-- HNSW is recommended: unlike IVFFlat it needs no training data and can be
+-- created on an empty table, so it is safe to run now. The query uses cosine
+-- distance, so use the vector_cosine_ops opclass.
 -- ==========================================
 
--- Index for docs table (when you have 100+ docs)
--- CREATE INDEX IF NOT EXISTS docs_embedding_idx 
---   ON docs USING ivfflat (embedding vector_cosine_ops) 
---   WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS vectors_embedding_hnsw_idx
+  ON vectors USING hnsw (embedding vector_cosine_ops);
 
--- Index for vectors table (when you have 1000+ vectors)
--- CREATE INDEX IF NOT EXISTS vectors_embedding_idx 
---   ON vectors USING ivfflat (embedding vector_cosine_ops) 
---   WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS docs_embedding_hnsw_idx
+  ON docs USING hnsw (embedding vector_cosine_ops);
+
+-- Alternative (older pgvector without HNSW): IVFFlat. Create only AFTER the
+-- table has data — it requires ~(lists * 39) rows to train effectively.
+-- CREATE INDEX IF NOT EXISTS vectors_embedding_idx
+--   ON vectors USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 -- ==========================================
 -- 5. Verify changes
