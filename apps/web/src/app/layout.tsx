@@ -62,6 +62,7 @@ export default function RootLayout({
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${geistMono.variable} ${newsreader.variable} ${playfairDisplay.variable} antialiased`}
+        suppressHydrationWarning
       >
         <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
       </body>

@@ -47,7 +47,7 @@ export default function LandingPage() {
             ]}
           />
 
-          {/* Testimonials - Light gray section */}
+          {/* Demo scope - Light gray section */}
           <section id="testimonials">
             <Testimonials />
           </section>

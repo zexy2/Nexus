@@ -8,8 +8,8 @@ import { Menu, X, Sparkles } from "lucide-react";
 const navLinks = [
   { href: "#features", label: "Features" },
   { href: "#gallery", label: "Showcase" },
-  { href: "#testimonials", label: "Testimonials" },
-  { href: "/pricing", label: "Pricing" },
+  { href: "#testimonials", label: "Demo Scope" },
+  { href: "/login", label: "Try Demo" },
 ];
 
 export function Navigation() {
@@ -85,7 +85,7 @@ export function Navigation() {
               Sign in
             </Link>
             <Link
-              href="/dashboard"
+              href="/login"
               className={`px-5 py-2.5 text-sm font-medium rounded-full transition-all ${
                 isScrolled
                   ? "bg-black text-white hover:bg-neutral-800"
@@ -143,7 +143,7 @@ export function Navigation() {
                   Sign in
                 </Link>
                 <Link
-                  href="/dashboard"
+                  href="/login"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="block px-4 py-3 text-lg font-medium text-white bg-black rounded-xl text-center hover:bg-neutral-800 transition-colors"
                 >

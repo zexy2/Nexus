@@ -189,7 +189,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
 }
 
 // Streaming message card
-function StreamingCard({ content, agentMode }: { content: string; agentMode?: AgentMode }) {
+function StreamingCard({ content }: { content: string }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -463,7 +463,7 @@ function ChatInput({ onSend }: ChatInputProps) {
 // ============================================================================
 
 function EmptyState() {
-  const { agentMode, suggestedPrompts, setInput } = useChatStore();
+  const { suggestedPrompts, setInput } = useChatStore();
   const prompts = suggestedPrompts.slice(0, 4);
 
   return (
@@ -547,7 +547,6 @@ export default function ChatPage() {
 
   const {
     messages,
-    isLoading,
     isStreaming,
     streamingContent,
     error,
@@ -612,7 +611,14 @@ export default function ChatPage() {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(
+          errorPayload?.message ||
+          errorPayload?.error ||
+          `Failed to get response (${response.status})`
+        );
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -702,7 +708,7 @@ export default function ChatPage() {
 
               <AnimatePresence>
                 {isStreaming && streamingContent && (
-                  <StreamingCard content={streamingContent} agentMode={activeAgent?.mode} />
+                  <StreamingCard content={streamingContent} />
                 )}
               </AnimatePresence>
 

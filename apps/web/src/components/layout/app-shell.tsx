@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { signOut, useSession } from '@/lib/auth-client';
 import { useZeroStatus } from '@/lib/sync/zero';
 import { useSidebar } from '@/components/ui/sidebar';
@@ -15,17 +15,12 @@ import {
   FileText,
   Bot,
   Settings,
-  ChevronLeft,
   ChevronRight,
   HardDrive,
   Search,
   User,
   LogOut,
   Sparkles,
-  Command,
-  Plus,
-  Clock,
-  Activity,
   Cloud,
   CloudOff,
   RefreshCw,
@@ -350,7 +345,8 @@ export function AppShellV2({ children }: AppShellV2Props) {
   const setIsCollapsed = (collapsed: boolean) => setSidebarOpen(!collapsed);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const user = session?.user;

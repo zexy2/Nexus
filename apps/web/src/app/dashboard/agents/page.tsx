@@ -1,14 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
 import { motion, AnimatePresence } from "framer-motion";
 import CountUp from "react-countup";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -35,16 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -59,7 +47,6 @@ import {
   Kanban,
   CheckCircle2,
   Clock,
-  AlertCircle,
   Activity,
   Zap,
   Play,
@@ -78,13 +65,9 @@ import {
   Timer,
   Target,
   BarChart3,
-  ArrowUpRight,
-  ArrowDownRight,
   XCircle,
   MessageSquare,
   Settings,
-  History,
-  ChevronRight,
   ChevronDown,
   RotateCcw,
   Cpu,
@@ -209,16 +192,6 @@ const AGENT_TYPES = [
   },
 ];
 
-// Agent Stats interface
-interface AgentMetrics {
-  tasksCompleted: number;
-  tasksToday: number;
-  avgResponseTime: string;
-  successRate: number;
-  trend: "up" | "down" | "stable";
-  lastActive?: number;
-}
-
 // Execution type from API
 interface Execution {
   id: string;
@@ -228,10 +201,82 @@ interface Execution {
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   error: string | null;
+  workflowId?: string | null;
   duration: string | null;
   startedAt: number | null;
   completedAt: number | null;
   createdAt: number;
+}
+
+function formatExecutionPreview(value: unknown): string {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.tasks)) {
+      return `${record.tasks.length} task${record.tasks.length === 1 ? "" : "s"} created`;
+    }
+    if (Array.isArray(record.steps)) {
+      return `${record.steps.length} workflow step${record.steps.length === 1 ? "" : "s"} recorded`;
+    }
+    if (typeof record.documentId === "string") {
+      return `Document created: ${record.title || record.documentId}`;
+    }
+    const primary = record.message || record.query || record.result || record.content;
+    if (typeof primary === "string") {
+      return primary;
+    }
+    return JSON.stringify(record).slice(0, 80);
+  }
+
+  return String(value);
+}
+
+function extractExecutionSteps(output: unknown): Array<Record<string, unknown>> {
+  if (!output || typeof output !== "object" || Array.isArray(output)) return [];
+  const record = output as Record<string, unknown>;
+  if (Array.isArray(record.steps)) return record.steps as Array<Record<string, unknown>>;
+  if (record.result && typeof record.result === "object" && !Array.isArray(record.result)) {
+    const nested = record.result as Record<string, unknown>;
+    if (Array.isArray(nested.steps)) return nested.steps as Array<Record<string, unknown>>;
+  }
+  return [];
+}
+
+function executionToWorkflowType(execution: Execution): WorkflowType {
+  const inputType = execution.input?.workflowType;
+  if (inputType === "tasks") return "task";
+  if (inputType === "document" || inputType === "research" || inputType === "code") {
+    return inputType;
+  }
+  if (execution.agentType === "project_manager") return "task";
+  if (execution.agentType === "researcher") return "research";
+  if (execution.agentType === "coder") return "code";
+  return "document";
+}
+
+function executionToActiveWorkflow(execution: Execution): WorkflowExecution {
+  const progress = execution.status === "completed" || execution.status === "failed" ? 100 : 65;
+  return {
+    id: execution.workflowId || execution.id,
+    type: executionToWorkflowType(execution),
+    status: execution.status === "completed" || execution.status === "failed" ? execution.status : "running",
+    input: execution.input || {},
+    output: execution.output ? formatExecutionPreview(execution.output) : undefined,
+    progress,
+    currentStep: execution.status === "running" ? "Workflow running in Temporal..." : undefined,
+    startedAt: execution.startedAt || execution.createdAt,
+    completedAt: execution.completedAt || undefined,
+    error: execution.error || undefined,
+  };
 }
 
 const statusConfig = {
@@ -241,14 +286,89 @@ const statusConfig = {
   pending: { icon: Clock, color: "text-gray-500", bg: "bg-gray-100", label: "Pending" },
 };
 
+interface MetricItem {
+  label: string;
+  value: number;
+  isNumeric: boolean;
+  suffix?: string;
+  displayValue?: string;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+  glow: string;
+  caption: string;
+}
+
+function MetricCard({ metric, index }: { metric: MetricItem; index: number }) {
+  const Icon = metric.icon;
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <motion.div
+      key={metric.label}
+      initial={{ opacity: 0, y: 30, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{
+        delay: 0.2 + index * 0.08,
+        type: 'spring',
+        stiffness: 150,
+        damping: 20,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      className="group relative p-5 rounded-2xl overflow-hidden cursor-default bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]"
+    >
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isHovered ? 1 : 0 }}
+        className={`absolute inset-0 -z-10 blur-2xl transition-opacity duration-500 ${metric.glow}`}
+      />
+
+      <div className="relative flex items-center gap-4">
+        <motion.div
+          animate={{
+            scale: isHovered ? 1.1 : 1,
+            rotate: isHovered ? 5 : 0,
+          }}
+          transition={{ type: 'spring', stiffness: 300 }}
+          className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors duration-300 ${metric.bg}`}
+        >
+          <Icon className={`w-6 h-6 ${metric.color}`} />
+        </motion.div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl md:text-3xl font-bold tracking-tight text-white">
+              {metric.isNumeric ? (
+                <>
+                  <CountUp
+                    end={metric.value}
+                    duration={2}
+                    delay={0.3 + index * 0.1}
+                    decimals={metric.suffix === "s" ? 1 : 0}
+                    separator=","
+                  />
+                  {metric.suffix}
+                </>
+              ) : (
+                metric.displayValue || metric.value
+              )}
+            </span>
+          </div>
+          <div className="text-sm text-white/40 font-medium truncate">{metric.label}</div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-white/35">
+        <Clock className="size-3 text-white/30" />
+        <span className="truncate">{metric.caption}</span>
+      </div>
+    </motion.div>
+  );
+}
+
 // Metrics Dashboard Component with Premium Animations
-function MetricsDashboard({ 
-  executions = [], 
-  agentMetrics = {} 
-}: { 
-  executions?: Execution[]; 
-  agentMetrics?: Record<string, AgentMetrics>;
-}) {
+function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
   const totalExecutions = executions?.length || 0;
   const completedToday = executions?.filter(e => {
     const today = new Date();
@@ -263,7 +383,7 @@ function MetricsDashboard({
     ? completedWithDuration.reduce((acc, e) => acc + ((e.completedAt || 0) - (e.startedAt || 0)), 0) / completedWithDuration.length
     : 0;
 
-  const metrics = [
+  const metrics: MetricItem[] = [
     { 
       label: "Total Executions", 
       value: totalExecutions, 
@@ -272,8 +392,7 @@ function MetricsDashboard({
       color: "text-blue-400",
       bg: "bg-blue-500/10",
       glow: "bg-blue-500/20",
-      change: "+12%",
-      trend: "up" as const,
+      caption: "Recorded in workflow history",
     },
     { 
       label: "Completed Today", 
@@ -283,8 +402,7 @@ function MetricsDashboard({
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
       glow: "bg-emerald-500/20",
-      change: "+5",
-      trend: "up" as const,
+      caption: "Completed since local midnight",
     },
     { 
       label: "Success Rate", 
@@ -295,8 +413,7 @@ function MetricsDashboard({
       color: "text-violet-400",
       bg: "bg-violet-500/10",
       glow: "bg-violet-500/20",
-      change: "+2%",
-      trend: "up" as const,
+      caption: "Completed divided by total",
     },
     { 
       label: "Avg Response", 
@@ -308,91 +425,15 @@ function MetricsDashboard({
       color: "text-amber-400",
       bg: "bg-amber-500/10",
       glow: "bg-amber-500/20",
-      change: "-0.3s",
-      trend: "up" as const,
+      caption: "Average completed duration",
     },
   ];
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-      {metrics.map((metric, index) => {
-        const Icon = metric.icon;
-        const [isHovered, setIsHovered] = useState(false);
-        
-        return (
-          <motion.div
-            key={metric.label}
-            initial={{ opacity: 0, y: 30, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ 
-              delay: 0.2 + index * 0.08,
-              type: 'spring',
-              stiffness: 150,
-              damping: 20,
-            }}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-            className="group relative p-5 rounded-2xl overflow-hidden cursor-default bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] transition-all duration-300 hover:border-white/20 hover:bg-white/[0.05]"
-          >
-            {/* Hover glow effect */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: isHovered ? 1 : 0 }}
-              className={`absolute inset-0 -z-10 blur-2xl transition-opacity duration-500 ${metric.glow}`}
-            />
-
-            <div className="relative flex items-center gap-4">
-              {/* Animated Icon */}
-              <motion.div
-                animate={{ 
-                  scale: isHovered ? 1.1 : 1,
-                  rotate: isHovered ? 5 : 0,
-                }}
-                transition={{ type: 'spring', stiffness: 300 }}
-                className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors duration-300 ${metric.bg}`}
-              >
-                <Icon className={`w-6 h-6 ${metric.color}`} />
-              </motion.div>
-
-              {/* Value & Label */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-                    {metric.isNumeric ? (
-                      <>
-                        <CountUp
-                          end={metric.value as number}
-                          duration={2}
-                          delay={0.3 + index * 0.1}
-                          decimals={metric.suffix === "s" ? 1 : 0}
-                          separator=","
-                        />
-                        {metric.suffix}
-                      </>
-                    ) : (
-                      metric.displayValue || metric.value
-                    )}
-                  </span>
-                </div>
-                <div className="text-sm text-white/40 font-medium truncate">{metric.label}</div>
-              </div>
-            </div>
-
-            {/* Trend indicator */}
-            <div className="mt-3 flex items-center text-xs">
-              {metric.trend === "up" ? (
-                <ArrowUpRight className="size-3 text-emerald-400 mr-1" />
-              ) : (
-                <ArrowDownRight className="size-3 text-rose-400 mr-1" />
-              )}
-              <span className={metric.trend === "up" ? "text-emerald-400" : "text-rose-400"}>
-                {metric.change}
-              </span>
-              <span className="text-white/30 ml-1">from yesterday</span>
-            </div>
-          </motion.div>
-        );
-      })}
+      {metrics.map((metric, index) => (
+        <MetricCard key={metric.label} metric={metric} index={index} />
+      ))}
     </div>
   );
 }
@@ -421,6 +462,7 @@ function ExecutionDetailDialog({
       return String(obj);
     }
   };
+  const steps = extractExecutionSteps(execution.output);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -474,6 +516,44 @@ function ExecutionDetailDialog({
                 {formatJson(execution.input)}
               </pre>
             </div>
+
+            {/* Workflow Steps */}
+            {steps.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Activity className="size-4 text-blue-500" />
+                  Workflow Steps
+                </Label>
+                <div className="space-y-2">
+                  {steps.map((step, index) => (
+                    <div key={index} className="rounded-lg border bg-muted/40 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium">
+                          {typeof step.agentName === "string"
+                            ? step.agentName
+                            : typeof step.agentId === "string"
+                              ? step.agentId
+                              : `Step ${index + 1}`}
+                        </p>
+                        {typeof step.duration === "number" && (
+                          <Badge variant="outline" className="text-xs">
+                            {(step.duration / 1000).toFixed(1)}s
+                          </Badge>
+                        )}
+                      </div>
+                      {typeof step.output === "string" && (
+                        <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">
+                          {step.output}
+                        </p>
+                      )}
+                      {typeof step.error === "string" && (
+                        <p className="mt-2 text-xs text-destructive">{step.error}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Output */}
             {execution.output && (
@@ -685,9 +765,21 @@ function ActiveWorkflowCard({
   const Icon = config.icon;
   const status = statusConfig[execution.status];
   const StatusIcon = status.icon;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (execution.completedAt) return;
+
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [execution.completedAt]);
+
   const elapsedTime = execution.completedAt 
     ? ((execution.completedAt - execution.startedAt) / 1000).toFixed(1)
-    : ((Date.now() - execution.startedAt) / 1000).toFixed(0);
+    : ((now - execution.startedAt) / 1000).toFixed(0);
 
   const handleSaveToDocuments = async () => {
     // Navigate to docs with prefilled content
@@ -888,7 +980,6 @@ ${JSON.stringify(execution.input, null, 2)}
 
 export default function AgentsPage() {
   const router = useRouter();
-  const { data: session } = useSession();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeWorkflows, setActiveWorkflows] = useState<WorkflowExecution[]>([]);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, string>>({});
@@ -950,35 +1041,6 @@ export default function AgentsPage() {
     }
   }, [executions]);
   
-  // Calculate overall metrics
-  const metrics: AgentMetrics = useMemo(() => {
-    const total = executions.length;
-    const completed = executions.filter(e => e.status === "completed").length;
-    const failed = executions.filter(e => e.status === "failed").length;
-    const today = executions.filter(e => {
-      const execDate = new Date(e.startedAt || 0);
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      return execDate >= todayStart && e.status === "completed";
-    }).length;
-    
-    const totalDuration = executions
-      .filter(e => e.startedAt && e.completedAt)
-      .reduce((acc, e) => acc + ((e.completedAt || 0) - (e.startedAt || 0)), 0);
-    const avgDuration = executions.filter(e => e.completedAt).length > 0 
-      ? totalDuration / executions.filter(e => e.completedAt).length 
-      : 0;
-    
-    return {
-      totalExecutions: total,
-      completedToday: today,
-      successRate: total > 0 ? (completed / total) * 100 : 0,
-      avgResponseTime: avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : "-",
-      failedCount: failed,
-      pendingCount: executions.filter(e => e.status === "pending" || e.status === "running").length,
-    };
-  }, [executions]);
-  
   // Filtered executions
   const filteredExecutions = useMemo(() => {
     return executions.filter(exec => {
@@ -1011,20 +1073,20 @@ export default function AgentsPage() {
     setDetailDialogOpen(true);
   }, []);
 
-  // Fetch execution history from API and merge with localStorage
+  // Fetch execution history from API. DB is the source of truth; localStorage is only
+  // used for optimistic entries before the API responds.
   useEffect(() => {
     async function fetchExecutions() {
       try {
         const res = await fetch("/api/agents/executions?limit=50");
         if (res.ok) {
           const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            // Merge with existing localStorage data (avoid duplicates)
-            setExecutions(prev => {
-              const existingIds = new Set(data.map((e: Execution) => e.id));
-              const localOnly = prev.filter(e => !existingIds.has(e.id));
-              return [...data, ...localOnly];
-            });
+          if (Array.isArray(data)) {
+            setExecutions(data);
+            setActiveWorkflows(data
+              .filter((execution: Execution) => execution.status === "running")
+              .map(executionToActiveWorkflow)
+            );
             
             // Calculate stats per agent type
             const stats: Record<string, { total: number; completedTime: number; count: number }> = {};
@@ -1054,7 +1116,7 @@ export default function AgentsPage() {
         }
       } catch (error) {
         console.error("Failed to fetch executions from API:", error);
-        // API failed, but we still have localStorage data loaded
+        // Keep optimistic localStorage data visible if the API is temporarily unavailable.
       } finally {
         setIsLoadingExecutions(false);
       }
@@ -1062,8 +1124,8 @@ export default function AgentsPage() {
 
     // Delay fetch to allow localStorage load first
     const timeout = setTimeout(fetchExecutions, 500);
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchExecutions, 30000);
+    // Refresh often enough for workflow history to feel live.
+    const interval = setInterval(fetchExecutions, 15000);
     return () => {
       clearTimeout(timeout);
       clearInterval(interval);
@@ -1093,7 +1155,7 @@ export default function AgentsPage() {
     return agentStatuses[agentId] ?? "active";
   }, [agentStatuses]);
 
-  // Simulated workflow launcher (will connect to real Temporal API)
+  // Launch durable workflows through the production workflow API.
   const launchWorkflow = useCallback(async (type: WorkflowType, input: Record<string, string>) => {
     const executionId = `wf-${Date.now()}`;
     
@@ -1122,117 +1184,38 @@ export default function AgentsPage() {
 
     try {
       updateProgress("Preparing AI request...", 10);
-      
-      // Build the prompt based on workflow type
-      let prompt = "";
-      let systemContext = "";
-      
-      switch (type) {
-        case "document":
-          systemContext = "You are a professional document writer. Create well-structured, comprehensive documents.";
-          prompt = `Write a detailed ${input.format || "document"} about: ${input.topic}\n\nAdditional context: ${input.context || "None provided"}`;
-          break;
-        case "research":
-          systemContext = "You are a research analyst. Provide thorough, well-sourced analysis.";
-          prompt = `Research the following topic in ${input.depth || "standard"} depth: ${input.query}\n\nPreferred sources: ${input.sources || "Any reliable sources"}`;
-          break;
-        case "task":
-          systemContext = "You are a project manager. Break down projects into actionable tasks with clear timelines.";
-          prompt = `Create a detailed task breakdown for this project goal: ${input.goal}\n\nTimeline: ${input.timeline || "Flexible"}\nRequirements: ${input.requirements || "None specified"}`;
-          break;
-        case "code":
-          systemContext = "You are an expert software engineer. Write clean, well-documented, production-ready code.";
-          prompt = `Write ${input.language || "TypeScript"} code for the following task:\n\n${input.task}\n\nContext: ${input.context || "None provided"}`;
-          break;
-      }
 
-      updateProgress("Calling AI agents...", 30);
+      updateProgress("Starting durable workflow...", 30);
 
-      // Map workflow type to agent mode
-      const agentModeMap: Record<WorkflowType, string> = {
-        document: "writer",
-        research: "research",
-        task: "task",
-        code: "coder",
-      };
-
-      // Call the chat API with proper message format
-      const response = await fetch("/api/chat", {
+      const apiWorkflowType = type === "task" ? "tasks" : type;
+      const response = await fetch("/api/workflows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: [
-            { role: "system", content: systemContext },
-            { role: "user", content: prompt }
-          ],
-          agentMode: agentModeMap[type],
+          workflowType: apiWorkflowType,
+          input,
         }),
       });
 
-      updateProgress("Processing AI response...", 60);
+      const payload = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(`AI request failed: ${response.status}`);
+        const message =
+          payload?.message ||
+          payload?.details ||
+          payload?.error ||
+          `Workflow request failed: ${response.status}`;
+        throw new Error(message);
       }
 
-      // Handle streaming response (Vercel AI SDK text stream format)
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullOutput = "";
-
-      if (reader) {
-        updateProgress("Generating output...", 70);
-        
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          const chunk = decoder.decode(value, { stream: true });
-          // Parse Vercel AI SDK stream format: "0:\"text\"\n"
-          const lines = chunk.split("\n");
-          for (const line of lines) {
-            if (line.startsWith("0:")) {
-              try {
-                const text = JSON.parse(line.slice(2));
-                fullOutput += text;
-              } catch {
-                // Not JSON, use raw text (plain text response)
-                fullOutput += line.slice(2);
-              }
-            } else if (line && !line.startsWith("e:") && !line.startsWith("d:")) {
-              // Plain text response (non-streaming)
-              fullOutput += line;
-            }
-          }
-          
-          // Update progress based on output length
-          const progressPct = Math.min(95, 70 + Math.min(25, fullOutput.length / 50));
-          updateProgress("Generating output...", progressPct);
-        }
-      }
-
-      // If no streaming output, try to get response as text
-      if (!fullOutput) {
-        fullOutput = await response.text();
-      }
-
-      updateProgress("Finalizing...", 98);
-
-      const completedAt = Date.now();
-      
-      // Format the output nicely
-      const formattedOutput = fullOutput.trim() || `No output was generated for ${workflowConfig[type].name}`;
-      
       setActiveWorkflows(prev => 
         prev.map(w => w.id === executionId 
           ? { 
               ...w, 
-              status: "completed", 
-              progress: 100,
-              currentStep: undefined,
-              output: formattedOutput,
-              completedAt,
-            } 
+	              progress: 60,
+	              currentStep: "Workflow running in Temporal...",
+	              output: `Workflow ${payload?.workflowId ?? executionId} is running. History updates automatically.`,
+	            } 
           : w
         )
       );
@@ -1246,33 +1229,25 @@ export default function AgentsPage() {
       };
       
       const newHistoryExecution: Execution = {
-        id: executionId,
+        id: payload?.executionId ?? executionId,
+        workspaceId: "local",
         agentType: agentTypeMap[type],
-        status: "completed",
+        status: "running",
         input,
-        output: { result: formattedOutput, type },
-        startedAt: newExecution.startedAt,
-        completedAt,
-        duration: `${((completedAt - newExecution.startedAt) / 1000).toFixed(1)}s`,
+	        output: {
+	          workflowId: payload?.workflowId,
+	          executionId: payload?.executionId,
+	          type,
+	        },
+	        error: null,
+	        workflowId: payload?.workflowId,
+	        startedAt: newExecution.startedAt,
+        completedAt: null,
+        duration: null,
+        createdAt: newExecution.startedAt,
       };
       
       setExecutions(prev => [newHistoryExecution, ...prev]);
-      
-      // Persist to database
-      try {
-        await fetch("/api/agents/executions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            agentType: agentTypeMap[type],
-            input,
-            status: "completed",
-            output: { result: formattedOutput, type },
-          }),
-        });
-      } catch (dbError) {
-        console.error("Failed to save execution to database:", dbError);
-      }
 
     } catch (error) {
       console.error("Workflow error:", error);
@@ -1303,13 +1278,16 @@ export default function AgentsPage() {
       
       const failedExecution: Execution = {
         id: executionId,
+        workspaceId: "local",
         agentType: agentTypeMap[type],
         status: "failed",
         input,
         output: { error: errorMessage },
+        error: errorMessage,
         startedAt: newExecution.startedAt,
         completedAt,
         duration: `${((completedAt - newExecution.startedAt) / 1000).toFixed(1)}s`,
+        createdAt: newExecution.startedAt,
       };
       
       setExecutions(prev => [failedExecution, ...prev]);
@@ -1356,7 +1334,7 @@ export default function AgentsPage() {
           title="AI Agents"
           description={
             <>
-              <span className="text-emerald-400/80">{AGENT_TYPES.filter((a) => getAgentStatus(a.id) === "active").length}</span> agents active
+              <span className="text-emerald-400/80">{AGENT_TYPES.length}</span> agent types available
               <span className="mx-2 text-white/20">•</span>
               <span className="text-violet-400/80">{activeWorkflows.filter(w => w.status === "running").length}</span> workflows running
             </>
@@ -1374,7 +1352,7 @@ export default function AgentsPage() {
 
         {/* Metrics Dashboard */}
         <section className="mb-8">
-          <MetricsDashboard executions={executions} agentMetrics={{}} />
+          <MetricsDashboard executions={executions} />
         </section>
 
         {/* Content */}
@@ -1780,12 +1758,8 @@ export default function AgentsPage() {
                       const agent = AGENT_TYPES.find((a) => a.id === exec.agentType);
                       const status = statusConfig[exec.status as keyof typeof statusConfig] || statusConfig.pending;
                       const StatusIcon = status.icon;
-                      const inputText = typeof exec.input === "object" && exec.input !== null 
-                        ? (exec.input as Record<string, unknown>).message || (exec.input as Record<string, unknown>).query || JSON.stringify(exec.input).slice(0, 80)
-                        : String(exec.input || "");
-                      const outputText = typeof exec.output === "object" && exec.output !== null
-                        ? (exec.output as Record<string, unknown>).result || (exec.output as Record<string, unknown>).content || JSON.stringify(exec.output).slice(0, 80)
-                        : String(exec.output || "");
+                      const inputText = formatExecutionPreview(exec.input);
+                      const outputText = formatExecutionPreview(exec.output);
 
                       return (
                         <div

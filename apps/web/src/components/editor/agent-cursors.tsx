@@ -138,15 +138,15 @@ function AgentCursorElement({ cursor }: { cursor: AgentCursor }) {
 export function useAgentCursors() {
   return {
     // Add cursor
-    addCursor: (cursor: AgentCursor) => {
+    addCursor: (_cursor: AgentCursor) => {
       // Implementation would connect to real-time collaboration
     },
     // Remove cursor
-    removeCursor: (id: string) => {
+    removeCursor: (_id: string) => {
       // Implementation would connect to real-time collaboration
     },
     // Update cursor position
-    updatePosition: (id: string, position: { top: number; left: number }) => {
+    updatePosition: (_id: string, _position: { top: number; left: number }) => {
       // Implementation would connect to real-time collaboration
     },
   };

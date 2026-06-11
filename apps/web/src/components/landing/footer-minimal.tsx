@@ -25,16 +25,16 @@ export function FooterMinimal() {
         <div className="max-w-7xl mx-auto px-6 text-center">
           <ScrollReveal animation="fade-up">
             <h2 className="text-4xl md:text-5xl lg:text-7xl font-semibold tracking-tight mb-6">
-              Ready to transform
+              Try the public
               <br />
-              <span className="text-white/40">your workflow?</span>
+              <span className="text-white/40">portfolio demo</span>
             </h2>
           </ScrollReveal>
 
           <ScrollReveal animation="fade-up" delay={0.1}>
             <p className="text-lg text-white/60 max-w-xl mx-auto mb-10">
-              Join thousands of teams already using Nexus to build faster, collaborate
-              smarter, and ship with confidence.
+              Open the demo account, generate an AI document, convert it into
+              tasks, and inspect the workflow history.
             </p>
           </ScrollReveal>
 
@@ -42,20 +42,21 @@ export function FooterMinimal() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <MagneticButton strength={0.2}>
                 <Link
-                  href="/dashboard"
+                  href="/login"
                   className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black rounded-full font-medium text-lg hover:bg-white/90 transition-colors"
                 >
-                  Get Started Free
+                  Try Demo
                   <ArrowRight className="size-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </MagneticButton>
 
               <MagneticButton strength={0.2}>
                 <Link
-                  href="/contact"
+                  href="https://github.com/zexy2/Nexus"
+                  target="_blank"
                   className="inline-flex items-center gap-3 px-8 py-4 border border-white/20 text-white rounded-full font-medium text-lg hover:bg-white/10 transition-colors"
                 >
-                  Contact Sales
+                  View GitHub
                 </Link>
               </MagneticButton>
             </div>
@@ -76,8 +77,8 @@ export function FooterMinimal() {
                 <span className="text-xl font-semibold">Nexus</span>
               </Link>
               <p className="text-white/50 text-sm leading-relaxed">
-                AI-powered workspace for modern teams. Build faster, collaborate
-                smarter.
+                Portfolio demo for an AI workspace: documents, task breakdown,
+                Kanban, and workflow history.
               </p>
             </div>
 
@@ -87,23 +88,23 @@ export function FooterMinimal() {
                 Product
               </h4>
               <ul className="space-y-3">
-                <FooterLink href="/features">Features</FooterLink>
-                <FooterLink href="/pricing">Pricing</FooterLink>
-                <FooterLink href="/changelog">Changelog</FooterLink>
-                <FooterLink href="/roadmap">Roadmap</FooterLink>
+                <FooterLink href="#features">Features</FooterLink>
+                <FooterLink href="#gallery">Showcase</FooterLink>
+                <FooterLink href="#testimonials">Demo Scope</FooterLink>
+                <FooterLink href="/login">Try Demo</FooterLink>
               </ul>
             </div>
 
-            {/* Company */}
+            {/* Project */}
             <div>
               <h4 className="text-sm font-semibold uppercase tracking-wider text-white/40 mb-4">
-                Company
+                Project
               </h4>
               <ul className="space-y-3">
-                <FooterLink href="/about">About</FooterLink>
-                <FooterLink href="/blog">Blog</FooterLink>
-                <FooterLink href="/careers">Careers</FooterLink>
-                <FooterLink href="/contact">Contact</FooterLink>
+                <FooterLink href="https://github.com/zexy2/Nexus">GitHub</FooterLink>
+                <FooterLink href="/docs">Docs</FooterLink>
+                <FooterLink href="/status">Health</FooterLink>
+                <FooterLink href="/login">Demo Login</FooterLink>
               </ul>
             </div>
 

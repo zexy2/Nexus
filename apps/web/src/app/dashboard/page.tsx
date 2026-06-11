@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import CountUp from 'react-countup';
 import {
@@ -11,14 +11,10 @@ import {
   Bot,
   Sparkles,
   ArrowRight,
-  Clock,
-  Activity,
   TrendingUp,
   Plus,
   MessageSquare,
-  Zap,
   CheckCircle2,
-  Play,
   ArrowUpRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -56,17 +52,18 @@ interface Agent {
   description: string;
 }
 
-// Mock agents
-const mockAgents: Agent[] = [
-  { id: '1', name: 'Researcher', avatar: '🔍', status: 'thinking', description: 'Gathering market data...' },
-  { id: '2', name: 'Coder', avatar: '💻', status: 'working', description: 'Refactoring API handlers' },
-  { id: '3', name: 'Writer', avatar: '✍️', status: 'idle', description: 'Ready for tasks' },
-  { id: '4', name: 'Analyst', avatar: '📊', status: 'idle', description: 'Ready for tasks' },
-];
+interface Execution {
+  id: string;
+  agentType: 'supervisor' | 'researcher' | 'writer' | 'coder' | 'project_manager';
+  status: string;
+  input: Record<string, unknown> | null;
+  createdAt: number;
+}
 
 // Format relative time
-function formatRelativeTime(timestamp: string) {
-  const diff = Date.now() - new Date(timestamp).getTime();
+function formatRelativeTime(timestamp: string | number) {
+  const value = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
+  const diff = Date.now() - value;
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -233,18 +230,20 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
 export default function DashboardPage() {
   const [docs, setDocs] = useState<Document[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { openModal } = useUIStore();
 
-  const activeAgents = mockAgents.filter(a => a.status !== 'idle').length;
-  const totalAgents = mockAgents.length;
+  const activeAgents = agents.filter(a => a.status !== 'idle').length;
+  const totalAgents = agents.length || 4;
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [docsRes, tasksRes] = await Promise.all([
+        const [docsRes, tasksRes, executionsRes] = await Promise.all([
           fetch('/api/docs'),
           fetch('/api/tasks'),
+          fetch('/api/agents/executions?limit=20'),
         ]);
 
         if (docsRes.ok) {
@@ -260,6 +259,44 @@ export default function DashboardPage() {
             .sort((a: Task, b: Task) => (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2))
             .slice(0, 5);
           setTasks(sortedTasks);
+        }
+
+        if (executionsRes.ok) {
+          const executions = await executionsRes.json() as Execution[];
+          const agentMeta: Record<Execution['agentType'], { name: string; avatar: string }> = {
+            supervisor: { name: 'Supervisor', avatar: '🧠' },
+            researcher: { name: 'Researcher', avatar: '🔍' },
+            writer: { name: 'Writer', avatar: '✍️' },
+            coder: { name: 'Coder', avatar: '💻' },
+            project_manager: { name: 'Task Manager', avatar: '📋' },
+          };
+          const latestByAgent = new Map<Execution['agentType'], Execution>();
+
+          for (const execution of executions) {
+            if (!latestByAgent.has(execution.agentType)) {
+              latestByAgent.set(execution.agentType, execution);
+            }
+          }
+
+          const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; avatar: string }]>)
+            .map(([agentType, meta]) => {
+              const execution = latestByAgent.get(agentType);
+              const status: Agent['status'] =
+                execution?.status === 'running'
+                  ? agentType === 'writer' ? 'writing' : 'working'
+                  : 'idle';
+              return {
+                id: agentType,
+                name: meta.name,
+                avatar: meta.avatar,
+                status,
+                description: execution
+                  ? `${execution.status} • ${formatRelativeTime(execution.createdAt)}`
+                  : 'No recent executions',
+              };
+            });
+
+          setAgents(nextAgents);
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
@@ -314,7 +351,7 @@ export default function DashboardPage() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-body-lg text-muted-foreground max-w-2xl mx-auto mb-8"
           >
-            {activeAgents} of {totalAgents} agents are working. Your workspace is synced and ready.
+            {activeAgents} of {totalAgents} agents are working. Your workspace is ready for AI workflows.
           </motion.p>
 
           {/* Quick actions */}
@@ -372,12 +409,12 @@ export default function DashboardPage() {
         <section className="px-6 md:px-12 lg:px-24 mb-16">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {/* Stats Cards */}
-            {[
-              { label: 'Tasks Completed', value: 12, trend: '+23%', icon: <CheckCircle2 className="h-5 w-5" /> },
+            {([
+              { label: 'Tasks Completed', value: tasks.filter((task) => task.status === 'done').length, icon: <CheckCircle2 className="h-5 w-5" /> },
               { label: 'Documents', value: docs.length, icon: <FileText className="h-5 w-5" /> },
-              { label: 'AI Interactions', value: 47, trend: '+12%', icon: <MessageSquare className="h-5 w-5" /> },
+              { label: 'AI Interactions', value: agents.filter((agent) => agent.description !== 'No recent executions').length, icon: <MessageSquare className="h-5 w-5" /> },
               { label: 'Active Agents', value: activeAgents, suffix: `/${totalAgents}`, icon: <Bot className="h-5 w-5" /> },
-            ].map((stat, index) => (
+            ] as Array<{ label: string; value: number; trend?: string; suffix?: string; icon: ReactNode }>).map((stat, index) => (
               <motion.div
                 key={stat.label}
                 initial={{ opacity: 0, y: 30 }}
@@ -436,7 +473,7 @@ export default function DashboardPage() {
             interactive={false}
           >
             <div className="space-y-3 mt-4">
-              {mockAgents.map((agent, i) => (
+              {agents.map((agent, i) => (
                 <AgentCard key={agent.id} agent={agent} index={i} />
               ))}
             </div>
@@ -504,17 +541,22 @@ export default function DashboardPage() {
             interactive={false}
           >
             <div className="grid grid-cols-2 gap-3 mt-4">
-              {[
+              {([
                 { icon: <FileText className="h-5 w-5" />, label: 'New Doc', action: 'createDocument' },
                 { icon: <ListTodo className="h-5 w-5" />, label: 'New Task', action: 'createTask' },
                 { icon: <Sparkles className="h-5 w-5" />, label: 'Ask AI', action: 'aiAssistant' },
                 { icon: <MessageSquare className="h-5 w-5" />, label: 'Chat', href: '/dashboard/chat' },
-              ].map((action, i) => (
+              ] as Array<{
+                icon: ReactNode;
+                label: string;
+                action?: 'createDocument' | 'createTask' | 'settings' | 'onboarding' | 'aiAssistant';
+                href?: string;
+              }>).map((action) => (
                 <motion.button
                   key={action.label}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => action.action && openModal(action.action as any)}
+                  onClick={() => action.action && openModal(action.action)}
                   className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
                 >
                   <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
@@ -528,48 +570,6 @@ export default function DashboardPage() {
         </BentoGrid>
       </section>
 
-      {/* Video showcase section */}
-      <ScrollReveal>
-        <section className="px-6 md:px-12 lg:px-24 mb-24">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            className="relative aspect-video rounded-3xl overflow-hidden bg-gradient-to-br from-white/5 to-transparent border border-white/10"
-          >
-            {/* Video placeholder */}
-            <div className="absolute inset-0 flex items-center justify-center z-10">
-              <div className="text-center">
-                <motion.div
-                  whileHover={{ scale: 1.1 }}
-                  className="h-20 w-20 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center mb-4 mx-auto cursor-pointer border border-white/20"
-                >
-                  <Play className="h-8 w-8 ml-1" />
-                </motion.div>
-                <p className="text-muted-foreground">Watch how Nexus works</p>
-              </div>
-            </div>
-
-            {/* Ambient gradient background as fallback */}
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-950/30 via-black/50 to-emerald-950/20" />
-            
-            {/* Video background with error handling */}
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover opacity-30"
-              onError={(e) => {
-                // Hide video on error, fallback gradient will show
-                (e.target as HTMLVideoElement).style.display = 'none';
-              }}
-            >
-              <source src="/videos/demo-bg.mp4" type="video/mp4" />
-            </video>
-          </motion.div>
-        </section>
-      </ScrollReveal>
     </div>
   );
 }

@@ -80,13 +80,15 @@ function SkeletonCard({ className }: { className?: string }) {
  * Document list skeleton
  */
 function SkeletonDocumentList({ count = 5 }: { count?: number }) {
+  const widths = [72, 88, 64, 80, 76];
+
   return (
     <div className="space-y-2" data-testid="docs-loading">
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="flex items-center gap-3 rounded-lg border p-3">
           <Skeleton className="h-6 w-6 rounded-sm" />
           <div className="flex-1">
-            <Skeleton className="h-4" style={{ width: `${60 + Math.random() * 30}%` }} />
+            <Skeleton className="h-4" style={{ width: `${widths[i % widths.length]}%` }} />
           </div>
           <Skeleton className="h-3 w-15" />
         </div>
@@ -101,10 +103,10 @@ function SkeletonDocumentList({ count = 5 }: { count?: number }) {
 function SkeletonTaskBoard() {
   return (
     <div className="flex gap-4" data-testid="tasks-loading">
-      {["todo", "in-progress", "done"].map((column) => (
+      {["todo", "in-progress", "done"].map((column, columnIndex) => (
         <div key={column} className="flex-1 space-y-3">
           <Skeleton className="h-6 w-25 mb-4" />
-          {Array.from({ length: 2 + Math.floor(Math.random() * 3) }).map((_, i) => (
+          {Array.from({ length: 2 + (columnIndex % 3) }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
         </div>

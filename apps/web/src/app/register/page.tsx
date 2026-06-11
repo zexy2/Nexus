@@ -29,6 +29,8 @@ const features = [
 
 export default function RegisterPage() {
   const router = useRouter();
+  const signupEnabled = process.env.NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED !== "false";
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -48,6 +50,11 @@ export default function RegisterPage() {
     setError("");
 
     try {
+      if (!signupEnabled) {
+        setError("Public signup is disabled for this demo. Please use the demo account.");
+        return;
+      }
+
       const result = await signUp.email({
         name,
         email,
@@ -59,7 +66,7 @@ export default function RegisterPage() {
       } else {
         router.push("/dashboard");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);
@@ -73,7 +80,7 @@ export default function RegisterPage() {
         provider: "github",
         callbackURL: "/dashboard"
       });
-    } catch (err) {
+    } catch {
       setError("GitHub login failed");
       setIsLoading(false);
     }
@@ -86,7 +93,7 @@ export default function RegisterPage() {
         provider: "google",
         callbackURL: "/dashboard"
       });
-    } catch (err) {
+    } catch {
       setError("Google login failed");
       setIsLoading(false);
     }
@@ -108,7 +115,7 @@ export default function RegisterPage() {
             Your AI-Powered Workspace
           </h2>
           <p className="text-muted-foreground mb-8">
-            Join thousands of teams using Nexus to automate their workflows with intelligent AI agents.
+            Use Nexus to generate AI documents, extract tasks, and inspect workflow history in one workspace.
           </p>
 
           <div className="space-y-4">
@@ -124,13 +131,13 @@ export default function RegisterPage() {
 
           <div className="mt-12 p-4 rounded-lg border bg-card/50">
             <p className="text-sm italic text-muted-foreground">
-              &ldquo;Nexus has transformed how our team works. The AI agents handle routine tasks while we focus on what matters.&rdquo;
+              &ldquo;The public demo is intentionally quota-limited: AI runs through a server-managed key with clear availability states.&rdquo;
             </p>
             <div className="flex items-center gap-2 mt-3">
               <div className="size-8 rounded-full bg-primary/20" />
               <div>
-                <p className="text-sm font-medium">Sarah Chen</p>
-                <p className="text-xs text-muted-foreground">Product Lead at TechCorp</p>
+                <p className="text-sm font-medium">Nexus Demo</p>
+                <p className="text-xs text-muted-foreground">Portfolio-safe AI workspace</p>
               </div>
             </div>
           </div>
@@ -152,12 +159,18 @@ export default function RegisterPage() {
             <CardHeader className="text-center">
               <CardTitle className="text-2xl">Create an account</CardTitle>
               <CardDescription>
-                Get started with your free account today
+                {signupEnabled ? "Get started with your free account today" : "Public signup is disabled for this portfolio demo"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {!signupEnabled && (
+                <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  Use the demo account from the sign-in page to try Nexus without creating a new account.
+                </div>
+              )}
+
               {/* Social Login */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className={signupEnabled ? "grid grid-cols-2 gap-3" : "hidden"}>
                 <Button
                   variant="outline"
                   onClick={handleGithubLogin}
@@ -205,7 +218,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Email Signup Form */}
-              <form onSubmit={handleEmailSignup} className="space-y-4">
+              <form onSubmit={handleEmailSignup} className={signupEnabled ? "space-y-4" : "hidden"}>
                 <div className="space-y-2">
                   <Label htmlFor="name">Full name</Label>
                   <Input
@@ -279,7 +292,7 @@ export default function RegisterPage() {
             </CardContent>
             <CardFooter className="justify-center">
               <p className="text-sm text-muted-foreground">
-                Already have an account?{" "}
+                {demoMode ? "Ready to try the demo? " : "Already have an account? "}
                 <Link href="/login" className="text-primary hover:underline">
                   Sign in
                 </Link>

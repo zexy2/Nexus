@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
+import { useEffect, useState } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import useEmblaCarousel from "embla-carousel-react";
-import { stockImages } from "@/lib/images";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
 import { ChevronLeft, ChevronRight, Quote } from "lucide-react";
 
@@ -15,36 +13,28 @@ if (typeof window !== "undefined") {
 
 interface Testimonial {
   quote: string;
-  author: string;
+  title: string;
   role: string;
-  avatar: string;
-  company?: string;
 }
 
 const testimonials: Testimonial[] = [
   {
     quote:
-      "Nexus has completely transformed how our team works. The AI agents handle research and drafting, letting us focus on strategy and creativity.",
-    author: "Alex Thompson",
-    role: "CEO",
-    company: "TechCorp",
-    avatar: stockImages.avatars[0].src,
+      "Generate a document with Gemini, save it to the workspace, then turn that document into real Kanban tasks.",
+    title: "Document to tasks",
+    role: "Primary demo flow",
   },
   {
     quote:
-      "The local-first architecture means we never worry about connectivity. Our team in remote areas has the same experience as headquarters.",
-    author: "Sarah Chen",
-    role: "Product Lead",
-    company: "Innovate",
-    avatar: stockImages.avatars[1].src,
+      "Temporal workflow history shows running, completed, and failed AI work instead of hiding everything behind a spinner.",
+    title: "Workflow visibility",
+    role: "Operational signal",
   },
   {
     quote:
-      "We evaluated dozens of tools before choosing Nexus. The combination of AI capabilities and data privacy is unmatched in the industry.",
-    author: "Michael Park",
-    role: "CTO",
-    company: "DataFlow",
-    avatar: stockImages.avatars[2].src,
+      "The public demo uses one server-managed Gemini key with strict daily quotas, audit logs, and a global AI kill switch.",
+    title: "Budget guardrails",
+    role: "Portfolio-safe AI",
   },
 ];
 
@@ -89,10 +79,10 @@ export function Testimonials() {
         {/* Section header */}
         <ScrollReveal animation="fade-up" className="text-center mb-16">
           <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
-            Testimonials
+            Demo scope
           </span>
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-black tracking-tight">
-            Loved by teams
+            What the live demo proves
           </h2>
         </ScrollReveal>
 
@@ -114,25 +104,12 @@ export function Testimonials() {
                       &ldquo;{testimonial.quote}&rdquo;
                     </blockquote>
 
-                    {/* Author */}
-                    <div className="flex items-center gap-4">
-                      <div className="relative size-14 rounded-full overflow-hidden">
-                        <Image
-                          src={testimonial.avatar}
-                          alt={testimonial.author}
-                          fill
-                          sizes="56px"
-                          className="object-cover"
-                        />
+                    <div>
+                      <div className="font-semibold text-black">
+                        {testimonial.title}
                       </div>
-                      <div>
-                        <div className="font-semibold text-black">
-                          {testimonial.author}
-                        </div>
-                        <div className="text-neutral-500">
-                          {testimonial.role}
-                          {testimonial.company && `, ${testimonial.company}`}
-                        </div>
+                      <div className="text-neutral-500">
+                        {testimonial.role}
                       </div>
                     </div>
                   </div>

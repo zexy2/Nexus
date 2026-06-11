@@ -12,6 +12,7 @@ import { Github, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,8 +34,35 @@ export default function LoginPage() {
       } else {
         router.push("/dashboard");
       }
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/demo/session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      const result = await response.json().catch(() => null) as
+        | { redirectTo?: string; message?: string }
+        | null;
+
+      if (!response.ok) {
+        setError(result?.message || "Demo login is not available right now.");
+      } else {
+        router.push(result?.redirectTo || "/dashboard");
+      }
+    } catch {
+      setError("Demo login failed");
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +75,7 @@ export default function LoginPage() {
         provider: "github",
         callbackURL: "/dashboard"
       });
-    } catch (err) {
+    } catch {
       setError("GitHub login failed");
       setIsLoading(false);
     }
@@ -60,7 +88,7 @@ export default function LoginPage() {
         provider: "google",
         callbackURL: "/dashboard"
       });
-    } catch (err) {
+    } catch {
       setError("Google login failed");
       setIsLoading(false);
     }
@@ -86,6 +114,18 @@ export default function LoginPage() {
               Welcome back. Enter your credentials to continue.
             </p>
           </div>
+
+          {demoMode && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="mb-4 w-full h-10"
+              onClick={handleDemoLogin}
+              disabled={isLoading}
+            >
+              Try the public demo
+            </Button>
+          )}
 
           {/* Social Login */}
           <div className="grid grid-cols-2 gap-3 mb-6">
@@ -190,17 +230,23 @@ export default function LoginPage() {
           {/* Footer */}
           <p className="text-sm text-muted-foreground text-center mt-6">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-foreground font-medium hover:underline">
-              Sign up
-            </Link>
+            {demoMode ? (
+              <span className="text-foreground font-medium">Use the demo account</span>
+            ) : (
+              <Link href="/register" className="text-foreground font-medium hover:underline">
+                Sign up
+              </Link>
+            )}
           </p>
 
-          <Link 
-            href="/dashboard" 
-            className="block text-center text-xs text-muted-foreground hover:text-foreground transition-base mt-4"
-          >
-            Continue without account →
-          </Link>
+          {!demoMode && (
+            <Link 
+              href="/dashboard" 
+              className="block text-center text-xs text-muted-foreground hover:text-foreground transition-base mt-4"
+            >
+              Continue without account →
+            </Link>
+          )}
         </div>
       </div>
 
@@ -209,11 +255,11 @@ export default function LoginPage() {
         <div className="max-w-md">
           <blockquote className="space-y-4">
             <p className="text-lg leading-relaxed text-foreground/80">
-              &ldquo;Nexus has transformed how our team handles documentation and task management. 
-              The AI agents save us hours every week.&rdquo;
+              &ldquo;Use the public demo to generate an AI document, convert it into tasks,
+              inspect the Kanban board, and review workflow history.&rdquo;
             </p>
             <footer className="text-sm text-muted-foreground">
-              — Demo User, Early Adopter
+              Nexus portfolio demo
             </footer>
           </blockquote>
         </div>

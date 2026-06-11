@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, ReactNode, cloneElement, isValidElement } from "react";
+import { useRef, useState, ReactNode } from "react";
 import { motion } from "framer-motion";
 
 interface MagneticButtonProps {
