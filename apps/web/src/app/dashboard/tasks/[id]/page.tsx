@@ -270,7 +270,7 @@ Please complete this subtask. Provide a brief but informative result in Turkish 
             // Clean up result
             researchResult = researchResult.slice(0, 300); // Limit length
           }
-        } catch (e) {
+        } catch {
           researchResult = `${subtaskTitle} tamamlandı.`;
         }
         
@@ -530,7 +530,7 @@ Format it nicely with sections. Keep it concise but informative (max 500 words).
                 if (event === "error") {
                   throw new Error(data.message);
                 }
-              } catch (e) {
+              } catch {
                 // Skip parse errors for incomplete chunks
               }
             }
@@ -780,7 +780,7 @@ Example format: ["Araştırma yap", "Taslak hazırla", "İncele ve düzenle"]`
         if (jsonMatch) {
           try {
             // Clean the JSON string
-            let cleanJson = jsonMatch[0]
+            const cleanJson = jsonMatch[0]
               .replace(/```json/g, "")
               .replace(/```/g, "")
               .trim();

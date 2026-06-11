@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { type Task as SyncTask } from "@/lib/sync/zero";
+import { useLocalFirstContext } from "@/lib/sync/local-first";
 import { motion, AnimatePresence } from "framer-motion";
-import { gsap } from "gsap";
 import {
   DndContext,
   DragOverlay,
@@ -24,9 +25,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  ListTodo,
-  Plus,
-  Bot,
   Trash2,
   CheckCircle2,
   Circle,
@@ -36,8 +34,6 @@ import {
   MoreHorizontal,
   Sparkles,
   GripVertical,
-  User,
-  Tag,
   AlertCircle,
   ArrowUpCircle,
   Search,
@@ -46,7 +42,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
@@ -78,8 +73,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  PageHeader,
-  EmptyState,
   SkeletonKanbanColumn,
 } from "@/components/shared";
 import { showToast } from "@/components/shared/toast-provider";
@@ -107,6 +100,39 @@ interface Task {
   createdAt: Date;
 }
 
+interface ApiTask extends Omit<Task, "createdAt" | "dueDate"> {
+  createdAt: string | number;
+  dueDate?: string | number | null;
+}
+
+function normalizeTask(task: ApiTask): Task {
+  return {
+    ...task,
+    description: task.description || "",
+    assigneeId: task.assigneeId || null,
+    assigneeAgentType: task.assigneeAgentType || null,
+    createdAt: new Date(task.createdAt),
+    dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+  };
+}
+
+// Map a locally-synced task (IndexedDB store, numeric timestamps) to the page
+// shape. Used for the local-first read path so the board renders instantly and
+// works offline from cached data.
+function fromSyncTask(t: SyncTask): Task {
+  return {
+    id: t.id,
+    title: t.title,
+    description: t.description || "",
+    status: t.status,
+    priority: t.priority,
+    assigneeId: t.assigneeId || null,
+    assigneeAgentType: t.assigneeAgentType || null,
+    createdAt: new Date(t.createdAt),
+    dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
+  };
+}
+
 // Column config
 const columns: { id: TaskStatus; title: string; color: string; icon: typeof Circle }[] = [
   { id: "todo", title: "Yapılacak", color: "neutral", icon: Circle },
@@ -121,66 +147,6 @@ const priorityConfig: Record<TaskPriority, { label: string; color: string; icon:
   high: { label: "Yüksek", color: "bg-amber-100 text-amber-600", icon: ArrowUpCircle },
   urgent: { label: "Acil", color: "bg-red-100 text-red-600", icon: AlertCircle },
 };
-
-// Sample tasks
-const sampleTasks: Task[] = [
-  {
-    id: "1",
-    title: "API entegrasyonunu tamamla",
-    description: "REST API endpoint'lerini implemente et",
-    status: "in_progress",
-    priority: "high",
-    assigneeId: null,
-    assigneeAgentType: "developer",
-    tags: ["api", "backend"],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-  },
-  {
-    id: "2",
-    title: "Kullanıcı testlerini yap",
-    description: "5 kullanıcı ile görüşme yap",
-    status: "todo",
-    priority: "medium",
-    assigneeId: "user1",
-    assigneeAgentType: null,
-    tags: ["ux", "araştırma"],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 48),
-  },
-  {
-    id: "3",
-    title: "Dökümantasyon güncelle",
-    description: "API dökümantasyonunu güncelle",
-    status: "todo",
-    priority: "low",
-    assigneeId: null,
-    assigneeAgentType: "writer",
-    tags: ["docs"],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 72),
-  },
-  {
-    id: "4",
-    title: "Sprint retrospektifi",
-    description: "Ekip ile retrospektif toplantısı",
-    status: "done",
-    priority: "medium",
-    assigneeId: "user1",
-    assigneeAgentType: null,
-    tags: ["toplantı"],
-    dueDate: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 96),
-  },
-  {
-    id: "5",
-    title: "Performans optimizasyonu",
-    description: "Sayfa yüklenme süresini iyileştir",
-    status: "in_progress",
-    priority: "urgent",
-    assigneeId: null,
-    assigneeAgentType: "developer",
-    tags: ["performance"],
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12),
-  },
-];
 
 // Sortable Task Card
 function SortableTaskCard({
@@ -508,8 +474,11 @@ function KanbanColumn({
 }
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(sampleTasks);
-  const [isLoading, setIsLoading] = useState(false);
+  const { engine, userId, workspaceId } = useLocalFirstContext();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  // Track the in-progress drag so background sync doesn't clobber it.
+  const activeIdRef = useRef<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -534,6 +503,62 @@ export default function TasksPage() {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const fetchTasks = useCallback(async () => {
+    // Local-first read: render cached tasks from IndexedDB instantly (and while
+    // offline), then refresh from the network when it is reachable.
+    let renderedFromCache = false;
+    if (engine) {
+      try {
+        const local = await engine.query<SyncTask>("tasks");
+        if (local.length > 0) {
+          setTasks(local.map(fromSyncTask));
+          setIsLoading(false);
+          renderedFromCache = true;
+        }
+      } catch {
+        // Cache miss is non-fatal; fall through to the network.
+      }
+    }
+
+    if (!renderedFromCache) setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/tasks");
+      if (!response.ok) {
+        throw new Error(`Failed to fetch tasks: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setTasks(Array.isArray(data) ? data.map(normalizeTask) : []);
+    } catch (error) {
+      console.error("Failed to load tasks:", error);
+      // Offline with no cache is the only case the user sees nothing.
+      if (!renderedFromCache) {
+        showToast.error("Görevler yüklenemedi");
+        setTasks([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [engine]);
+
+  useEffect(() => {
+    void fetchTasks();
+
+    // Re-read the local store when the background sync updates it, unless a drag
+    // is in progress (so optimistic reordering isn't clobbered mid-gesture).
+    if (!engine) return;
+    return engine.subscribe("tasks", async () => {
+      if (activeIdRef.current) return;
+      try {
+        const local = await engine.query<SyncTask>("tasks");
+        setTasks(local.map(fromSyncTask));
+      } catch {
+        // ignore
+      }
+    });
+  }, [engine, fetchTasks]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -568,7 +593,9 @@ export default function TasksPage() {
 
   // DnD handlers
   const handleDragStart = useCallback((event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+    const id = event.active.id as string;
+    activeIdRef.current = id;
+    setActiveId(id);
   }, []);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -603,11 +630,17 @@ export default function TasksPage() {
     }
   }, [tasks]);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveId(null);
+    activeIdRef.current = null;
 
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+
+    const movedTask = tasks.find((task) => task.id === active.id);
+    const overTask = tasks.find((task) => task.id === over.id);
+    const overColumn = columns.find((column) => column.id === over.id);
+    const targetStatus = overTask?.status || overColumn?.id || movedTask?.status;
 
     // Reorder within same column
     setTasks((prev) => {
@@ -618,62 +651,205 @@ export default function TasksPage() {
 
       const newTasks = [...prev];
       const [removed] = newTasks.splice(activeIndex, 1);
+      const moved = targetStatus ? { ...removed, status: targetStatus } : removed;
       
       if (overIndex !== -1) {
-        newTasks.splice(overIndex, 0, removed);
+        newTasks.splice(overIndex, 0, moved);
       } else {
-        newTasks.push(removed);
+        newTasks.push(moved);
       }
 
       return newTasks;
     });
 
-    showToast.success("Görev taşındı");
-  }, []);
+    if (!movedTask || !targetStatus) return;
+
+    // Local-first: persist the new status to the local store and queue the sync.
+    if (engine) {
+      try {
+        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
+        if (existing) {
+          await engine.mutate<SyncTask>("tasks", "update", {
+            ...existing,
+            status: targetStatus,
+            updatedAt: Date.now(),
+          });
+        }
+        showToast.success("Görev taşındı");
+      } catch (error) {
+        console.error("Failed to persist task move:", error);
+        showToast.error("Görev taşınamadı");
+        void fetchTasks();
+      }
+      return;
+    }
+
+    // Fallback: network move.
+    try {
+      const response = await fetch(`/api/tasks/${movedTask.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: targetStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to move task: ${response.status}`);
+      }
+
+      showToast.success("Görev taşındı");
+    } catch (error) {
+      console.error("Failed to persist task move:", error);
+      showToast.error("Görev taşınamadı");
+      void fetchTasks();
+    }
+  }, [fetchTasks, tasks, engine]);
 
   // CRUD handlers
-  const handleCreateTask = useCallback(() => {
+  const resetNewTask = useCallback(() => {
+    setNewTask({ title: "", description: "", priority: "medium", assignToAgent: false });
+    setIsCreateOpen(false);
+  }, []);
+
+  const handleCreateTask = useCallback(async () => {
     if (!newTask.title.trim()) {
       showToast.warning("Lütfen görev başlığı girin");
       return;
     }
 
-    const task: Task = {
-      id: Date.now().toString(),
-      title: newTask.title,
-      description: newTask.description,
-      status: "todo",
-      priority: newTask.priority,
-      assigneeId: newTask.assignToAgent ? null : "user1",
-      assigneeAgentType: newTask.assignToAgent ? "assistant" : null,
-      createdAt: new Date(),
-    };
+    // Local-first: optimistic insert written to the local store and queued for
+    // sync — works offline. The subscription re-read renders it instantly.
+    if (engine && workspaceId && userId) {
+      const now = Date.now();
+      await engine.mutate<SyncTask>("tasks", "insert", {
+        id: crypto.randomUUID(),
+        workspaceId,
+        title: newTask.title.trim(),
+        description: newTask.description,
+        status: "todo",
+        priority: newTask.priority,
+        assigneeId: newTask.assignToAgent ? undefined : userId,
+        assigneeAgentType: newTask.assignToAgent ? "supervisor" : undefined,
+        createdBy: userId,
+        position: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+      resetNewTask();
+      showToast.success("Görev oluşturuldu");
+      return;
+    }
 
-    setTasks((prev) => [task, ...prev]);
-    setNewTask({
-      title: "",
-      description: "",
-      priority: "medium",
-      assignToAgent: false,
-    });
-    setIsCreateOpen(false);
-    showToast.success("Görev oluşturuldu");
-  }, [newTask]);
+    // Fallback: network create (sync engine not ready yet).
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newTask.title,
+          description: newTask.description,
+          priority: newTask.priority,
+          assignToAgent: newTask.assignToAgent,
+        }),
+      });
 
-  const handleUpdateTask = useCallback(() => {
+      if (!response.ok) {
+        throw new Error(`Failed to create task: ${response.status}`);
+      }
+
+      const created = normalizeTask(await response.json());
+      setTasks((prev) => [created, ...prev]);
+      resetNewTask();
+      showToast.success("Görev oluşturuldu");
+    } catch (error) {
+      console.error("Failed to create task:", error);
+      showToast.error("Görev oluşturulamadı");
+    }
+  }, [newTask, engine, workspaceId, userId, resetNewTask]);
+
+  const handleUpdateTask = useCallback(async () => {
     if (!editingTask) return;
 
-    setTasks((prev) =>
-      prev.map((t) => (t.id === editingTask.id ? editingTask : t))
-    );
-    setEditingTask(null);
-    showToast.success("Görev güncellendi");
-  }, [editingTask]);
+    // Local-first: merge changes into the cached row and queue the sync.
+    if (engine) {
+      const existing = await engine.get<SyncTask>("tasks", editingTask.id);
+      if (existing) {
+        await engine.mutate<SyncTask>("tasks", "update", {
+          ...existing,
+          title: editingTask.title,
+          description: editingTask.description,
+          priority: editingTask.priority,
+          status: editingTask.status,
+          updatedAt: Date.now(),
+        });
+        setEditingTask(null);
+        showToast.success("Görev güncellendi");
+        return;
+      }
+    }
 
-  const handleDeleteTask = useCallback((id: string) => {
+    // Fallback: network update.
+    try {
+      const response = await fetch(`/api/tasks/${editingTask.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editingTask.title,
+          description: editingTask.description,
+          priority: editingTask.priority,
+          status: editingTask.status,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update task: ${response.status}`);
+      }
+
+      const updated = normalizeTask({
+        ...editingTask,
+        ...(await response.json()),
+      });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === editingTask.id ? updated : t))
+      );
+      setEditingTask(null);
+      showToast.success("Görev güncellendi");
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      showToast.error("Görev güncellenemedi");
+      void fetchTasks();
+    }
+  }, [editingTask, engine, fetchTasks]);
+
+  const handleDeleteTask = useCallback(async (id: string) => {
+    const previousTasks = tasks;
     setTasks((prev) => prev.filter((t) => t.id !== id));
-    showToast.success("Görev silindi");
-  }, []);
+
+    // Local-first: optimistic delete + queued sync.
+    if (engine) {
+      try {
+        await engine.mutate<SyncTask>("tasks", "delete", { id } as SyncTask);
+        showToast.success("Görev silindi");
+      } catch (error) {
+        console.error("Failed to delete task:", error);
+        showToast.error("Görev silinemedi");
+        setTasks(previousTasks);
+      }
+      return;
+    }
+
+    // Fallback: network delete.
+    try {
+      const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error(`Failed to delete task: ${response.status}`);
+      }
+      showToast.success("Görev silindi");
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      showToast.error("Görev silinemedi");
+      setTasks(previousTasks);
+    }
+  }, [tasks, engine]);
 
   if (isLoading) {
     return (
