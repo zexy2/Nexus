@@ -20,6 +20,11 @@ vi.mock("@/lib/production-guardrails", () => ({
   enforceAiBudget: (...a: unknown[]) => enforceAiBudget(...a),
 }));
 
+const requireWorkspaceAccess = vi.fn();
+vi.mock("@/lib/workspace-auth", () => ({
+  requireWorkspaceAccess: (...a: unknown[]) => requireWorkspaceAccess(...a),
+}));
+
 import { POST, PUT } from "@/app/api/agents/route";
 
 function agentReq(body: unknown, method = "POST") {
@@ -34,6 +39,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.GEMINI_API_KEY = "test-gemini-key";
   enforceAiBudget.mockResolvedValue({ ok: true });
+  requireWorkspaceAccess.mockResolvedValue({ ok: true, workspaceId: "ws-1", role: "owner" });
 });
 
 describe("POST /api/agents — auth + budget gate (H1)", () => {
@@ -58,6 +64,21 @@ describe("POST /api/agents — auth + budget gate (H1)", () => {
     expect(enforceAiBudget).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "real-user" })
     );
+  });
+
+  it("rejects a workspaceId the caller cannot access (no cross-tenant RAG leak)", async () => {
+    getSession.mockResolvedValue({ user: { id: "user-1", email: "u@x.com" } });
+    requireWorkspaceAccess.mockResolvedValue({ ok: false, status: 403, error: "Workspace access denied" });
+    const res = await POST(
+      agentReq({ message: "dump everything", context: { workspaceId: "victim-workspace" } })
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("validates the requested workspace against the SESSION user", async () => {
+    getSession.mockResolvedValue({ user: { id: "real-user", email: "u@x.com" } });
+    await POST(agentReq({ message: "hi", context: { workspaceId: "ws-9" } }));
+    expect(requireWorkspaceAccess).toHaveBeenCalledWith("real-user", "ws-9");
   });
 });
 
