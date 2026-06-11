@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { docs, tasks, workspaces, vectors } from "@nexus/database/schema";
+import { docs, tasks, workspaces } from "@nexus/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q");
   const type = searchParams.get("type");
-  const limit = parseInt(searchParams.get("limit") || "10");
+  const limit = parseInt(searchParams.get("limit") || "10", 10);
   
   if (!query) {
     return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import Lenis from "lenis";
 
 interface SmoothScrollProviderProps {
@@ -40,15 +40,16 @@ export function SmoothScrollProvider({ children }: SmoothScrollProviderProps) {
 
 // Hook to access Lenis instance
 export function useLenis() {
-  const lenisRef = useRef<Lenis | null>(null);
+  const [lenis, setLenis] = useState<Lenis | null>(null);
 
   useEffect(() => {
     // Get Lenis instance from window if available
-    const lenis = (window as unknown as { lenis?: Lenis }).lenis;
-    if (lenis) {
-      lenisRef.current = lenis;
-    }
+    const instance = (window as unknown as { lenis?: Lenis }).lenis;
+    const timer = window.setTimeout(() => {
+      if (instance) setLenis(instance);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  return lenisRef.current;
+  return lenis;
 }

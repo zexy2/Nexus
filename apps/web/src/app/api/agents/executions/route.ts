@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { agentExecutions, workspaces, workspaceMembers } from "@nexus/database/schema";
 import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { headers } from "next/headers";
+import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { reconcileRunningWorkflowExecutions } from "@/lib/workflow-reconcile";
 
 export const runtime = "nodejs";
 
@@ -21,7 +23,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const workspaceId = searchParams.get("workspaceId");
     const status = searchParams.get("status");
-    const limit = parseInt(searchParams.get("limit") || "50");
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     // Get user's workspaces
     const userWorkspaces = await db
@@ -52,20 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch executions with proper condition handling
-    let query = db
-      .select({
-        id: agentExecutions.id,
-        workspaceId: agentExecutions.workspaceId,
-        agentType: agentExecutions.agentType,
-        status: agentExecutions.status,
-        input: agentExecutions.input,
-        output: agentExecutions.output,
-        error: agentExecutions.errorMessage,
-        startedAt: agentExecutions.startedAt,
-        completedAt: agentExecutions.completedAt,
-        createdAt: agentExecutions.createdAt,
-      })
-      .from(agentExecutions);
+    const query = db.select().from(agentExecutions);
     
     // Only apply where clause if we have conditions
     const executions = conditions.length > 0
@@ -80,14 +69,20 @@ export async function GET(request: NextRequest) {
       status: string;
       input: Record<string, unknown> | null;
       output: Record<string, unknown> | null;
-      error: string | null;
+      errorMessage: string | null;
+      temporalWorkflowId: string | null;
       startedAt: Date | null;
       completedAt: Date | null;
       createdAt: Date;
     };
 
+    const reconciledExecutions = await reconcileRunningWorkflowExecutions(
+      executions as ExecutionRow[],
+      { userId: session.user.id, request }
+    );
+
     // Calculate duration for each execution
-    const executionsWithDuration = (executions as ExecutionRow[]).map((exec) => {
+    const executionsWithDuration = (reconciledExecutions as ExecutionRow[]).map((exec) => {
       let duration: string | null = null;
       if (exec.startedAt && exec.completedAt) {
         const ms = exec.completedAt.getTime() - exec.startedAt.getTime();
@@ -108,7 +103,15 @@ export async function GET(request: NextRequest) {
       }
 
       return {
-        ...exec,
+        id: exec.id,
+        workspaceId: exec.workspaceId,
+        agentType: exec.agentType,
+        status: exec.status,
+        input: exec.input,
+        output: exec.output,
+        error: exec.errorMessage,
+        temporalWorkflowId: exec.temporalWorkflowId,
+        workflowId: exec.temporalWorkflowId,
         duration,
         startedAt: exec.startedAt?.getTime() || null,
         completedAt: exec.completedAt?.getTime() || null,
@@ -147,44 +150,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If no workspaceId provided, get user's first workspace or create one
-    let workspaceId = providedWorkspaceId;
-    
-    if (!workspaceId) {
-      // Find user's first workspace
-      const userWorkspace = await db.query.workspaces.findFirst({
-        where: eq(workspaces.ownerId, session.user.id),
-      });
-      
-      if (userWorkspace) {
-        workspaceId = userWorkspace.id;
-      } else {
-        // Create a default workspace for the user
-        const [newWorkspace] = await db
-          .insert(workspaces)
-          .values({
-            name: "Default Workspace",
-            ownerId: session.user.id,
-          })
-          .returning();
-        workspaceId = newWorkspace.id;
-      }
-    } else {
-      // Verify user has access to provided workspace
-      const workspace = await db.query.workspaces.findFirst({
-        where: eq(workspaces.id, workspaceId),
-      });
+    const workspaceId = providedWorkspaceId || (await ensureDefaultWorkspace(session.user.id)).id;
+    const access = await requireWorkspaceAccess(session.user.id, workspaceId);
 
-      if (!workspace) {
-        return NextResponse.json({ error: "Workspace not found" }, { status: 404 });
-      }
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
     // Create execution record
     const [execution] = await db
       .insert(agentExecutions)
       .values({
-        workspaceId,
+        workspaceId: access.workspaceId,
         agentType,
         status: execStatus || "running",
         input: input || {},
@@ -225,14 +202,30 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updateData: Record<string, unknown> = { status };
+    const workspaceIds = await getAccessibleWorkspaceIds(session.user.id);
+    if (workspaceIds.length === 0) {
+      return NextResponse.json({ error: "Execution not found" }, { status: 404 });
+    }
+
+    const existing = await db.query.agentExecutions.findFirst({
+      where: and(
+        eq(agentExecutions.id, id),
+        inArray(agentExecutions.workspaceId, workspaceIds)
+      ),
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: "Execution not found" }, { status: 404 });
+    }
+
+    const updateData: Partial<typeof agentExecutions.$inferInsert> = { status };
     
     if (output !== undefined) {
       updateData.output = output;
     }
     
     if (errorMessage !== undefined) {
-      updateData.error = errorMessage;
+      updateData.errorMessage = errorMessage;
     }
     
     if (status === "completed" || status === "failed") {

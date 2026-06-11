@@ -10,7 +10,6 @@ import {
   Wifi, 
   Clock,
   ChevronUp,
-  ChevronDown,
   X,
   CheckCircle2,
   AlertCircle,

@@ -9,7 +9,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  getLocal,
   setLocal,
   getAllLocal,
   deleteLocal,
@@ -121,7 +120,7 @@ export function useOfflineData<T extends { id: string }>(
             await setLocal(store, serverItem);
             return serverItem;
           }
-        } catch (err) {
+        } catch {
           // Queue for later sync
           await queueChange(store, "create", newItem);
           setHasPendingChanges(true);

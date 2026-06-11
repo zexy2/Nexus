@@ -60,7 +60,7 @@ interface UseCollaborationResult {
 }
 
 // Dynamic import for client-side only
-let yjsModule: typeof import("@/lib/yjs") | null = null;
+let yjsModule: typeof import("@/lib/sync/yjs") | null = null;
 
 export function useCollaboration(
   options: UseCollaborationOptions
@@ -95,7 +95,7 @@ export function useCollaboration(
   useEffect(() => {
     if (typeof window === "undefined" || !enabled) return;
 
-    import("@/lib/yjs").then((mod) => {
+    import("@/lib/sync/yjs").then((mod) => {
       yjsModule = mod;
     });
   }, [enabled]);
@@ -105,7 +105,7 @@ export function useCollaboration(
     if (typeof window === "undefined" || !enabled || !yjsModule) return;
 
     const connect = async () => {
-      const mod = await import("@/lib/yjs");
+      const mod = await import("@/lib/sync/yjs");
 
       // Connect to server
       const provider = mod.connectToCollaborationServer(

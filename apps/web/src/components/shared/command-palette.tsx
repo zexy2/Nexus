@@ -81,14 +81,18 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   // Reset selection when query changes
   useEffect(() => {
-    setSelectedIndex(0);
+    const timer = window.setTimeout(() => setSelectedIndex(0), 0);
+    return () => window.clearTimeout(timer);
   }, [query]);
 
   // Reset state when closed
   useEffect(() => {
     if (!open) {
-      setQuery("");
-      setSelectedIndex(0);
+      const timer = window.setTimeout(() => {
+        setQuery("");
+        setSelectedIndex(0);
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [open]);
 

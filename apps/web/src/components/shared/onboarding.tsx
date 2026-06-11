@@ -585,9 +585,10 @@ export function QuickTourTooltip({
 
   useEffect(() => {
     const target = document.querySelector(step.target);
-    if (target) {
-      setTargetRect(target.getBoundingClientRect());
-    }
+    const timer = window.setTimeout(() => {
+      setTargetRect(target ? target.getBoundingClientRect() : null);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [step.target]);
 
   if (!targetRect) return null;

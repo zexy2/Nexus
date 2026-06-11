@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { MessageBubble, StreamingMessageBubble } from './message-bubble';
@@ -15,7 +15,7 @@ interface MessageListProps {
 export function MessageList({ className }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const isNearBottomRef = useRef(true);
+  const [isNearBottom, setIsNearBottom] = useState(true);
 
   const { 
     messages, 
@@ -36,22 +36,22 @@ export function MessageList({ className }: MessageListProps) {
     
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
     const threshold = 100;
-    isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < threshold;
+    setIsNearBottom(scrollHeight - scrollTop - clientHeight < threshold);
   }, []);
 
   // Scroll to bottom on new messages if near bottom
   useEffect(() => {
-    if (isNearBottomRef.current) {
+    if (isNearBottom) {
       scrollToBottom();
     }
-  }, [messages, isStreaming, scrollToBottom]);
+  }, [messages, isStreaming, isNearBottom, scrollToBottom]);
 
   // Initial scroll to bottom
   useEffect(() => {
     scrollToBottom('instant');
   }, [scrollToBottom]);
 
-  const showScrollButton = messages.length > 3 && !isNearBottomRef.current;
+  const showScrollButton = messages.length > 3 && !isNearBottom;
 
   return (
     <div className={cn('relative flex flex-col h-full', className)}>
@@ -130,7 +130,7 @@ export function MessageList({ className }: MessageListProps) {
 
 // Empty state component
 function EmptyState() {
-  const { agentMode, suggestedPrompts, setInput } = useChatStore();
+  const { suggestedPrompts, setInput } = useChatStore();
   
   // Get prompts for current mode
   const prompts = suggestedPrompts.slice(0, 4);

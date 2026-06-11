@@ -160,8 +160,8 @@ export function FloatingAIWidget({
               <div className="px-4 py-3 border-b border-white/5 bg-white/[0.02]">
                 <p className="text-xs text-zinc-500 mb-1">Selected text:</p>
                 <p className="text-sm text-zinc-300 line-clamp-2 font-serif italic">
-                  "{selectedText.slice(0, 100)}
-                  {selectedText.length > 100 ? "..." : ""}"
+                  &quot;{selectedText.slice(0, 100)}
+                  {selectedText.length > 100 ? "..." : ""}&quot;
                 </p>
               </div>
             )}

@@ -1,24 +1,17 @@
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { verifySession } from "@/lib/api-middleware";
+import { unauthorized } from "@/lib/api-response";
 import { docs, workspaces } from "@nexus/database/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { headers } from "next/headers";
 
 // GET - List archived documents
 export async function GET() {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    let userId = session?.user?.id;
-
-    // Dev fallback
-    if (!userId && process.env.NODE_ENV === "development") {
-      const u = await db.query.users.findFirst();
-      if (u) userId = u.id;
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
-
-    if (!userId) {
-      return Response.json([], { status: 200 });
-    }
+    const userId = session.user.id;
 
     // Get user's workspace
     const workspace = await db.query.workspaces.findFirst({

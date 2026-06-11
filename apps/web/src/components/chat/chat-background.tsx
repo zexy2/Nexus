@@ -48,64 +48,6 @@ export function ChatBackground({
     }));
   }, [particleCount]);
 
-  // Animation loop
-  const animate = useCallback(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-
-    const { width, height } = canvas;
-    
-    // Clear with fade effect for trails
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
-    ctx.fillRect(0, 0, width, height);
-
-    // Update and draw particles
-    pointsRef.current.forEach((point) => {
-      // Mouse interaction
-      if (interactive) {
-        const dx = mouseRef.current.x - point.x;
-        const dy = mouseRef.current.y - point.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        if (dist < 200) {
-          const force = (200 - dist) / 200;
-          point.vx += (dx / dist) * force * 0.01;
-          point.vy += (dy / dist) * force * 0.01;
-        }
-      }
-
-      // Update position
-      point.x += point.vx;
-      point.y += point.vy;
-
-      // Damping
-      point.vx *= 0.99;
-      point.vy *= 0.99;
-
-      // Boundary wrap
-      if (point.x < -point.radius) point.x = width + point.radius;
-      if (point.x > width + point.radius) point.x = -point.radius;
-      if (point.y < -point.radius) point.y = height + point.radius;
-      if (point.y > height + point.radius) point.y = -point.radius;
-
-      // Draw gradient blob
-      const gradient = ctx.createRadialGradient(
-        point.x, point.y, 0,
-        point.x, point.y, point.radius
-      );
-      gradient.addColorStop(0, point.color);
-      gradient.addColorStop(1, 'transparent');
-
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, point.radius, 0, Math.PI * 2);
-      ctx.fillStyle = gradient;
-      ctx.fill();
-    });
-
-    animationRef.current = requestAnimationFrame(animate);
-  }, [interactive]);
-
   // Handle resize
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -153,13 +95,61 @@ export function ChatBackground({
 
   // Start animation
   useEffect(() => {
-    animate();
+    function tick() {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
+
+      const { width, height } = canvas;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.02)';
+      ctx.fillRect(0, 0, width, height);
+
+      pointsRef.current.forEach((point) => {
+        if (interactive) {
+          const dx = mouseRef.current.x - point.x;
+          const dy = mouseRef.current.y - point.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist > 0 && dist < 200) {
+            const force = (200 - dist) / 200;
+            point.vx += (dx / dist) * force * 0.01;
+            point.vy += (dy / dist) * force * 0.01;
+          }
+        }
+
+        point.x += point.vx;
+        point.y += point.vy;
+        point.vx *= 0.99;
+        point.vy *= 0.99;
+
+        if (point.x < -point.radius) point.x = width + point.radius;
+        if (point.x > width + point.radius) point.x = -point.radius;
+        if (point.y < -point.radius) point.y = height + point.radius;
+        if (point.y > height + point.radius) point.y = -point.radius;
+
+        const gradient = ctx.createRadialGradient(
+          point.x, point.y, 0,
+          point.x, point.y, point.radius
+        );
+        gradient.addColorStop(0, point.color);
+        gradient.addColorStop(1, 'transparent');
+
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, point.radius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+      });
+
+      animationRef.current = requestAnimationFrame(tick);
+    }
+
+    tick();
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [animate]);
+  }, [interactive]);
 
   return (
     <div className={`absolute inset-0 overflow-hidden ${className}`}>

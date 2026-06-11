@@ -2,22 +2,22 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 /**
- * Zero Sync Client - Local-First Data Layer
+ * Local-First Sync Client
  *
- * Implements the Local-First architecture pattern:
- * - Offline-first: Works without network connection
- * - Optimistic UI: Instant updates without waiting for server
- * - Sync Engine: Automatic background synchronization
- * - CRDT-based: Conflict-free data merging
+ * A self-contained offline-first data layer (no external sync service required,
+ * so it runs on serverless hosting). Implements:
+ * - Offline-first: reads come from IndexedDB and work with no network
+ * - Optimistic UI: mutations update the local store immediately
+ * - Background sync: pending mutations are pushed and fresh data pulled via the
+ *   REST sync API (/api/sync/push and /api/sync/pull) when online
  *
- * This is a hybrid implementation that:
- * 1. Uses IndexedDB for local persistence
- * 2. Syncs with server via WebSocket/REST when online
- * 3. Provides React hooks for reactive data access
- * 
- * Note: The subscription hooks intentionally call refresh() in useEffect
- * to load initial data, then subscribe for updates. This is a valid pattern
- * for external store subscriptions per React documentation.
+ * Conflict policy: last-write-wins by `updatedAt` (server upsert wins on push,
+ * newer pulled rows overwrite local). This is NOT a CRDT — concurrent edits to
+ * the same field resolve to the last writer, which is acceptable for the
+ * doc/task metadata synced here. Doc *body* collaboration uses Yjs separately.
+ *
+ * Note: the subscription hooks intentionally call refresh() in useEffect to load
+ * initial data, then subscribe for updates — a valid external-store pattern.
  */
 
 import {
@@ -202,7 +202,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result as T[]);
-      } catch (error) {
+      } catch {
         resolve([]);
       }
     });
@@ -220,7 +220,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result as T[]);
-      } catch (error) {
+      } catch {
         resolve([]);
       }
     });
@@ -237,7 +237,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve(request.result as T | null);
-      } catch (error) {
+      } catch {
         resolve(null);
       }
     });
@@ -254,7 +254,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
-      } catch (error) {
+      } catch {
         resolve();
       }
     });
@@ -271,7 +271,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
-      } catch (error) {
+      } catch {
         resolve();
       }
     });
@@ -288,7 +288,7 @@ class LocalStore {
 
         request.onerror = () => reject(request.error);
         request.onsuccess = () => resolve();
-      } catch (error) {
+      } catch {
         resolve();
       }
     });

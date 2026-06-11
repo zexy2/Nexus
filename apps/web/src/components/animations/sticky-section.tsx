@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, ReactNode } from 'react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { cn } from '@/lib/utils';
@@ -52,7 +52,7 @@ export function StickySection({
 
       // Animate each item as it comes into view
       const itemElements = rightRef.current!.querySelectorAll('.sticky-item');
-      itemElements.forEach((item, index) => {
+      itemElements.forEach((item) => {
         gsap.fromTo(
           item,
           {

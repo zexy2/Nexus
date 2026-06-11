@@ -10,9 +10,17 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { and, gte, inArray, or, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import {
+  agentExecutions,
+  chatMessages,
+  docs,
+  tasks,
+  workspaceMembers,
+  workspaces,
+} from "@nexus/database/schema";
 
 export async function GET(request: NextRequest) {
   // Auth + Rate Limit check
@@ -26,31 +34,65 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const userId = protection.user?.id;
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
     const { searchParams } = new URL(request.url);
     const since = parseInt(searchParams.get("since") || "0", 10);
-    const sinceDate = new Date(since).toISOString();
+    const sinceDate = new Date(Number.isFinite(since) ? since : 0);
 
-    // Fetch all tables with changes since the given timestamp using raw SQL
+    const accessibleWorkspaces = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .leftJoin(workspaceMembers, eq(workspaceMembers.workspaceId, workspaces.id))
+      .where(or(eq(workspaces.ownerId, userId), eq(workspaceMembers.userId, userId)));
+
+    const workspaceIds = accessibleWorkspaces.map((workspace) => workspace.id);
+
+    if (workspaceIds.length === 0) {
+      return NextResponse.json({
+        docs: [],
+        tasks: [],
+        workspaces: [],
+        chatMessages: [],
+        agentExecutions: [],
+        lastSync: Date.now(),
+      });
+    }
+
     const [
-      docsResult,
-      tasksResult,
-      workspacesResult,
-      chatMessagesResult,
-      agentExecutionsResult,
+      docsData,
+      tasksData,
+      workspacesData,
+      chatMessagesData,
+      agentExecutionsData,
     ] = await Promise.all([
-      db.execute(sql`SELECT * FROM docs WHERE updated_at >= ${sinceDate}::timestamp`),
-      db.execute(sql`SELECT * FROM tasks WHERE updated_at >= ${sinceDate}::timestamp`),
-      db.execute(sql`SELECT * FROM workspaces WHERE updated_at >= ${sinceDate}::timestamp`),
-      db.execute(sql`SELECT * FROM chat_messages WHERE created_at >= ${sinceDate}::timestamp`),
-      db.execute(sql`SELECT * FROM agent_executions WHERE created_at >= ${sinceDate}::timestamp`),
+      db
+        .select()
+        .from(docs)
+        .where(and(inArray(docs.workspaceId, workspaceIds), gte(docs.updatedAt, sinceDate))),
+      db
+        .select()
+        .from(tasks)
+        .where(and(inArray(tasks.workspaceId, workspaceIds), gte(tasks.updatedAt, sinceDate))),
+      db
+        .select()
+        .from(workspaces)
+        .where(and(inArray(workspaces.id, workspaceIds), gte(workspaces.updatedAt, sinceDate))),
+      db
+        .select()
+        .from(chatMessages)
+        .where(and(inArray(chatMessages.workspaceId, workspaceIds), gte(chatMessages.createdAt, sinceDate))),
+      db
+        .select()
+        .from(agentExecutions)
+        .where(and(inArray(agentExecutions.workspaceId, workspaceIds), gte(agentExecutions.createdAt, sinceDate))),
     ]);
-    
-    // Extract rows from query results (drizzle returns array directly)
-    const docsData = docsResult as unknown[];
-    const tasksData = tasksResult as unknown[];
-    const workspacesData = workspacesResult as unknown[];
-    const chatMessagesData = chatMessagesResult as unknown[];
-    const agentExecutionsData = agentExecutionsResult as unknown[];
 
     // Convert to client format (snake_case to camelCase, dates to timestamps)
     const result = {
@@ -59,6 +101,7 @@ export async function GET(request: NextRequest) {
       workspaces: workspacesData.map(toClientFormat),
       chatMessages: chatMessagesData.map(toClientFormat),
       agentExecutions: agentExecutionsData.map(toClientFormat),
+      lastSync: Date.now(),
     };
 
     return NextResponse.json(result);

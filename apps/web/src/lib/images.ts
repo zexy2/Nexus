@@ -80,20 +80,20 @@ export const stockImages = {
     {
       id: 1,
       src: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&q=80&auto=format&fit=crop",
-      name: "Alex Thompson",
-      role: "CEO, TechCorp",
+      name: "Demo Flow",
+      role: "Document to tasks",
     },
     {
       id: 2,
       src: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&q=80&auto=format&fit=crop",
-      name: "Sarah Chen",
-      role: "Product Lead, Innovate",
+      name: "Workflow Visibility",
+      role: "Temporal history",
     },
     {
       id: 3,
       src: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80&auto=format&fit=crop",
-      name: "Michael Park",
-      role: "CTO, DataFlow",
+      name: "Budget Guardrails",
+      role: "Server-managed AI",
     },
   ],
 

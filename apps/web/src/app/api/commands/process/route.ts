@@ -18,6 +18,18 @@ const commandStatusStore = new Map<string, {
   startedAt: number;
 }>();
 
+interface AgentCommandResult {
+  output?: string;
+  documentId?: string;
+  taskIds?: string[];
+}
+
+interface SupervisorCommandResult {
+  completed?: string[];
+  finalOutput?: string;
+  agentResults?: Record<string, AgentCommandResult>;
+}
+
 /**
  * POST /api/commands/process
  * Process a natural language command via Supervisor Agent
@@ -161,19 +173,19 @@ async function processCommandAsync(
         finalOutput: undefined,
       };
 
-      const result = await supervisor.invoke(initialState);
+      const result = await supervisor.invoke(initialState) as SupervisorCommandResult;
       
       agentsUsed = result.completed || [];
       output = result.finalOutput || 
         Object.values(result.agentResults || {})
-          .map((r: any) => r.output)
+          .map((r) => r.output)
           .join("\n\n") ||
         "Command processed successfully.";
 
       // Check if documents or tasks were created
       if (result.agentResults) {
-        for (const [agentName, agentResult] of Object.entries(result.agentResults)) {
-          const res = agentResult as any;
+        for (const agentResult of Object.values(result.agentResults)) {
+          const res = agentResult;
           if (res.documentId) documentsCreated.push(res.documentId);
           if (res.taskIds) tasksCreated.push(...res.taskIds);
         }

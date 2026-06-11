@@ -10,6 +10,7 @@ import {
   pgEnum,
   boolean,
   customType,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -422,6 +423,86 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
 }));
 
 // ==========================================
+// RATE LIMIT BUCKETS (Production quota state)
+// ==========================================
+
+export const rateLimitBuckets = pgTable(
+  "rate_limit_buckets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    key: varchar("key", { length: 255 }).notNull(),
+    bucket: varchar("bucket", { length: 100 }).notNull(),
+    count: integer("count").notNull().default(0),
+    limit: integer("limit").notNull(),
+    resetAt: timestamp("reset_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("rate_limit_buckets_key_bucket_idx").on(table.key, table.bucket),
+    index("rate_limit_buckets_reset_idx").on(table.resetAt),
+  ]
+);
+
+// ==========================================
+// AUDIT LOGS (Production critical event trail)
+// ==========================================
+
+export const auditLogs = pgTable(
+  "audit_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    event: varchar("event", { length: 120 }).notNull(),
+    status: varchar("status", { length: 50 }).notNull().default("success"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    occurredOn: timestamp("occurred_on", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("audit_logs_user_idx").on(table.userId),
+    index("audit_logs_workspace_idx").on(table.workspaceId),
+    index("audit_logs_event_idx").on(table.event),
+    index("audit_logs_occurred_on_idx").on(table.occurredOn),
+  ]
+);
+
+// ==========================================
+// WORKER HEARTBEATS (Production worker health)
+// ==========================================
+
+export const workerHeartbeats = pgTable(
+  "worker_heartbeats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workerId: varchar("worker_id", { length: 120 }).notNull(),
+    taskQueue: varchar("task_queue", { length: 120 }).notNull(),
+    status: varchar("status", { length: 50 }).notNull().default("healthy"),
+    lastHeartbeatAt: timestamp("last_heartbeat_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("worker_heartbeats_worker_id_idx").on(table.workerId),
+    index("worker_heartbeats_last_heartbeat_idx").on(table.lastHeartbeatAt),
+  ]
+);
+
+// ==========================================
 // USER SETTINGS (Kullanıcı Ayarları)
 // ==========================================
 
@@ -433,11 +514,10 @@ export const userSettings = pgTable("user_settings", {
     .references(() => users.id, { onDelete: "cascade" }),
   
   // AI Settings
+  // NOTE: BYOK (bring-your-own-key) is disabled in v1 — AI providers are managed
+  // by server secrets. The per-user API-key columns were removed because they
+  // stored plaintext keys and were never read by application code.
   defaultModel: varchar("default_model", { length: 50 }).notNull().default("gemini-2.5-flash"),
-  geminiApiKey: text("gemini_api_key"), // Encrypted in production
-  openaiApiKey: text("openai_api_key"), // Encrypted in production
-  anthropicApiKey: text("anthropic_api_key"), // Encrypted in production
-  groqApiKey: text("groq_api_key"), // Encrypted in production - for Llama models
   autoSaveAiOutputs: boolean("auto_save_ai_outputs").notNull().default(true),
   
   // Notification Settings

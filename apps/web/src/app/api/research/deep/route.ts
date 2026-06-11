@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { enforceAiBudget } from "@/lib/production-guardrails";
 
 /**
  * Deep Research API
@@ -25,15 +27,13 @@ interface SearchResult {
   score: number;
 }
 
-const TAVILY_API_KEY = process.env.TAVILY_API_KEY;
-
 async function searchTavily(query: string, depth: "basic" | "advanced" = "advanced"): Promise<{
   results: SearchResult[];
   answer?: string;
 }> {
-  if (!TAVILY_API_KEY) {
-    console.log("[DeepResearch] No Tavily API key, skipping search");
-    return { results: [] };
+  const tavilyKey = process.env.TAVILY_API_KEY;
+  if (!tavilyKey) {
+    throw new Error("TAVILY_NOT_CONFIGURED");
   }
 
   try {
@@ -41,7 +41,7 @@ async function searchTavily(query: string, depth: "basic" | "advanced" = "advanc
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        api_key: TAVILY_API_KEY,
+        api_key: tavilyKey,
         query,
         max_results: 10,
         search_depth: depth,
@@ -65,46 +65,76 @@ async function searchTavily(query: string, depth: "basic" | "advanced" = "advanc
   }
 }
 
-// Direct Groq API call for report generation - bypasses multi-agent system
 async function generateWithAI(prompt: string): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.log("[DeepResearch] No Groq API key, falling back to basic response");
-    return "";
+    throw new Error("AI_PROVIDER_UNAVAILABLE");
   }
   
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: "Sen kısa ve öz yanıtlar veren bir araştırma asistanısın. Türkçe cevap ver." },
-          { role: "user", content: prompt },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
         ],
-        temperature: 0.3,
-        max_tokens: 2048,
-        stream: false,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+        },
       }),
     });
 
     if (response.ok) {
       const data = await response.json();
-      return data.choices[0]?.message?.content || "";
+      return data.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("") || "";
     }
-    return "";
+    throw new Error(`Gemini error: ${response.status}`);
   } catch (error) {
-    console.error("[DeepResearch] Groq API error:", error);
-    return "";
+    console.error("[DeepResearch] Gemini API error:", error);
+    throw error;
   }
 }
 
 export async function POST(request: NextRequest) {
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.research,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.TAVILY_API_KEY) {
+    return NextResponse.json(
+      {
+        error: "TAVILY_NOT_CONFIGURED",
+        message: "Deep web research is not configured on this server.",
+        retryable: false,
+      },
+      { status: 503 }
+    );
+  }
+
+  const aiBudget = await enforceAiBudget({
+    userId: protection.user.id,
+    email: protection.user.email,
+    kind: "research",
+  });
+  if (!aiBudget.ok) return aiBudget.response;
+
+  const { query } = await request.json();
+  if (!query || typeof query !== "string") {
+    return NextResponse.json({ error: "Query is required" }, { status: 400 });
+  }
+
   const encoder = new TextEncoder();
   
   const stream = new ReadableStream({
@@ -114,7 +144,6 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const { query, topic } = await request.json();
         const startTime = Date.now();
         
         // ===== PHASE 1: PLANNING =====

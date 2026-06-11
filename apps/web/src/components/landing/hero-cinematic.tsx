@@ -14,7 +14,6 @@ if (typeof window !== "undefined") {
 
 export function HeroCinematic() {
   const heroRef = useRef<HTMLElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,28 +55,13 @@ export function HeroCinematic() {
     >
       {/* Background Video/Image */}
       <div className="absolute inset-0">
-        {/* Fallback gradient background for when video fails */}
-        <div className="absolute inset-0 bg-gradient-to-br from-violet-950/50 via-black to-black" />
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          loop
-          playsInline
-          suppressHydrationWarning
-          className="absolute inset-0 w-full h-full object-cover opacity-40"
-          poster="https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=90"
-          onError={(e) => {
-            // Hide video on error, fallback gradient will show
-            (e.target as HTMLVideoElement).style.display = 'none';
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-40"
+          style={{
+            backgroundImage:
+              "url(https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1920&q=90)",
           }}
-        >
-          {/* Use a more reliable source or local video */}
-          <source
-            src="/videos/hero-bg.mp4"
-            type="video/mp4"
-          />
-        </video>
+        />
         {/* Gradient overlay */}
         <div
           ref={overlayRef}
@@ -133,7 +117,7 @@ export function HeroCinematic() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12 animate-fade-in-delayed-2">
           <MagneticButton strength={0.2}>
             <Link
-              href="/dashboard"
+              href="/login"
               className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black rounded-full font-medium text-lg hover:bg-white/90 transition-colors"
             >
               Start Building

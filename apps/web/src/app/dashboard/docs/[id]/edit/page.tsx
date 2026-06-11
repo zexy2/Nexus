@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Settings,
-  Share2,
   Users,
   Loader2,
   Sparkles,
@@ -166,7 +165,7 @@ export default function DocumentEditPage() {
           </div>
           <h2 className="text-xl font-semibold text-white mb-2">{error}</h2>
           <p className="text-sm text-zinc-500 mb-6">
-            The document you're looking for might have been moved or deleted.
+            The document you&apos;re looking for might have been moved or deleted.
           </p>
           <Link
             href="/dashboard/docs"

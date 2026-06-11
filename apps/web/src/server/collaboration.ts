@@ -52,7 +52,7 @@ class WSSharedDoc extends Y.Doc {
     
     this.awareness.on('update', awarenessChangeHandler);
     
-    this.on('update', (update: Uint8Array, _origin: unknown, _doc: Y.Doc) => {
+    this.on('update', (update: Uint8Array, origin: unknown, _doc: Y.Doc) => {
         const encoder = encoding.createEncoder();
         encoding.writeVarUint(encoder, messageSync);
         syncProtocol.writeUpdate(encoder, update);

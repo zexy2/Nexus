@@ -1,481 +1,332 @@
 import { NextRequest, NextResponse } from "next/server";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
-import { traceWorkflow, traceLLMCall, traceAgentExecution } from "@/lib/otel";
-import { 
-  hitlCheckpoint, 
-  type CriticalAction,
-  type ApprovalRequest 
-} from "@nexus/agents";
+import { db } from "@/lib/db";
+import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { agentExecutions } from "@nexus/database/schema";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
+import {
+  extractWorkflowSteps,
+  reconcileRunningWorkflowExecutions,
+  reconcileWorkflowExecution,
+} from "@/lib/workflow-reconcile";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// In-memory approval store (in production, use database)
-const pendingApprovals = new Map<string, ApprovalRequest>();
+type PublicWorkflowType =
+  | "document"
+  | "research"
+  | "tasks"
+  | "task"
+  | "code"
+  | "document_generation"
+  | "task_breakdown"
+  | "code_generation";
 
-// Helper to extract error message
+type WorkflowRequest = {
+  workflowType?: PublicWorkflowType;
+  type?: PublicWorkflowType;
+  input?: Record<string, unknown>;
+  workspaceId?: string;
+};
+
+type WorkflowStarter = (
+  workflowType: string,
+  input: Record<string, unknown>,
+  options?: { workflowId?: string; taskQueue?: string }
+) => Promise<{ workflowId: string; runId: string; status?: string }>;
+
+let startWorkflow: WorkflowStarter | null = null;
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return "Unknown error";
 }
 
-// Temporal client (dynamically imported)
-let temporalAvailable = false;
-type WorkflowStarter = (workflowType: string, input: Record<string, unknown>, options?: { workflowId?: string; taskQueue?: string }) => Promise<{ workflowId: string; runId: string }>;
-type WorkflowStatusGetter = (workflowId: string) => Promise<{ status: string; result?: unknown }>;
-let startWorkflow: WorkflowStarter | null = null;
-let getWorkflowStatus: WorkflowStatusGetter | null = null;
-
-// Initialize Temporal client
 async function initTemporal() {
   if (startWorkflow) return true;
-  
+
   try {
     const temporalClient = await import("@nexus/workflows/client");
-    startWorkflow = temporalClient.startWorkflow as WorkflowStarter;
-    getWorkflowStatus = temporalClient.getWorkflowStatus as WorkflowStatusGetter;
-    
-    // Test connection
     await temporalClient.createTemporalClient();
-    temporalAvailable = true;
-    console.log("[Workflows] Temporal connected");
+    startWorkflow = temporalClient.startWorkflow as WorkflowStarter;
     return true;
-  } catch (e: unknown) {
-    console.log("[Workflows] Temporal not available:", getErrorMessage(e));
-    temporalAvailable = false;
+  } catch (error) {
+    console.error("[Workflows] Temporal unavailable:", getErrorMessage(error));
+    startWorkflow = null;
     return false;
   }
 }
 
-interface WorkflowRequest {
-  workflowType: "document" | "research" | "tasks" | "code";
-  input: Record<string, unknown>;
-}
-
-// Gemini API call helper for real agent execution with tracing
-async function callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  
-  return traceLLMCall("gemini-2.5-flash", userPrompt, async () => {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
-  
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-  
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  });
-}
-
-// Real workflow execution with Gemini and tracing
-async function executeWorkflow(type: string, input: Record<string, unknown>) {
-  const workflowId = `${type}-${Date.now()}`;
-  
-  return traceWorkflow(type, workflowId, async () => {
-    const steps: Array<{agent: string; status: string; output: string}> = [];
-  
-    switch (type) {
-      case "document": {
-        // Step 1: Research
-        const researchPrompt = `Research the topic: ${input.topic || input.title || "provided topic"}.
-Provide key facts, relevant information, and context.`;
-      
-        const researchResult = await traceAgentExecution("research", "Topic research", async () => {
-          return callGemini(
-            "You are a Research Agent. Gather comprehensive information.",
-            researchPrompt
-          );
-        });
-        steps.push({ agent: "research", status: "completed", output: researchResult });
-      
-        // Step 2: Write document
-        const writePrompt = `Create a ${input.format || "report"} about: ${input.topic || input.title}
-      
-Use this research: ${researchResult}
-
-Additional context: ${input.context || ""}`;
-
-      const writerResult = await traceAgentExecution("writer", "Creating document", async () => {
-        return callGemini(
-          "You are a Writer Agent. Create well-structured Markdown documents.",
-          writePrompt
-        );
-      });
-      steps.push({ agent: "writer", status: "completed", output: writerResult });
-      
+function normalizeWorkflowType(type: PublicWorkflowType | undefined) {
+  switch (type) {
+    case "document":
+    case "document_generation":
       return {
-        workflowId,
-        status: "completed",
-        result: {
-          documentId: crypto.randomUUID(),
-          title: input.title || "Generated Document",
-          content: writerResult,
-        },
-        steps,
+        publicType: "document",
+        temporalName: "documentGenerationWorkflow",
+        agentType: "writer" as const,
       };
-    }
-
-    case "research": {
-      const result = await traceAgentExecution("research", "Web research", async () => {
-        return callGemini(
-          `You are a Research Agent doing ${input.depth || "standard"} depth research.`,
-          `Research query: ${input.query}
-         
-Preferred sources: ${input.sources || "any reliable sources"}`
-        );
-      });
-      steps.push({ agent: "research", status: "completed", output: result });
-      
+    case "research":
       return {
-        workflowId,
-        status: "completed",
-        result: {
-          summary: result,
-          sources: [
-            { title: "AI Research", relevance: 0.95 },
-            { title: "Analysis", relevance: 0.87 },
-          ],
-        },
-        steps,
+        publicType: "research",
+        temporalName: "researchWorkflow",
+        agentType: "researcher" as const,
       };
-    }
-
-    case "tasks": {
-      const result = await traceAgentExecution("task", "Task breakdown", async () => {
-        return callGemini(
-          `You are a Task Agent. Break down projects into actionable tasks.
-Return ONLY a JSON array: [{"title":"task","description":"...","priority":"high|medium|low"}]`,
-          `Project: ${input.goal}
-Timeline: ${input.timeline || "flexible"}
-Requirements: ${input.requirements || "standard"}`
-        );
-      });
-      steps.push({ agent: "task", status: "completed", output: result });
-      
-      // Try to parse tasks from response
-      let tasks: Array<{id?: string; title: string; priority: string; description?: string}> = [];
-      try {
-        const match = result.match(/\[[\s\S]*\]/);
-        if (match) {
-          tasks = JSON.parse(match[0]);
-        }
-      } catch {
-        tasks = [{ id: "1", title: result, priority: "medium" }];
-      }
-      
+    case "tasks":
+    case "task":
+    case "task_breakdown":
       return {
-        workflowId,
-        status: "completed",
-        result: { tasks },
-        steps,
+        publicType: "tasks",
+        temporalName: "taskBreakdownWorkflow",
+        agentType: "project_manager" as const,
       };
-    }
-
-    case "code": {
-      // HITL: Code execution is a critical action, check if approval needed
-      const hitlState = hitlCheckpoint(
-        "code_execution" as CriticalAction,
-        { task: input.task, language: input.language },
-        { pendingApproval: null, isBlocked: false }
-      );
-      
-      if (hitlState.isBlocked && hitlState.pendingApproval) {
-        // Store pending approval
-        pendingApprovals.set(hitlState.pendingApproval.id, hitlState.pendingApproval);
-        
-        return {
-          workflowId,
-          status: "pending_approval",
-          approvalId: hitlState.pendingApproval.id,
-          approvalRequired: {
-            action: "code_execution",
-            description: "Execute generated code",
-            riskLevel: hitlState.pendingApproval.riskLevel,
-            expiresAt: hitlState.pendingApproval.expiresAt,
-          },
-          message: hitlState.blockReason,
-          steps: [{ agent: "hitl", status: "waiting", output: "Waiting for human approval" }],
-        };
-      }
-      
-      // Optional research step
-      if (input.context) {
-        const researchResult = await traceAgentExecution("research", "Finding code patterns", async () => {
-          return callGemini(
-            "You are a Research Agent finding relevant code patterns.",
-            `Find best practices for: ${input.task}`
-          );
-        });
-        steps.push({ agent: "research", status: "completed", output: researchResult });
-      }
-      
-      const codeResult = await traceAgentExecution("coder", "Generating code", async () => {
-        return callGemini(
-          `You are a Coder Agent. Write clean, production-ready ${input.language || "TypeScript"} code.
-Include comments and follow best practices.`,
-          `Task: ${input.task}
-Context: ${input.context || ""}`
-        );
-      });
-      steps.push({ agent: "coder", status: "completed", output: codeResult });
-      
+    case "code":
+    case "code_generation":
       return {
-        workflowId,
-        status: "completed",
-        result: {
-          files: [
-            {
-              path: `src/generated.${input.language === "python" ? "py" : "ts"}`,
-              content: codeResult,
-              language: input.language || "typescript",
-            },
-          ],
-        },
-        steps,
+        publicType: "code",
+        temporalName: "codeGenerationWorkflow",
+        agentType: "coder" as const,
       };
-    }
-
     default:
-      throw new Error(`Unknown workflow type: ${type}`);
-    }
-  }); // Close traceWorkflow
+      return null;
+  }
+}
+
+function buildTemporalInput(
+  workflowType: string,
+  input: Record<string, unknown>,
+  workspaceId: string,
+  userId: string
+) {
+  const title = typeof input.title === "string" ? input.title : "Generated Document";
+
+  if (workflowType === "document") {
+    return {
+      workspaceId,
+      userId,
+      title,
+      prompt: String(input.prompt || input.topic || input.title || ""),
+      style: typeof input.style === "string" ? input.style : "formal",
+    };
+  }
+
+  if (workflowType === "tasks") {
+    return {
+      workspaceId,
+      userId,
+      projectDescription: String(input.projectDescription || input.goal || input.prompt || ""),
+    };
+  }
+
+  if (workflowType === "research") {
+    return {
+      workspaceId,
+      userId,
+      query: String(input.query || input.prompt || ""),
+      depth: input.depth === "deep" ? "deep" : "standard",
+      sources: Array.isArray(input.sources) ? input.sources : ["documents", "web"],
+    };
+  }
+
+  return {
+    workspaceId,
+    userId,
+    specification: String(input.specification || input.task || input.prompt || ""),
+    language: typeof input.language === "string" ? input.language : "typescript",
+    framework: typeof input.framework === "string" ? input.framework : undefined,
+    includeTests: Boolean(input.includeTests),
+  };
 }
 
 export async function POST(request: NextRequest) {
-  // Auth check
-  const authResult = await protectRoute(request, { rateLimit: RATE_LIMITS.research });
-  if (!authResult.success) return authResult.response;
-  
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.research,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = protection.user.id;
+
+  let body: WorkflowRequest;
   try {
-    const body: WorkflowRequest = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
-    if (!body.workflowType || !body.input) {
-      return NextResponse.json(
-        { error: "workflowType and input are required" },
-        { status: 400 }
-      );
-    }
+  const workflow = normalizeWorkflowType(body.workflowType || body.type);
+  if (!workflow) {
+    return NextResponse.json({ error: "Invalid workflow type" }, { status: 400 });
+  }
 
-    // Try to use Temporal if available
-    await initTemporal();
+  if (!body.input || Object.keys(body.input).length === 0) {
+    return NextResponse.json({ error: "Missing workflow input" }, { status: 400 });
+  }
 
-    // Stream workflow progress
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Send start event
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "start",
-                workflowType: body.workflowType,
-                message: `Starting ${body.workflowType} workflow...`,
-                usingTemporal: temporalAvailable,
-              })}\n\n`
-            )
-          );
+  const workspaceAccess = await requireWorkspaceAccess(
+    userId,
+    typeof body.workspaceId === "string" ? body.workspaceId : typeof body.input.workspaceId === "string" ? body.input.workspaceId : null
+  );
 
-          await new Promise((r) => setTimeout(r, 500));
+  if (!workspaceAccess.ok) {
+    return NextResponse.json({ error: workspaceAccess.error }, { status: workspaceAccess.status });
+  }
 
-          // If Temporal is available, use it for durable execution
-          if (temporalAvailable && startWorkflow) {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "temporal_start",
-                  message: "Using Temporal for durable workflow execution...",
-                })}\n\n`
-              )
-            );
-
-            try {
-              // Map workflow types to Temporal workflow names
-              const workflowNameMap: Record<string, string> = {
-                document: "documentGenerationWorkflow",
-                research: "researchWorkflow",
-                tasks: "taskBreakdownWorkflow",
-                code: "codeGenerationWorkflow",
-              };
-
-              const workflowName = workflowNameMap[body.workflowType];
-              const result = await startWorkflow(workflowName, body.input);
-
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "temporal_started",
-                    workflowId: result.workflowId,
-                    runId: result.runId,
-                    message: "Workflow started in Temporal",
-                  })}\n\n`
-                )
-              );
-
-              // For now, wait a bit and return - in production, you'd poll for completion
-              await new Promise((r) => setTimeout(r, 2000));
-
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "complete",
-                    workflowId: result.workflowId,
-                    status: "running",
-                    message: "Workflow is running in Temporal. Check status endpoint for results.",
-                  })}\n\n`
-                )
-              );
-
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-              controller.close();
-              return;
-            } catch (temporalError) {
-              console.error("[Workflows] Temporal execution failed, falling back:", temporalError);
-              controller.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: "temporal_fallback",
-                    message: "Temporal unavailable, using direct execution...",
-                  })}\n\n`
-                )
-              );
-            }
-          }
-
-          // Send progress events (fallback mode)
-          const agentMap: Record<string, string[]> = {
-            document: ["research", "writer"],
-            research: ["research"],
-            tasks: ["task"],
-            code: ["research", "coder"],
-          };
-
-          const agents = agentMap[body.workflowType] || [];
-
-          for (const agent of agents) {
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "agent_start",
-                  agent,
-                  message: `${agent} agent is working...`,
-                })}\n\n`
-              )
-            );
-
-            await new Promise((r) => setTimeout(r, 1000));
-
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: "agent_complete",
-                  agent,
-                  message: `${agent} agent completed`,
-                })}\n\n`
-              )
-            );
-          }
-
-          // Execute workflow
-          const result = await executeWorkflow(body.workflowType, body.input);
-
-          // Send completion
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "complete",
-                ...result,
-              })}\n\n`
-            )
-          );
-
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (error) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({
-                type: "error",
-                error: error instanceof Error ? error.message : "Unknown error",
-              })}\n\n`
-            )
-          );
-          controller.close();
-        }
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-      },
-    });
-  } catch (error) {
-    console.error("Workflow API error:", error);
+  if (!(await initTemporal()) || !startWorkflow) {
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: "TEMPORAL_UNAVAILABLE", message: "Workflow engine is unavailable" },
+      { status: 503 }
+    );
+  }
+
+  const aiBudget = await enforceAiBudget({
+    userId,
+    email: protection.user.email,
+    kind: "workflow",
+  });
+  if (!aiBudget.ok) return aiBudget.response;
+
+  const workflowId = `${workflow.publicType}-${crypto.randomUUID()}`;
+  const temporalInput = buildTemporalInput(
+    workflow.publicType,
+    body.input,
+    workspaceAccess.workspaceId,
+    userId
+  );
+
+  const [execution] = await db
+    .insert(agentExecutions)
+    .values({
+      workspaceId: workspaceAccess.workspaceId,
+      agentType: workflow.agentType,
+      status: "running",
+      input: {
+        ...body.input,
+        workflowType: workflow.publicType,
+      },
+      temporalWorkflowId: workflowId,
+      startedAt: new Date(),
+    })
+    .returning();
+
+  try {
+    const result = await startWorkflow(workflow.temporalName, temporalInput, {
+      workflowId,
+      taskQueue: "nexus-agents",
+    });
+
+    await writeAuditLog({
+      userId,
+      workspaceId: workspaceAccess.workspaceId,
+      event: "workflow.start",
+      metadata: {
+        workflowId: result.workflowId,
+        executionId: execution.id,
+        workflowType: workflow.publicType,
+      },
+      request,
+    });
+
+    return NextResponse.json(
+      {
+        workflowId: result.workflowId,
+        executionId: execution.id,
+        status: "running",
+      },
+      { status: 202 }
+    );
+  } catch (error) {
+    const message = getErrorMessage(error);
+    await db
+      .update(agentExecutions)
+      .set({
+        status: "failed",
+        errorMessage: message,
+        completedAt: new Date(),
+      })
+      .where(eq(agentExecutions.id, execution.id));
+
+    await writeAuditLog({
+      userId,
+      workspaceId: workspaceAccess.workspaceId,
+      event: "workflow.start_failed",
+      status: "failed",
+      metadata: {
+        workflowId,
+        executionId: execution.id,
+        workflowType: workflow.publicType,
+        message,
+      },
+      request,
+    });
+
+    return NextResponse.json(
+      { error: "WORKFLOW_START_FAILED", message, executionId: execution.id },
+      { status: 503 }
     );
   }
 }
 
 export async function GET(request: NextRequest) {
-  // Auth check
-  const authResult = await protectRoute(request, { rateLimit: RATE_LIMITS.research });
-  if (!authResult.success) return authResult.response;
-  
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.research,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = protection.user.id;
+
   const { searchParams } = new URL(request.url);
   const workflowId = searchParams.get("workflowId");
+  const executionId = searchParams.get("executionId");
+  const limit = Number(searchParams.get("limit") || 20);
 
-  if (!workflowId) {
-    return NextResponse.json(
-      { error: "workflowId is required" },
-      { status: 400 }
-    );
+  const workspaceIds = await getAccessibleWorkspaceIds(userId);
+  if (workspaceIds.length === 0) {
+    await ensureDefaultWorkspace(userId);
+    return NextResponse.json([]);
   }
 
-  // Try to use Temporal if available
-  await initTemporal();
-  
-  if (temporalAvailable && getWorkflowStatus) {
-    try {
-      const status = await getWorkflowStatus(workflowId);
-      return NextResponse.json({
-        workflowId,
-        ...status,
-        usingTemporal: true,
-      });
-    } catch (e) {
-      console.error("[Workflows] Temporal status check failed:", e);
-    }
+  if (!workflowId && !executionId) {
+    const rows = await db
+      .select()
+      .from(agentExecutions)
+      .where(inArray(agentExecutions.workspaceId, workspaceIds))
+      .orderBy(desc(agentExecutions.createdAt))
+      .limit(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 100) : 20);
+
+    const reconciledRows = await reconcileRunningWorkflowExecutions(rows, { userId, request });
+
+    return NextResponse.json(reconciledRows);
   }
 
-  // Fallback status check
+  const conditions = [inArray(agentExecutions.workspaceId, workspaceIds)];
+  if (executionId) conditions.push(eq(agentExecutions.id, executionId));
+  if (workflowId) conditions.push(eq(agentExecutions.temporalWorkflowId, workflowId));
+
+  const execution = await db.query.agentExecutions.findFirst({
+    where: and(...conditions),
+  });
+
+  if (!execution) {
+    return NextResponse.json({ error: "Workflow not found" }, { status: 404 });
+  }
+
+  const reconciledExecution = await reconcileWorkflowExecution(execution, { userId, request });
+
   return NextResponse.json({
-    workflowId,
-    status: "completed",
-    message: "Workflow completed successfully",
-    usingTemporal: false,
+    workflowId: reconciledExecution.temporalWorkflowId,
+    executionId: reconciledExecution.id,
+    status: reconciledExecution.status,
+    steps: extractWorkflowSteps(reconciledExecution.output),
+    result: reconciledExecution.output ?? null,
+    error: reconciledExecution.errorMessage ?? null,
   });
 }

@@ -16,14 +16,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
   Plus,
   Loader2,
   BrainCircuit,
-  Flag,
-  Calendar,
   CheckCircle2,
   Trash2,
   Sparkles,

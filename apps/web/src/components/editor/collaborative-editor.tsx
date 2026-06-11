@@ -67,7 +67,6 @@ function getStableUserColor(userId: string): string {
 function CollaborativeEditorInner({
   provider,
   fragment,
-  ydoc,
   userName,
   userColor,
   initialContent,

@@ -21,7 +21,7 @@ export async function createTemporalClient(): Promise<Client> {
 
   client = new Client({
     connection,
-    namespace: process.env.TEMPORAL_NAMESPACE || "nexus",
+    namespace: process.env.TEMPORAL_NAMESPACE || "default",
   });
 
   return client;

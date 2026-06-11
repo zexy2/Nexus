@@ -4,6 +4,9 @@ import { AIWriteProvider } from "@/lib/ai/ai-write";
 import { ToastProvider } from "@/components/shared/toast-provider";
 import { OnboardingWrapper } from "@/components/shared/onboarding-wrapper";
 import { ModalProvider } from "@/components/shared/modal-provider";
+import { SidebarProvider } from "@/components/ui/sidebar";
+
+export const dynamic = "force-dynamic";
 
 export default function DashboardLayout({
   children,
@@ -16,7 +19,9 @@ export default function DashboardLayout({
         <ToastProvider />
         <OnboardingWrapper />
         <ModalProvider />
-        <DashboardShell>{children}</DashboardShell>
+        <SidebarProvider className="contents">
+          <DashboardShell>{children}</DashboardShell>
+        </SidebarProvider>
       </AIWriteProvider>
     </ZeroProvider>
   );

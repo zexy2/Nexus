@@ -157,7 +157,7 @@ export function DocumentEditor({
   );
 
   const handleAIAction = useCallback(
-    async (action: string, customPrompt?: string) => {
+    async (action: string, _customPrompt?: string) => {
       if (!editor || !selectedText) return;
 
       // Add a "thinking" comment

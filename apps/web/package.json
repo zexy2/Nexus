@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "collab": "tsx src/server/collaboration.ts",
-    "collab:simple": "npx y-websocket"
+    "collab:simple": "tsx src/server/collaboration.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.15",
@@ -30,7 +31,6 @@
     "@nexus/agents": "workspace:*",
     "@nexus/database": "workspace:*",
     "@nexus/workflows": "workspace:*",
-    "@nexus/zero-schema": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.3",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/auto-instrumentations-node": "^0.68.0",
@@ -51,7 +51,6 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@rocicorp/zero": "^0.25.9",
     "@tiptap/extension-collaboration": "^3.17.0",
     "@tiptap/extension-collaboration-cursor": "^2.26.2",
     "@tiptap/extension-highlight": "^3.17.0",

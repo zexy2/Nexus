@@ -20,28 +20,24 @@ interface Stat {
 
 const stats: Stat[] = [
   {
-    value: 10,
-    suffix: "x",
-    label: "Faster Development",
-    description: "Ship features at unprecedented speed",
+    value: 4,
+    label: "Core Steps",
+    description: "Document, tasks, Kanban, history",
   },
   {
-    value: 99.9,
-    suffix: "%",
-    label: "Uptime",
-    description: "Enterprise-grade reliability",
+    value: 1,
+    label: "Demo Workspace",
+    description: "Single-team portfolio scope",
   },
   {
-    value: 50,
-    suffix: "k+",
-    label: "Active Users",
-    description: "Developers trust Nexus daily",
+    value: 2,
+    label: "AI Workflows",
+    description: "Document generation and task breakdown",
   },
   {
-    value: 100,
-    suffix: "ms",
-    label: "Response Time",
-    description: "Local-first instant sync",
+    value: 1,
+    label: "Managed Key",
+    description: "Server-side Gemini with quotas",
   },
 ];
 
@@ -88,10 +84,10 @@ export function StatsSection() {
         {/* Section header */}
         <ScrollReveal animation="fade-up" className="text-center mb-20">
           <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
-            By The Numbers
+            Demo Proof
           </span>
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-black tracking-tight">
-            Built for scale
+            Built to prove the workflow
           </h2>
         </ScrollReveal>
 

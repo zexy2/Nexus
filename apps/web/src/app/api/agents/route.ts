@@ -1,16 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
-import { 
-  startAgentTrace, 
-  addAgentStep, 
-  completeAgentTrace, 
-  failAgentTrace,
-  logger 
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { enforceAiBudget } from "@/lib/production-guardrails";
+import {
+  startAgentTrace,
+  addAgentStep,
+  completeAgentTrace,
+  failAgentTrace
 } from "@/lib/observability";
-import { searchWeb, getAnswer } from "@/lib/tavily";
-import { correctiveRAG, generateCRAGAnswer } from "@/lib/crag";
+import { searchWeb } from "@/lib/ai/tavily";
+import { correctiveRAG } from "@/lib/ai/crag";
+import { buildWorkspaceSearchContext, searchWorkspaceContent } from "@/lib/workspace-search";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+// Shared auth + AI budget gate. This endpoint calls paid LLM/search providers,
+// so it must never run for anonymous callers or beyond the per-user quota.
+async function authorizeAgentRequest():
+  Promise<
+    | { ok: true; userId: string }
+    | { ok: false; response: NextResponse }
+  > {
+  const session = await auth.api.getSession({ headers: await headers() });
+  if (!session?.user?.id) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
+  }
+
+  const budget = await enforceAiBudget({
+    userId: session.user.id,
+    email: session.user.email,
+    kind: "chat",
+  });
+  if (!budget.ok) {
+    return { ok: false, response: budget.response };
+  }
+
+  return { ok: true, userId: session.user.id };
+}
 
 interface AgentRequest {
   message: string;
@@ -62,24 +92,12 @@ async function getGeminiResponse(
 }
 
 // RAG context retrieval
-async function getRAGContext(query: string): Promise<string> {
+async function getRAGContext(query: string, workspaceId?: string): Promise<string> {
+  if (!workspaceId) return "";
+
   try {
-    const response = await fetch(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/search`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query,
-          options: { limit: 3, includeContext: true, useSemantic: true },
-        }),
-      }
-    );
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.context || "";
-    }
+    const results = await searchWorkspaceContent(query, workspaceId, { limit: 3 });
+    return buildWorkspaceSearchContext(results);
   } catch (err) {
     console.error("RAG context retrieval failed:", err);
   }
@@ -184,6 +202,9 @@ Türkçe yaz.`,
 
 export async function POST(request: NextRequest) {
   try {
+    const authorized = await authorizeAgentRequest();
+    if (!authorized.ok) return authorized.response;
+
     const body: AgentRequest = await request.json();
 
     if (!body.message) {
@@ -192,6 +213,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Trust the session, not the client-supplied userId.
+    body.context = { ...body.context, userId: authorized.userId };
 
     const mode = body.mode || "auto";
     const agentType = mode === "auto" ? "supervisor" : mode;
@@ -280,7 +304,7 @@ export async function POST(request: NextRequest) {
                 })}\n\n`)
               );
               
-              ragContext = await getRAGContext(body.message);
+              ragContext = await getRAGContext(body.message, body.context?.workspaceId);
             }
           }
 
@@ -566,6 +590,9 @@ JSON array olarak döndür: ["sorgu1", "sorgu2", ...]`;
 // Non-streaming endpoint for simpler use cases
 export async function PUT(request: NextRequest) {
   try {
+    const authorized = await authorizeAgentRequest();
+    if (!authorized.ok) return authorized.response;
+
     const body: AgentRequest = await request.json();
 
     if (!body.message) {

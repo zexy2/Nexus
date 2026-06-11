@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { type Doc as SyncDoc } from "@/lib/sync/zero";
+import { useLocalFirstContext } from "@/lib/sync/local-first";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
@@ -14,12 +16,10 @@ import {
   Trash2,
   Sparkles,
   Clock,
-  FolderOpen,
   Star,
   StarOff,
   Eye,
   Edit3,
-  Filter,
   SortAsc,
   Calendar,
   User,
@@ -55,7 +55,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  PageHeader,
   EmptyState,
   SkeletonDocumentList,
 } from "@/components/shared";
@@ -76,6 +75,21 @@ interface Document {
   isAI: boolean;
   isFavorite: boolean;
   tags?: string[];
+}
+
+// Map a locally-synced doc (IndexedDB store, numeric timestamps) to the page
+// shape, for the local-first read path (instant render + offline from cache).
+function fromSyncDoc(d: SyncDoc): Document {
+  return {
+    id: d.id,
+    title: d.title,
+    iconEmoji: d.iconEmoji || "📄",
+    updatedAt: new Date(d.updatedAt),
+    createdAt: new Date(d.createdAt ?? d.updatedAt),
+    createdBy: d.createdBy || "User",
+    isAI: false,
+    isFavorite: false,
+  };
 }
 
 // Emoji picker options
@@ -444,6 +458,7 @@ export default function DocsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocEmoji, setNewDocEmoji] = useState("📄");
+  const { engine, userId, workspaceId } = useLocalFirstContext();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -452,10 +467,26 @@ export default function DocsPage() {
 
   const { documentsView, setDocumentsView } = useUIStore();
 
-  // Fetch documents from API on mount
+  // Fetch documents: local-first (instant cache + offline), then refresh online.
   const fetchDocuments = useCallback(async () => {
+    let renderedFromCache = false;
+    if (engine) {
+      try {
+        const local = await engine.query<SyncDoc>("docs");
+        const active = local.filter((d) => !d.isArchived);
+        if (active.length > 0) {
+          setDocuments(active.map(fromSyncDoc));
+          setIsLoading(false);
+          renderedFromCache = true;
+        }
+      } catch {
+        // Cache miss is non-fatal; fall through to the network.
+      }
+    }
+
+    if (!renderedFromCache) setIsLoading(true);
+
     try {
-      setIsLoading(true);
       const res = await fetch("/api/docs");
       if (res.ok) {
         const data = await res.json();
@@ -477,12 +508,21 @@ export default function DocsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [engine]);
 
-  // Load documents on mount
+  // Load on mount, and re-read the local store when background sync updates it.
   useEffect(() => {
     fetchDocuments();
-  }, [fetchDocuments]);
+    if (!engine) return;
+    return engine.subscribe("docs", async () => {
+      try {
+        const local = await engine.query<SyncDoc>("docs");
+        setDocuments(local.filter((d) => !d.isArchived).map(fromSyncDoc));
+      } catch {
+        // ignore
+      }
+    });
+  }, [engine, fetchDocuments]);
 
   // Filter and sort documents
   const filteredDocuments = useMemo(() => {
@@ -521,6 +561,28 @@ export default function DocsPage() {
       return;
     }
 
+    // Local-first: optimistic insert + queued sync (works offline).
+    if (engine && workspaceId && userId) {
+      const now = Date.now();
+      await engine.mutate<SyncDoc>("docs", "insert", {
+        id: crypto.randomUUID(),
+        workspaceId,
+        title: newDocTitle.trim(),
+        content: [],
+        iconEmoji: newDocEmoji,
+        isArchived: false,
+        createdBy: userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+      setNewDocTitle("");
+      setNewDocEmoji("📄");
+      setIsCreateOpen(false);
+      showToast.success("Döküman oluşturuldu");
+      return;
+    }
+
+    // Fallback: network create.
     try {
       setIsCreating(true);
       const res = await fetch("/api/docs", {
@@ -537,7 +599,7 @@ export default function DocsPage() {
       }
 
       const data = await res.json();
-      
+
       const newDoc: Document = {
         id: data.id,
         title: data.title,
@@ -560,33 +622,55 @@ export default function DocsPage() {
     } finally {
       setIsCreating(false);
     }
-  }, [newDocTitle, newDocEmoji]);
+  }, [newDocTitle, newDocEmoji, engine, workspaceId, userId]);
 
-  const handleDuplicate = useCallback((id: string) => {
-    const doc = documents.find((d) => d.id === id);
-    if (doc) {
-      const duplicated: Document = {
-        ...doc,
-        id: Date.now().toString(),
-        title: `${doc.title} (Kopya)`,
-        updatedAt: new Date(),
-        createdAt: new Date(),
-        isFavorite: false,
-      };
-      setDocuments((prev) => [duplicated, ...prev]);
-      showToast.success("Döküman çoğaltıldı");
+  const handleDuplicate = useCallback(async (id: string) => {
+    if (!(engine && workspaceId && userId)) {
+      showToast.error("Çoğaltma için bağlantı bekleniyor");
+      return;
     }
-  }, [documents]);
+    const source = await engine.get<SyncDoc>("docs", id);
+    if (!source) return;
+    const now = Date.now();
+    await engine.mutate<SyncDoc>("docs", "insert", {
+      id: crypto.randomUUID(),
+      workspaceId,
+      title: `${source.title} (Kopya)`,
+      content: source.content ?? [],
+      iconEmoji: source.iconEmoji,
+      isArchived: false,
+      createdBy: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    showToast.success("Döküman çoğaltıldı");
+  }, [engine, workspaceId, userId]);
 
-  const handleArchive = useCallback((id: string) => {
+  // Soft-delete/archive: mark the doc archived locally and queue the sync. This
+  // also fixes a prior bug where delete/archive only updated React state and
+  // never persisted (docs reappeared on reload).
+  const archiveDoc = useCallback(async (id: string) => {
     setDocuments((prev) => prev.filter((d) => d.id !== id));
+    if (!engine) return;
+    const existing = await engine.get<SyncDoc>("docs", id);
+    if (existing) {
+      await engine.mutate<SyncDoc>("docs", "update", {
+        ...existing,
+        isArchived: true,
+        updatedAt: Date.now(),
+      });
+    }
+  }, [engine]);
+
+  const handleArchive = useCallback(async (id: string) => {
+    await archiveDoc(id);
     showToast.info("Döküman arşivlendi");
-  }, []);
+  }, [archiveDoc]);
 
-  const handleDelete = useCallback((id: string) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
+  const handleDelete = useCallback(async (id: string) => {
+    await archiveDoc(id);
     showToast.success("Döküman silindi");
-  }, []);
+  }, [archiveDoc]);
 
   const handleToggleFavorite = useCallback((id: string) => {
     setDocuments((prev) =>

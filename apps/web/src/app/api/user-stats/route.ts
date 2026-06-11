@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { docs, tasks, workspaces } from "@nexus/database/schema";
-import { eq, and, count, gte } from "drizzle-orm";
+import { eq, and, count, gte, inArray, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 
 // GET - Get user statistics for dashboard
@@ -85,7 +85,7 @@ export async function GET() {
         .from(tasks)
         .where(and(
           eq(tasks.workspaceId, wsId),
-          eq(tasks.status, "completed")
+          eq(tasks.status, "done")
         ));
       completedTasks += completed[0]?.count || 0;
 
@@ -94,7 +94,7 @@ export async function GET() {
         .from(tasks)
         .where(and(
           eq(tasks.workspaceId, wsId),
-          eq(tasks.status, "pending")
+          ne(tasks.status, "done")
         ));
       pendingTasks += pending[0]?.count || 0;
 
@@ -104,7 +104,7 @@ export async function GET() {
         .from(tasks)
         .where(and(
           eq(tasks.workspaceId, wsId),
-          eq(tasks.status, "completed"),
+          eq(tasks.status, "done"),
           gte(tasks.updatedAt, oneWeekAgo)
         ));
       tasksCompletedThisWeek += recentCompleted[0]?.count || 0;
@@ -112,7 +112,7 @@ export async function GET() {
 
     // Get recent documents for activity
     const recentDocuments = await db.query.docs.findMany({
-      where: eq(docs.isArchived, 0),
+      where: and(inArray(docs.workspaceId, workspaceIds), eq(docs.isArchived, 0)),
       orderBy: (docs, { desc }) => [desc(docs.updatedAt)],
       limit: 5,
     });

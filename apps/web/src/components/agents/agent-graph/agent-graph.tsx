@@ -21,7 +21,6 @@ import {
   Pause, 
   RotateCcw, 
   Eye, 
-  Maximize2,
   Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -113,7 +112,7 @@ const initialEdges: Edge[] = [
   },
 ];
 
-// Demo workflow simulation
+// Static workflow visualizer preview. Real workflow history is shown in the Agents page.
 const workflowSteps = [
   {
     nodes: { supervisor: { status: 'working', currentTask: 'Analyzing request...' } },
@@ -322,8 +321,8 @@ export function AgentGraph({ className }: AgentGraphProps) {
     if (!isPlaying || isPaused) return;
 
     if (currentStep >= workflowSteps.length) {
-      setIsPlaying(false);
-      return;
+      const stopTimer = setTimeout(() => setIsPlaying(false), 0);
+      return () => clearTimeout(stopTimer);
     }
 
     const timer = setTimeout(() => {
@@ -366,6 +365,12 @@ export function AgentGraph({ className }: AgentGraphProps) {
         <Controls 
           className="!bg-zinc-900 !border-zinc-700 !rounded-lg overflow-hidden [&>button]:!bg-zinc-800 [&>button]:!border-zinc-700 [&>button]:!text-zinc-400 [&>button:hover]:!bg-zinc-700"
         />
+
+        <Panel position="top-left" className="mt-4 ml-4">
+          <div className="rounded-full border border-zinc-700 bg-zinc-900/90 px-3 py-1 text-xs text-zinc-300 shadow-xl backdrop-blur-xl">
+            Workflow visualizer preview
+          </div>
+        </Panel>
 
         {/* Control Panel */}
         <Panel position="bottom-center" className="mb-4">

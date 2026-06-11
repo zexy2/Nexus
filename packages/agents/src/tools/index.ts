@@ -194,15 +194,45 @@ async function searchVectors(
     }
     const queryEmbedding = firstData.embedding;
 
-    // Use fetch to call database API or return empty for now
-    // In production, this would call a database endpoint
     const limit = options?.limit || 5;
+    const postgres = (await import("postgres")).default;
+    const sql = postgres(databaseUrl);
     
-    // For now, return mock data indicating vector search is configured
-    // The actual pgvector implementation will be in the web app's API routes
-    console.log(`[VectorStore] Would search for: "${query}" with embedding (${queryEmbedding.length} dims), limit: ${limit}`);
-    
-    return [];
+    try {
+      const rows = options?.workspaceId
+        ? await sql<Array<{
+            id: string;
+            content: string;
+            similarity: number;
+            metadata: Record<string, unknown> | null;
+          }>>`
+            SELECT id, content, 1 - (embedding <=> ${`[${queryEmbedding.join(",")}]`}::vector) as similarity, metadata
+            FROM vectors
+            WHERE workspace_id = ${options.workspaceId}
+            ORDER BY embedding <=> ${`[${queryEmbedding.join(",")}]`}::vector
+            LIMIT ${limit}
+          `
+        : await sql<Array<{
+            id: string;
+            content: string;
+            similarity: number;
+            metadata: Record<string, unknown> | null;
+          }>>`
+            SELECT id, content, 1 - (embedding <=> ${`[${queryEmbedding.join(",")}]`}::vector) as similarity, metadata
+            FROM vectors
+            ORDER BY embedding <=> ${`[${queryEmbedding.join(",")}]`}::vector
+            LIMIT ${limit}
+          `;
+
+      return rows.map((row) => ({
+        id: row.id,
+        content: row.content,
+        similarity: Number(row.similarity),
+        metadata: row.metadata || {},
+      }));
+    } finally {
+      await sql.end();
+    }
   } catch (error) {
     console.error("[VectorStore] Search error:", error);
     return [];

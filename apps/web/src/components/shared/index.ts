@@ -13,7 +13,7 @@ export {
   SkeletonAgentActivity,
   SkeletonSettings,
 } from './loading-skeleton';
-export { ErrorBoundary, ErrorFallback, InlineError, LoadingError } from './error-boundary';
+export { ErrorBoundary, useErrorHandler, withErrorBoundary } from './error-boundary';
 export { ToastProvider, showToast } from './toast-provider';
 export { OnboardingModal, QuickTourTooltip, tourSteps } from './onboarding';
 export type { QuickTourStep } from './onboarding';

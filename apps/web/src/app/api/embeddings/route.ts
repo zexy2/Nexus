@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vectors, docs } from "@nexus/database/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { aiUnavailableResponse, enforceAiBudget } from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
 
@@ -70,15 +72,11 @@ function chunkText(text: string, chunkSize = 500): { content: string; position: 
   return chunks.length > 0 ? chunks : [{ content: text, position: 0 }];
 }
 
-// Generate embedding using Groq (free) or OpenAI
 async function generateEmbedding(text: string): Promise<number[]> {
-  // Use OpenAI for embeddings (Groq doesn't support embeddings yet)
   const apiKey = process.env.OPENAI_API_KEY;
   
   if (!apiKey) {
-    // Return a simple hash-based pseudo-embedding for development
-    console.warn("No OPENAI_API_KEY found, using pseudo-embeddings");
-    return generatePseudoEmbedding(text);
+    throw new Error("OPENAI_API_KEY is not set");
   }
   
   try {
@@ -102,33 +100,8 @@ async function generateEmbedding(text: string): Promise<number[]> {
     return data.data[0].embedding;
   } catch (error) {
     console.error("Embedding generation failed:", error);
-    return generatePseudoEmbedding(text);
+    throw error;
   }
-}
-
-// Pseudo-embedding for development without API key
-function generatePseudoEmbedding(text: string, dimensions = 384): number[] {
-  const embedding = new Array(dimensions).fill(0);
-  const normalized = text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
-  const words = normalized.split(/\s+/);
-  
-  for (const word of words) {
-    for (let i = 0; i < word.length; i++) {
-      const charCode = word.charCodeAt(i);
-      const index = (charCode * (i + 1)) % dimensions;
-      embedding[index] += 1 / words.length;
-    }
-  }
-  
-  // Normalize
-  const magnitude = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
-  if (magnitude > 0) {
-    for (let i = 0; i < dimensions; i++) {
-      embedding[i] = embedding[i] / magnitude;
-    }
-  }
-  
-  return embedding;
 }
 
 // POST - Generate embeddings for a document
@@ -144,17 +117,38 @@ export async function POST(req: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+  }
 
   try {
-    const { docId, forceRegenerate = false } = await req.json();
+    const { docId, workspaceId, forceRegenerate = false } = await req.json();
     
     if (!docId) {
       return NextResponse.json({ error: "docId is required" }, { status: 400 });
     }
+    if (!workspaceId || typeof workspaceId !== "string") {
+      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+    }
+
+    const access = await requireWorkspaceAccess(protection.user.id, workspaceId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "embedding",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
     
     // Get the document
     const doc = await db.query.docs.findFirst({
-      where: eq(docs.id, docId),
+      where: and(eq(docs.id, docId), eq(docs.workspaceId, access.workspaceId)),
     });
     
     if (!doc) {
@@ -172,12 +166,12 @@ export async function POST(req: NextRequest) {
     
     // Delete existing vectors for this document if regenerating
     if (forceRegenerate) {
-      await db.delete(vectors).where(eq(vectors.sourceId, docId));
+      await db.delete(vectors).where(and(eq(vectors.sourceId, docId), eq(vectors.workspaceId, access.workspaceId)));
     }
     
     // Check if vectors already exist
     const existingVectors = await db.query.vectors.findFirst({
-      where: eq(vectors.sourceId, docId),
+      where: and(eq(vectors.sourceId, docId), eq(vectors.workspaceId, access.workspaceId)),
     });
     
     if (existingVectors && !forceRegenerate) {
@@ -198,7 +192,10 @@ export async function POST(req: NextRequest) {
       vectorRecords.push({
         sourceType: "doc" as const,
         sourceId: docId,
+        docId,
+        workspaceId: access.workspaceId,
         content: chunk.content,
+        embedding,
         embeddingJson: embedding,
         metadata: {
           title: doc.title,
@@ -216,10 +213,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       message: "Embeddings generated successfully",
       docId,
+      workspaceId: access.workspaceId,
       chunksCreated: vectorRecords.length,
     });
   } catch (error) {
     console.error("Embedding generation error:", error);
+    if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
+      return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+    }
     return NextResponse.json(
       { error: "Failed to generate embeddings" },
       { status: 500 }
@@ -240,15 +241,30 @@ export async function GET(req: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+  }
 
   try {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q");
-    const limit = parseInt(searchParams.get("limit") || "5");
+    const workspaceId = searchParams.get("workspaceId");
+    const limit = parseInt(searchParams.get("limit") || "5", 10);
     const threshold = parseFloat(searchParams.get("threshold") || "0.3");
     
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
+    }
+    if (!workspaceId) {
+      return NextResponse.json({ error: "workspaceId is required" }, { status: 400 });
+    }
+
+    const access = await requireWorkspaceAccess(protection.user.id, workspaceId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
     
     // Generate embedding for query
@@ -256,7 +272,7 @@ export async function GET(req: NextRequest) {
     
     // Get all vectors (in production, use pgvector for efficient similarity search)
     const allVectors = await db.query.vectors.findMany({
-      where: eq(vectors.sourceType, "doc"),
+      where: and(eq(vectors.sourceType, "doc"), eq(vectors.workspaceId, access.workspaceId)),
     });
     
     // Calculate similarities
@@ -282,7 +298,7 @@ export async function GET(req: NextRequest) {
     const docIds = [...new Set(results.map(r => r.sourceId))];
     const docsList = docIds.length > 0 
       ? await Promise.all(
-          docIds.map(id => db.query.docs.findFirst({ where: eq(docs.id, id) }))
+          docIds.map(id => db.query.docs.findFirst({ where: and(eq(docs.id, id), eq(docs.workspaceId, access.workspaceId)) }))
         )
       : [];
     
@@ -300,6 +316,9 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error("Vector search error:", error);
+    if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
+      return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+    }
     return NextResponse.json(
       { error: "Failed to search" },
       { status: 500 }

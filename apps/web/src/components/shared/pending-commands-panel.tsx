@@ -76,14 +76,14 @@ const statusConfig: Record<CommandStatus, {
 
 export function PendingCommandsPanel({ className, workspaceId }: PendingCommandsPanelProps) {
   const [commands, setCommands] = useState<OfflineCommand[]>([]);
-  const [isOnline, setIsOnline] = useState(true);
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine
+  );
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check online status
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-    
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     
@@ -98,7 +98,6 @@ export function PendingCommandsPanel({ className, workspaceId }: PendingCommands
 
   // Subscribe to command updates
   useEffect(() => {
-    setIsLoading(true);
     const unsubscribe = commandQueue.subscribe((updatedCommands) => {
       const filtered = workspaceId 
         ? updatedCommands.filter(c => c.workspaceId === workspaceId)

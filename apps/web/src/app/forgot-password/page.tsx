@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
       
       // For demo purposes, always show success
       setIsSubmitted(true);
-    } catch (err) {
+    } catch {
       setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);

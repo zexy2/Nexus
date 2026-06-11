@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
-import { docs, workspaces } from "@nexus/database/schema";
-import { eq, and } from "drizzle-orm";
+import { verifySession } from "@/lib/api-middleware";
+import { docs, workspaceMembers, workspaces } from "@nexus/database/schema";
+import { and, eq, or } from "drizzle-orm";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -16,6 +16,28 @@ interface DocUpdateData {
   content?: Record<string, unknown>;
   iconEmoji?: string | null;
   isArchived?: number; // 0 or 1 - integer in DB for Zero Sync compatibility
+}
+
+async function getUserId() {
+  const session = await verifySession();
+  return session?.user.id;
+}
+
+async function findAuthorizedDoc(id: string, userId: string) {
+  const [row] = await db
+    .select({ doc: docs })
+    .from(docs)
+    .innerJoin(workspaces, eq(docs.workspaceId, workspaces.id))
+    .leftJoin(workspaceMembers, eq(workspaceMembers.workspaceId, workspaces.id))
+    .where(
+      and(
+        eq(docs.id, id),
+        or(eq(workspaces.ownerId, userId), eq(workspaceMembers.userId, userId))
+      )
+    )
+    .limit(1);
+
+  return row?.doc;
 }
 
 // GET - Get single document
@@ -34,9 +56,15 @@ export async function GET(
       );
     }
     
-    const doc = await db.query.docs.findFirst({
-      where: eq(docs.id, id),
-    });
+    const userId = await getUserId();
+    if (!userId) {
+      return Response.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const doc = await findAuthorizedDoc(id, userId);
 
     if (!doc) {
       return Response.json({ error: "Document not found" }, { status: 404 });
@@ -44,6 +72,7 @@ export async function GET(
 
     return Response.json({
       id: doc.id,
+      workspaceId: doc.workspaceId,
       title: doc.title,
       iconEmoji: doc.iconEmoji,
       content: doc.content || [],
@@ -73,6 +102,18 @@ export async function PATCH(
     }
     
     const body = await req.json();
+    const userId = await getUserId();
+    if (!userId) {
+      return Response.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const existing = await findAuthorizedDoc(id, userId);
+    if (!existing) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
+    }
 
     const updateData: DocUpdateData = {};
     if (body.title !== undefined) updateData.title = body.title;
@@ -90,18 +131,29 @@ export async function PATCH(
       return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
-    // Trigger embedding generation in background when content is updated
-    if (body.content !== undefined) {
-      // Fire and forget - don't block the response
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docId: id, forceRegenerate: true }),
-      }).catch(err => console.error('Background embedding failed:', err));
+    // Trigger embedding generation in background when content is updated.
+    // The embeddings endpoint requires authentication and a workspaceId, so we
+    // forward the caller's session cookie and the document's workspace. Without
+    // these the request would be rejected (401/400) and silently do nothing.
+    if (body.content !== undefined && process.env.OPENAI_API_KEY) {
+      const cookie = req.headers.get("cookie");
+      if (cookie) {
+        // Fire and forget - don't block the response
+        fetch(`${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/embeddings`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", cookie },
+          body: JSON.stringify({
+            docId: id,
+            workspaceId: updated.workspaceId,
+            forceRegenerate: true,
+          }),
+        }).catch((err) => console.error("Background embedding failed:", err));
+      }
     }
 
     return Response.json({
       id: updated.id,
+      workspaceId: updated.workspaceId,
       title: updated.title,
       iconEmoji: updated.iconEmoji,
       content: updated.content || [],
@@ -139,7 +191,20 @@ export async function DELETE(
       );
     }
 
-    await db.delete(docs).where(eq(docs.id, id));
+    const userId = await getUserId();
+    if (!userId) {
+      return Response.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+
+    const existing = await findAuthorizedDoc(id, userId);
+    if (!existing) {
+      return Response.json({ error: "Document not found" }, { status: 404 });
+    }
+
+    await db.update(docs).set({ isArchived: 1 }).where(eq(docs.id, id));
 
     return Response.json({ success: true });
   } catch (error) {

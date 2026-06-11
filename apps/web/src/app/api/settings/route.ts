@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { verifySession } from "@/lib/api-middleware";
+import { unauthorized } from "@/lib/api-response";
 import { userSettings, users } from "@nexus/database";
 import { eq } from "drizzle-orm";
-import { headers } from "next/headers";
+import { getAiProviderStatus, getAiUsageLimits, getAiUsageRemaining, isAdminEmail } from "@/lib/production-guardrails";
+
+const SERVER_MANAGED_MODEL = "gemini-2.5-flash";
 
 // GET /api/settings - Get user settings
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
 
     // Get user settings or create default
@@ -36,20 +36,10 @@ export async function GET(request: NextRequest) {
     const user = await db.query.users.findFirst({
       where: eq(users.id, session.user.id),
     });
-
-    // Mask API keys for response
-    const maskedGeminiKey = settings.geminiApiKey 
-      ? `AI...${settings.geminiApiKey.slice(-4)}` 
-      : null;
-    const maskedOpenAiKey = settings.openaiApiKey 
-      ? `sk-...${settings.openaiApiKey.slice(-4)}` 
-      : null;
-    const maskedAnthropicKey = settings.anthropicApiKey 
-      ? `sk-...${settings.anthropicApiKey.slice(-4)}` 
-      : null;
-    const maskedGroqKey = settings.groqApiKey 
-      ? `gsk_...${settings.groqApiKey.slice(-4)}` 
-      : null;
+    const providerStatus = getAiProviderStatus();
+    const isAdmin = isAdminEmail(user?.email || session.user.email);
+    const usageLimits = getAiUsageLimits(isAdmin);
+    const usageRemaining = await getAiUsageRemaining(session.user.id, user?.email || session.user.email);
 
     return NextResponse.json({
       // Profile
@@ -61,20 +51,22 @@ export async function GET(request: NextRequest) {
       },
       // AI Settings
       ai: {
-        defaultModel: settings.defaultModel,
+        defaultModel: SERVER_MANAGED_MODEL,
         autoSaveAiOutputs: settings.autoSaveAiOutputs,
-        // User's own API keys
-        geminiConnected: !!settings.geminiApiKey,
-        openaiConnected: !!settings.openaiApiKey,
-        anthropicConnected: !!settings.anthropicApiKey,
-        groqConnected: !!settings.groqApiKey,
-        // Server-side fallback availability
-        serverGeminiAvailable: !!process.env.GEMINI_API_KEY,
-        serverOpenaiAvailable: !!process.env.OPENAI_API_KEY,
-        maskedGeminiKey,
-        maskedOpenAiKey,
-        maskedAnthropicKey,
-        maskedGroqKey,
+        keyManagement: "server",
+        byokEnabled: false,
+        serverAiAvailable: providerStatus.aiEnabled && providerStatus.geminiAvailable,
+        serverGeminiAvailable: providerStatus.geminiAvailable,
+        serverOpenaiAvailable: providerStatus.openaiAvailable,
+        serverAnthropicAvailable: !!process.env.ANTHROPIC_API_KEY,
+        serverGroqAvailable: !!process.env.GROQ_API_KEY,
+        usageLimits: {
+          workflowsPerDay: usageLimits.workflowDaily,
+          chatMessagesPerDay: usageLimits.chatDaily,
+          globalAiRequestsPerDay: usageLimits.globalDaily,
+          maxStepsPerWorkflow: usageLimits.maxStepsPerWorkflow,
+        },
+        usageRemaining,
       },
       // Notifications
       notifications: {
@@ -105,12 +97,9 @@ export async function GET(request: NextRequest) {
 // PATCH /api/settings - Update user settings
 export async function PATCH(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
 
     const body = await request.json();
@@ -118,12 +107,7 @@ export async function PATCH(request: NextRequest) {
       // Profile updates
       name,
       // AI settings
-      defaultModel,
       autoSaveAiOutputs,
-      geminiApiKey,
-      openaiApiKey,
-      anthropicApiKey,
-      groqApiKey,
       // Notifications
       emailNotifications,
       agentNotifications,
@@ -147,13 +131,8 @@ export async function PATCH(request: NextRequest) {
     // Build settings update object
     const settingsUpdate: Partial<typeof userSettings.$inferInsert> = {};
 
-    if (defaultModel !== undefined) settingsUpdate.defaultModel = defaultModel;
+    settingsUpdate.defaultModel = SERVER_MANAGED_MODEL;
     if (autoSaveAiOutputs !== undefined) settingsUpdate.autoSaveAiOutputs = autoSaveAiOutputs;
-    // Trim API keys to remove accidental whitespace
-    if (geminiApiKey !== undefined) settingsUpdate.geminiApiKey = geminiApiKey?.trim() || null;
-    if (openaiApiKey !== undefined) settingsUpdate.openaiApiKey = openaiApiKey?.trim() || null;
-    if (anthropicApiKey !== undefined) settingsUpdate.anthropicApiKey = anthropicApiKey?.trim() || null;
-    if (groqApiKey !== undefined) settingsUpdate.groqApiKey = groqApiKey?.trim() || null;
     if (emailNotifications !== undefined) settingsUpdate.emailNotifications = emailNotifications;
     if (agentNotifications !== undefined) settingsUpdate.agentNotifications = agentNotifications;
     if (taskReminders !== undefined) settingsUpdate.taskReminders = taskReminders;

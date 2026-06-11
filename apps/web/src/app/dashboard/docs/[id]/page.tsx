@@ -63,11 +63,31 @@ const CollaborativeEditorWrapper = dynamic(
 
 interface Document {
   id: string;
+  workspaceId: string;
   title: string;
   iconEmoji: string | null;
   content: BlockNoteContent;
   createdBy: string | null;
   updatedAt: string;
+}
+
+type TaskWorkflowState = {
+  workflowId: string;
+  executionId: string;
+  status: "running" | "completed" | "failed";
+  taskCount?: number;
+  error?: string;
+};
+
+function extractCreatedTasks(result: unknown): Array<{ id?: string; title?: string }> {
+  if (!result || typeof result !== "object") return [];
+  const record = result as Record<string, unknown>;
+  if (Array.isArray(record.tasks)) return record.tasks as Array<{ id?: string; title?: string }>;
+  if (record.result && typeof record.result === "object") {
+    const nested = record.result as Record<string, unknown>;
+    if (Array.isArray(nested.tasks)) return nested.tasks as Array<{ id?: string; title?: string }>;
+  }
+  return [];
 }
 
 export default function DocDetailPage() {
@@ -82,6 +102,7 @@ export default function DocDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
+  const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
   const [collaborativeMode, setCollaborativeMode] = useState(false);
   const editorContentRef = useRef<BlockNoteContent>([]);
 
@@ -107,6 +128,53 @@ export default function DocDetailPage() {
       fetchDoc();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    if (!taskWorkflow || taskWorkflow.status !== "running") return;
+
+    const workflowId = taskWorkflow.workflowId;
+    const executionId = taskWorkflow.executionId;
+    let cancelled = false;
+
+    async function pollTaskWorkflow() {
+      try {
+        const res = await fetch(`/api/workflows?workflowId=${workflowId}`);
+        const data = await res.json().catch(() => null);
+
+        if (cancelled || !res.ok || !data) return;
+
+        if (data.status === "completed") {
+          const tasks = extractCreatedTasks(data.result);
+          setTaskWorkflow({
+            workflowId,
+            executionId,
+            status: "completed",
+            taskCount: tasks.length,
+          });
+          setAiSuccess("tasks");
+          setAiLoading(null);
+        } else if (data.status === "failed") {
+          setTaskWorkflow({
+            workflowId,
+            executionId,
+            status: "failed",
+            error: data.error || "Task workflow failed",
+          });
+          setAiLoading(null);
+        }
+      } catch (err) {
+        console.error("Failed to poll task workflow:", err);
+      }
+    }
+
+    void pollTaskWorkflow();
+    const interval = window.setInterval(pollTaskWorkflow, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [taskWorkflow]);
 
   const handleContentChange = async (content: BlockNoteContent) => {
     if (!doc) return;
@@ -171,9 +239,36 @@ export default function DocDetailPage() {
           agentMode = "writer";
           break;
         case "tasks":
-          prompt = `Bu dökümandan görev listesi çıkar ve her görevi ayrı ayrı listele:\n\n${textContent}`;
-          agentMode = "task";
-          break;
+          if (!doc?.workspaceId) {
+            throw new Error("Workspace not found for this document");
+          }
+
+          const workflowResponse = await fetch("/api/workflows", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              workflowType: "tasks",
+              workspaceId: doc.workspaceId,
+              input: {
+                workspaceId: doc.workspaceId,
+                docId: doc.id,
+                projectDescription: `Create actionable tasks from this document titled "${title}":\n\n${textContent}`,
+              },
+            }),
+          });
+
+          if (!workflowResponse.ok) {
+            const errorBody = await workflowResponse.json().catch(() => null);
+            throw new Error(errorBody?.message || errorBody?.error || "Task workflow failed to start");
+          }
+
+          const workflow = await workflowResponse.json();
+          setTaskWorkflow({
+            workflowId: workflow.workflowId,
+            executionId: workflow.executionId,
+            status: "running",
+          });
+          return;
       }
 
       const response = await fetch("/api/chat", {
@@ -198,57 +293,42 @@ export default function DocDetailPage() {
         }));
       };
 
-      if (action === "tasks") {
-        // Task oluştur
-        const lines = result.split("\n").filter(line => 
-          line.match(/^[-*•]\s/) || line.match(/^\d+\.\s/) || line.match(/^⬜|🔴|🟡|🟢/)
-        );
-        
-        for (const line of lines.slice(0, 5)) {
-          const taskTitle = line.replace(/^[-*•\d.⬜🔴🟡🟢\s]+/, "").trim();
-          if (taskTitle.length > 3) {
-            await fetch("/api/tasks", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ title: taskTitle, description: `${title} dökümanından oluşturuldu`, priority: "medium" }),
-            });
-          }
-        }
-        setAiSuccess("tasks");
-        setTimeout(() => setAiSuccess(null), 3000);
-      } else {
-        // Yeni doküman oluştur
-        const actionNames = {
-          summarize: "Özet",
-          expand: "Genişletilmiş",
-          improve: "İyileştirilmiş",
-        };
-        
-        // AI sonucunu BlockNote formatına çevir
-        const blockNoteContent = textToBlockNoteContent(result);
-        
-        const newDocRes = await fetch("/api/docs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            title: `${actionNames[action]}: ${title}`,
-            content: blockNoteContent 
-          }),
-        });
-        
-        if (newDocRes.ok) {
-          const newDoc = await newDocRes.json();
-          setAiSuccess(action);
-          setTimeout(() => {
-            router.push(`/dashboard/docs/${newDoc.id}`);
-          }, 1000);
-        }
+      // Yeni doküman oluştur
+      const actionNames = {
+        summarize: "Özet",
+        expand: "Genişletilmiş",
+        improve: "İyileştirilmiş",
+      };
+      
+      // AI sonucunu BlockNote formatına çevir
+      const blockNoteContent = textToBlockNoteContent(result);
+      
+      const newDocRes = await fetch("/api/docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          title: `${actionNames[action]}: ${title}`,
+          content: blockNoteContent 
+        }),
+      });
+      
+      if (newDocRes.ok) {
+        const newDoc = await newDocRes.json();
+        setAiSuccess(action);
+        setTimeout(() => {
+          router.push(`/dashboard/docs/${newDoc.id}`);
+        }, 1000);
       }
     } catch (err) {
       console.error("AI action failed:", err);
       alert("AI işlemi başarısız oldu. Lütfen tekrar deneyin.");
+      if (action === "tasks") {
+        setTaskWorkflow(null);
+      }
     } finally {
-      setAiLoading(null);
+      if (action !== "tasks") {
+        setAiLoading(null);
+      }
     }
   };
 
@@ -502,16 +582,39 @@ export default function DocDetailPage() {
               onClick={() => handleAiAction("tasks")}
               disabled={aiLoading !== null}
             >
-              {aiLoading === "tasks" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> Görevler oluşturuluyor...</>
+              {taskWorkflow?.status === "running" ? (
+                <><Loader2 className="size-3 animate-spin mr-1" /> Workflow çalışıyor...</>
+              ) : taskWorkflow?.status === "completed" ? (
+                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {taskWorkflow.taskCount || 0} görev oluşturuldu</>
+              ) : aiLoading === "tasks" ? (
+                <><Loader2 className="size-3 animate-spin mr-1" /> Başlatılıyor...</>
               ) : aiSuccess === "tasks" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> Görevler oluşturuldu!</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> Görevler hazır</>
               ) : (
                 "Görev Çıkar"
               )}
             </Button>
           </div>
         </div>
+        {taskWorkflow && (
+          <div className="max-w-4xl mx-auto mt-2 text-xs">
+            {taskWorkflow.status === "running" && (
+              <span className="text-muted-foreground">
+                Task breakdown workflow running. Execution: {taskWorkflow.executionId}
+              </span>
+            )}
+            {taskWorkflow.status === "completed" && (
+              <Link href="/dashboard/tasks" className="text-primary hover:underline">
+                {taskWorkflow.taskCount || 0} task created. Open Kanban.
+              </Link>
+            )}
+            {taskWorkflow.status === "failed" && (
+              <span className="text-destructive">
+                Task workflow failed: {taskWorkflow.error || "Unknown error"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,7 +1,5 @@
 "use client";
 
-import { useRef, ReactNode } from "react";
-import Image from "next/image";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
 import { ParallaxImage } from "@/components/animations/parallax-image";
 import { stockImages } from "@/lib/images";
@@ -16,30 +14,30 @@ interface Feature {
 const features: Feature[] = [
   {
     badge: "AI Agents",
-    title: "Autonomous agents that understand your workflow",
+    title: "AI agents for the demo workflow",
     description:
-      "Deploy intelligent AI agents that learn from your patterns, automate repetitive tasks, and collaborate seamlessly with your team. Each agent specializes in different domains—research, writing, coding, and more.",
+      "Run a document workflow with visible research and writer steps, then run a task breakdown workflow that creates real Kanban tasks.",
     image: stockImages.features[0].src,
   },
   {
-    badge: "Local-First",
-    title: "Your data, always available",
+    badge: "Workspace",
+    title: "One focused workspace",
     description:
-      "Experience instant performance with our local-first architecture. Work offline without interruption, sync when you're ready. Your data stays on your device, giving you complete privacy and control.",
+      "The public demo is scoped to a seeded workspace so visitors can try the full flow without creating accounts or supplying their own API keys.",
     image: stockImages.features[1].src,
   },
   {
-    badge: "Real-Time",
-    title: "Collaborate without boundaries",
+    badge: "Kanban",
+    title: "Tasks land where users manage work",
     description:
-      "Work together in real-time with live cursors, instant updates, and seamless presence awareness. Whether you're across the room or across the world, collaboration feels natural.",
+      "Task breakdown results are saved to the database and appear in the Kanban board with status and priority metadata.",
     image: stockImages.features[2].src,
   },
   {
-    badge: "Intelligence",
-    title: "Insights that drive decisions",
+    badge: "Operations",
+    title: "Workflow status is visible",
     description:
-      "Transform raw data into actionable intelligence. Our AI analyzes patterns, surfaces insights, and helps you make informed decisions faster than ever before.",
+      "Agent execution history records running, completed, and failed workflows with step previews and clear errors.",
     image: stockImages.features[3].src,
   },
 ];
@@ -78,9 +76,9 @@ function FeatureBlock({ feature, index, reversed = false }: FeatureBlockProps) {
 
           {/* Feature points */}
           <div className="mt-8 space-y-4">
-            <FeaturePoint text="Enterprise-grade security" />
-            <FeaturePoint text="Unlimited team members" />
-            <FeaturePoint text="24/7 priority support" />
+            <FeaturePoint text="Server-managed Gemini key" />
+            <FeaturePoint text="Daily demo quotas" />
+            <FeaturePoint text="Workflow audit trail" />
           </div>
         </div>
       </ScrollReveal>

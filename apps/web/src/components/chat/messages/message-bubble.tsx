@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Bot, User, Copy, Check, RotateCcw, Sparkles } from 'lucide-react';
+import { User, Copy, Check, RotateCcw, Sparkles } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import type { Message, AgentMode } from '@/lib/stores/chat-store';
 import { AGENT_DEFINITIONS } from '@/lib/stores/chat-store';

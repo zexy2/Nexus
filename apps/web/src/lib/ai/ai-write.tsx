@@ -9,7 +9,7 @@
  * - Supports interruption and continuation
  */
 
-import { createContext, useContext, useCallback, useState, useRef, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useRef, useEffect, type ReactNode } from "react";
 
 // ==========================================
 // TYPES
@@ -327,14 +327,19 @@ export function useAIWriteSession(documentId: string) {
   useEffect(() => {
     // Get existing active session
     const existing = aiWriteManager.getActiveSession(documentId);
-    if (existing) setSession(existing);
+    const timer = window.setTimeout(() => {
+      if (existing) setSession(existing);
+    }, 0);
 
     // Subscribe to updates
     const unsubscribe = aiWriteManager.subscribe(documentId, (updatedSession) => {
       setSession(updatedSession);
     });
 
-    return unsubscribe;
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+    };
   }, [documentId]);
 
   return session;
@@ -345,7 +350,10 @@ export function useAIWriteSession(documentId: string) {
  */
 export function useAIWriteChunks(documentId: string, onChunk: (chunk: AIWriteChunk) => void) {
   const callbackRef = useRef(onChunk);
-  callbackRef.current = onChunk;
+
+  useEffect(() => {
+    callbackRef.current = onChunk;
+  }, [onChunk]);
 
   useEffect(() => {
     const unsubscribe = aiWriteManager.onChunk(documentId, (chunk) => {

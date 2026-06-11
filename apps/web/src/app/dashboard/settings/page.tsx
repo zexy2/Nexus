@@ -29,13 +29,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   User,
   Bot,
-  Key,
   Bell,
   Palette,
   Database,
-  Zap,
   CheckCircle2,
-  AlertCircle,
   Loader2,
   Save,
   Upload,
@@ -51,16 +48,13 @@ interface SettingsData {
   ai: {
     defaultModel: string;
     autoSaveAiOutputs: boolean;
-    geminiConnected: boolean;
-    openaiConnected: boolean;
-    anthropicConnected: boolean;
-    groqConnected: boolean;
+    keyManagement?: "server";
+    byokEnabled?: boolean;
     serverGeminiAvailable: boolean;
-    serverOpenaiAvailable: boolean;
-    maskedGeminiKey: string | null;
-    maskedOpenAiKey: string | null;
-    maskedAnthropicKey: string | null;
-    maskedGroqKey: string | null;
+    usageLimits?: {
+      workflowsPerDay: number;
+      chatMessagesPerDay: number;
+    };
   };
   notifications: {
     emailNotifications: boolean;
@@ -80,34 +74,18 @@ interface SettingsData {
 // Model definitions with provider info
 const AI_MODELS = [
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", badge: "Fast" },
-  { id: "gemini-2.0-pro", name: "Gemini 2.0 Pro", provider: "gemini", badge: null },
-  { id: "gpt-4o", name: "GPT-4o", provider: "openai", badge: "Recommended" },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "openai", badge: "Cheap" },
-  { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "openai", badge: null },
-  { id: "claude-3-opus", name: "Claude 3 Opus", provider: "anthropic", badge: "Smart" },
-  { id: "claude-3-sonnet", name: "Claude 3.5 Sonnet", provider: "anthropic", badge: null },
-  { id: "claude-3-haiku", name: "Claude 3 Haiku", provider: "anthropic", badge: "Fast" },
-  { id: "llama-3.3-70b", name: "Llama 3.3 70B", provider: "groq", badge: "Open Source" },
-  { id: "llama-3.1-8b", name: "Llama 3.1 8B", provider: "groq", badge: "Free Tier" },
 ] as const;
 
 function SettingsContent() {
   const searchParams = useSearchParams();
-  const defaultTab = searchParams.get("tab") || "profile";
+  const requestedTab = searchParams.get("tab");
+  const defaultTab = requestedTab === "api" ? "ai" : requestedTab || "profile";
   const { data: session } = useSession();
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [activeTab, setActiveTab] = useState(defaultTab); // Track active tab
-  const [isVerifyingGemini, setIsVerifyingGemini] = useState(false);
-  const [isVerifyingOpenAI, setIsVerifyingOpenAI] = useState(false);
-  const [isVerifyingAnthropic, setIsVerifyingAnthropic] = useState(false);
-  const [isVerifyingGroq, setIsVerifyingGroq] = useState(false);
-  const [geminiStatus, setGeminiStatus] = useState<"idle" | "success" | "error">("idle");
-  const [openAIStatus, setOpenAIStatus] = useState<"idle" | "success" | "error">("idle");
-  const [anthropicStatus, setAnthropicStatus] = useState<"idle" | "success" | "error">("idle");
-  const [groqStatus, setGroqStatus] = useState<"idle" | "success" | "error">("idle");
   
   // Form state
   const [name, setName] = useState("");
@@ -115,20 +93,8 @@ function SettingsContent() {
   const [image, setImage] = useState<string | null>(null);
   const [defaultModel, setDefaultModel] = useState("gemini-2.5-flash");
   const [autoSaveAiOutputs, setAutoSaveAiOutputs] = useState(true);
-  const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [openaiApiKey, setOpenaiApiKey] = useState("");
-  const [anthropicApiKey, setAnthropicApiKey] = useState("");
-  const [groqApiKey, setGroqApiKey] = useState("");
-  const [geminiConnected, setGeminiConnected] = useState(false);
-  const [openaiConnected, setOpenaiConnected] = useState(false);
-  const [anthropicConnected, setAnthropicConnected] = useState(false);
-  const [groqConnected, setGroqConnected] = useState(false);
   const [serverGeminiAvailable, setServerGeminiAvailable] = useState(true);
-  const [serverOpenaiAvailable, setServerOpenaiAvailable] = useState(false);
-  const [maskedGeminiKey, setMaskedGeminiKey] = useState<string | null>(null);
-  const [maskedOpenAiKey, setMaskedOpenAiKey] = useState<string | null>(null);
-  const [maskedAnthropicKey, setMaskedAnthropicKey] = useState<string | null>(null);
-  const [maskedGroqKey, setMaskedGroqKey] = useState<string | null>(null);
+  const [usageLimits, setUsageLimits] = useState({ workflowsPerDay: 25, chatMessagesPerDay: 100 });
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [agentNotifications, setAgentNotifications] = useState(true);
   const [taskReminders, setTaskReminders] = useState(true);
@@ -143,17 +109,12 @@ function SettingsContent() {
   
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
   
-  // Check if model is available based on connected API keys or server fallback
+  // Check if model is available through the server-managed provider.
   const isModelAvailable = useCallback((modelId: string) => {
     const model = AI_MODELS.find(m => m.id === modelId);
     if (!model) return false;
-    
-    if (model.provider === "gemini") return geminiConnected || serverGeminiAvailable;
-    if (model.provider === "openai") return openaiConnected || serverOpenaiAvailable;
-    if (model.provider === "anthropic") return anthropicConnected;
-    if (model.provider === "groq") return groqConnected;
-    return false;
-  }, [geminiConnected, serverGeminiAvailable, openaiConnected, serverOpenaiAvailable, anthropicConnected, groqConnected]);
+    return model.provider === "gemini" && serverGeminiAvailable;
+  }, [serverGeminiAvailable]);
   
   // Get available models
   const availableModels = AI_MODELS.filter(m => isModelAvailable(m.id));
@@ -165,10 +126,6 @@ function SettingsContent() {
       name !== originalSettings.profile.name ||
       defaultModel !== originalSettings.ai.defaultModel ||
       autoSaveAiOutputs !== originalSettings.ai.autoSaveAiOutputs ||
-      geminiApiKey.length > 0 ||
-      openaiApiKey.length > 0 ||
-      anthropicApiKey.length > 0 ||
-      groqApiKey.length > 0 ||
       emailNotifications !== originalSettings.notifications.emailNotifications ||
       agentNotifications !== originalSettings.notifications.agentNotifications ||
       taskReminders !== originalSettings.notifications.taskReminders ||
@@ -177,7 +134,7 @@ function SettingsContent() {
       offlineMode !== originalSettings.sync.offlineMode ||
       syncFrequency !== originalSettings.sync.syncFrequency
     );
-  }, [originalSettings, name, defaultModel, autoSaveAiOutputs, geminiApiKey, openaiApiKey, anthropicApiKey, groqApiKey, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
+  }, [originalSettings, name, defaultModel, autoSaveAiOutputs, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
   
   // Fetch settings from API
   const fetchSettings = useCallback(async () => {
@@ -194,16 +151,8 @@ function SettingsContent() {
       setImage(data.profile.image);
       setDefaultModel(data.ai.defaultModel);
       setAutoSaveAiOutputs(data.ai.autoSaveAiOutputs);
-      setGeminiConnected(data.ai.geminiConnected);
-      setOpenaiConnected(data.ai.openaiConnected);
-      setAnthropicConnected(data.ai.anthropicConnected);
-      setGroqConnected(data.ai.groqConnected);
       setServerGeminiAvailable(data.ai.serverGeminiAvailable);
-      setServerOpenaiAvailable(data.ai.serverOpenaiAvailable);
-      setMaskedGeminiKey(data.ai.maskedGeminiKey);
-      setMaskedOpenAiKey(data.ai.maskedOpenAiKey);
-      setMaskedAnthropicKey(data.ai.maskedAnthropicKey);
-      setMaskedGroqKey(data.ai.maskedGroqKey);
+      setUsageLimits(data.ai.usageLimits ?? { workflowsPerDay: 25, chatMessagesPerDay: 100 });
       setEmailNotifications(data.notifications.emailNotifications);
       setAgentNotifications(data.notifications.agentNotifications);
       setTaskReminders(data.notifications.taskReminders);
@@ -256,106 +205,6 @@ function SettingsContent() {
     }
   };
   
-  const handleVerifyGemini = async () => {
-    if (!geminiApiKey.trim()) {
-      alert("Please enter a Google AI API key first.");
-      return;
-    }
-    
-    setIsVerifyingGemini(true);
-    setGeminiStatus("idle");
-    
-    try {
-      const response = await fetch("/api/settings/verify-api-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "gemini", apiKey: geminiApiKey }),
-      });
-      
-      const result = await response.json();
-      setGeminiStatus(result.valid ? "success" : "error");
-    } catch {
-      setGeminiStatus("error");
-    } finally {
-      setIsVerifyingGemini(false);
-    }
-  };
-  
-  const handleVerifyOpenAI = async () => {
-    if (!openaiApiKey.trim()) {
-      alert("Please enter an OpenAI API key first.");
-      return;
-    }
-    
-    setIsVerifyingOpenAI(true);
-    setOpenAIStatus("idle");
-    
-    try {
-      const response = await fetch("/api/settings/verify-api-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "openai", apiKey: openaiApiKey }),
-      });
-      
-      const result = await response.json();
-      setOpenAIStatus(result.valid ? "success" : "error");
-    } catch {
-      setOpenAIStatus("error");
-    } finally {
-      setIsVerifyingOpenAI(false);
-    }
-  };
-  
-  const handleVerifyAnthropic = async () => {
-    if (!anthropicApiKey.trim()) {
-      alert("Please enter an Anthropic API key first.");
-      return;
-    }
-    
-    setIsVerifyingAnthropic(true);
-    setAnthropicStatus("idle");
-    
-    try {
-      const response = await fetch("/api/settings/verify-api-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "anthropic", apiKey: anthropicApiKey }),
-      });
-      
-      const result = await response.json();
-      setAnthropicStatus(result.valid ? "success" : "error");
-    } catch {
-      setAnthropicStatus("error");
-    } finally {
-      setIsVerifyingAnthropic(false);
-    }
-  };
-
-  const handleVerifyGroq = async () => {
-    if (!groqApiKey.trim()) {
-      alert("Please enter a Groq API key first.");
-      return;
-    }
-    
-    setIsVerifyingGroq(true);
-    setGroqStatus("idle");
-    
-    try {
-      const response = await fetch("/api/settings/verify-api-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: "groq", apiKey: groqApiKey }),
-      });
-      
-      const result = await response.json();
-      setGroqStatus(result.valid ? "success" : "error");
-    } catch {
-      setGroqStatus("error");
-    } finally {
-      setIsVerifyingGroq(false);
-    }
-  };
-
   const handleSave = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
@@ -368,25 +217,12 @@ function SettingsContent() {
       return;
     }
     
-    // Check if model selection is still valid after API key changes
+    // Check if model selection is still valid after server availability changes.
     let modelToSave = defaultModel;
     const model = AI_MODELS.find(m => m.id === defaultModel);
-    if (model) {
-      // If removing OpenAI key and using OpenAI model, fallback
-      const willHaveOpenai = openaiConnected && !openaiApiKey; // not changing key
-      const willHaveAnthropic = anthropicConnected && !anthropicApiKey;
-      const willHaveGroq = groqConnected && !groqApiKey;
-      
-      if (model.provider === "openai" && !willHaveOpenai && !openaiApiKey && !serverOpenaiAvailable) {
-        modelToSave = "gemini-2.5-flash";
-        setDefaultModel("gemini-2.5-flash");
-      } else if (model.provider === "anthropic" && !willHaveAnthropic && !anthropicApiKey) {
-        modelToSave = "gemini-2.5-flash";
-        setDefaultModel("gemini-2.5-flash");
-      } else if (model.provider === "groq" && !willHaveGroq && !groqApiKey) {
-        modelToSave = "gemini-2.5-flash";
-        setDefaultModel("gemini-2.5-flash");
-      }
+    if (model && !isModelAvailable(defaultModel)) {
+      modelToSave = availableModels[0]?.id || "gemini-2.5-flash";
+      setDefaultModel(modelToSave);
     }
     
     try {
@@ -397,10 +233,6 @@ function SettingsContent() {
           name,
           defaultModel: modelToSave,
           autoSaveAiOutputs,
-          geminiApiKey: geminiApiKey || undefined,
-          openaiApiKey: openaiApiKey || undefined,
-          anthropicApiKey: anthropicApiKey || undefined,
-          groqApiKey: groqApiKey || undefined,
           emailNotifications,
           agentNotifications,
           taskReminders,
@@ -415,14 +247,8 @@ function SettingsContent() {
       
       setSaveSuccess(true);
       
-      // Refresh settings to get updated masked keys
+      // Refresh settings to get the latest server-managed AI availability and quota.
       await fetchSettings();
-      
-      // Clear API key inputs after save
-      setGeminiApiKey("");
-      setOpenaiApiKey("");
-      setAnthropicApiKey("");
-      setGroqApiKey("");
       
       // Reset success indicator after 3 seconds
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -482,7 +308,7 @@ function SettingsContent() {
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-4xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-            <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full h-auto gap-1">
+            <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full h-auto gap-1">
               <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <User className="size-3 md:size-4" />
                 <span className="hidden xs:inline">Profile</span>
@@ -490,10 +316,6 @@ function SettingsContent() {
               <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bot className="size-3 md:size-4" />
                 <span className="hidden xs:inline">AI</span>
-              </TabsTrigger>
-              <TabsTrigger value="api" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
-                <Key className="size-3 md:size-4" />
-                <span className="hidden xs:inline">API</span>
               </TabsTrigger>
               <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bell className="size-3 md:size-4" />
@@ -593,15 +415,10 @@ function SettingsContent() {
                         value={defaultModel}
                         onValueChange={(value) => {
                           // Check if model is available
-                          if (!isModelAvailable(value)) {
-                            const model = AI_MODELS.find(m => m.id === value);
-                            if (model?.provider === "openai") {
-                              alert("OpenAI API key required. Please add your API key in the API Keys tab.");
-                            } else if (model?.provider === "anthropic") {
-                              alert("Anthropic API key required. Please add your API key in the API Keys tab.");
-                            }
-                            return;
-                          }
+	                          if (!isModelAvailable(value)) {
+	                            alert("Server-managed Gemini is not configured for this demo.");
+	                            return;
+	                          }
                           setDefaultModel(value);
                         }}
                       >
@@ -630,7 +447,7 @@ function SettingsContent() {
                                   )}
                                   {!available && (
                                     <Badge variant="outline" className="text-xs text-muted-foreground">
-                                      No API Key
+                                      Not configured
                                     </Badge>
                                   )}
                                 </div>
@@ -639,14 +456,38 @@ function SettingsContent() {
                           })}
                         </SelectContent>
                       </Select>
-                      {availableModels.length === 0 && (
-                        <p className="text-xs text-amber-600">
-                          No models available. Please add an API key in the API Keys tab or contact admin to enable Gemini.
-                        </p>
-                      )}
-                      {!isModelAvailable(defaultModel) && defaultModel !== "gemini-2.5-flash" && (
-                        <p className="text-xs text-amber-600">
-                          Selected model requires an API key. Will fallback to Gemini if available.
+	                      {availableModels.length === 0 && (
+	                        <p className="text-xs text-amber-600">
+	                          No server-managed AI providers are configured. Ask an administrator to set a provider secret.
+	                        </p>
+	                      )}
+	                    </div>
+
+                    <div className="rounded-lg border p-4 dark:border-neutral-700">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">Server-managed Gemini</p>
+                          <p className="text-xs text-muted-foreground">
+                            AI access is controlled by the demo server. No personal API key is required.
+                          </p>
+                        </div>
+                        <Badge variant={serverGeminiAvailable ? "secondary" : "outline"}>
+                          {serverGeminiAvailable ? "Available" : "Unavailable"}
+                        </Badge>
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-md bg-muted/60 p-3">
+                          <p className="text-xs text-muted-foreground">Workflow quota</p>
+                          <p className="text-sm font-semibold">{usageLimits.workflowsPerDay}/day</p>
+                        </div>
+                        <div className="rounded-md bg-muted/60 p-3">
+                          <p className="text-xs text-muted-foreground">Chat quota</p>
+                          <p className="text-sm font-semibold">{usageLimits.chatMessagesPerDay}/day</p>
+                        </div>
+                      </div>
+                      {!serverGeminiAvailable && (
+                        <p className="mt-3 text-xs text-amber-600">
+                          AI is temporarily unavailable until the server Gemini key is configured.
                         </p>
                       )}
                     </div>
@@ -667,302 +508,6 @@ function SettingsContent() {
                           checked={autoSaveAiOutputs}
                           onCheckedChange={setAutoSaveAiOutputs}
                         />
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* API Keys */}
-            <TabsContent value="api">
-              <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
-                <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">API Keys</CardTitle>
-                  <CardDescription className="text-xs md:text-sm">
-                    Manage your API keys for AI services. Add your own keys to use specific models.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 md:space-y-6 p-4 pt-0 md:p-6 md:pt-0">
-                  <div className="grid gap-4 md:gap-6">
-                    {/* Google AI (Gemini) */}
-                    <div className="grid gap-2">
-                      <Label htmlFor="gemini-key" className="text-sm">Google AI API Key (Gemini)</Label>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
-                          id="gemini-key"
-                          type="password"
-                          placeholder={maskedGeminiKey || "AIza..."}
-                          value={geminiApiKey}
-                          onChange={(e) => setGeminiApiKey(e.target.value)}
-                          autoComplete="new-password"
-                          className="text-sm flex-1"
-                        />
-                        <Button 
-                          variant="outline" 
-                          onClick={handleVerifyGemini}
-                          disabled={isVerifyingGemini || !geminiApiKey.trim()}
-                          className="w-full sm:w-auto text-sm"
-                        >
-                          {isVerifyingGemini ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : geminiStatus === "success" ? (
-                            <><CheckCircle2 className="size-4 mr-1 text-green-500" /> Valid</>
-                          ) : geminiStatus === "error" ? (
-                            <><AlertCircle className="size-4 mr-1 text-red-500" /> Invalid</>
-                          ) : (
-                            "Verify"
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        For Gemini models. Get your key from{" "}
-                        <a
-                          href="https://aistudio.google.com/apikey"
-                          target="_blank"
-                          rel="noopener"
-                          className="text-primary hover:underline"
-                        >
-                          Google AI Studio
-                        </a>
-                        {serverGeminiAvailable && !geminiConnected && (
-                          <span className="ml-2 text-green-600">(Server key available as fallback)</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    {/* OpenAI */}
-                    <div className="grid gap-2">
-                      <Label htmlFor="openai-key">OpenAI API Key</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="openai-key"
-                          type="password"
-                          placeholder={maskedOpenAiKey || "sk-..."}
-                          value={openaiApiKey}
-                          onChange={(e) => setOpenaiApiKey(e.target.value)}
-                          autoComplete="new-password"
-                        />
-                        <Button 
-                          variant="outline" 
-                          onClick={handleVerifyOpenAI}
-                          disabled={isVerifyingOpenAI || !openaiApiKey.trim()}
-                        >
-                          {isVerifyingOpenAI ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : openAIStatus === "success" ? (
-                            <><CheckCircle2 className="size-4 mr-1 text-green-500" /> Valid</>
-                          ) : openAIStatus === "error" ? (
-                            <><AlertCircle className="size-4 mr-1 text-red-500" /> Invalid</>
-                          ) : (
-                            "Verify"
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        For GPT-4o and other OpenAI models. Get your key from{" "}
-                        <a
-                          href="https://platform.openai.com/api-keys"
-                          target="_blank"
-                          rel="noopener"
-                          className="text-primary hover:underline"
-                        >
-                          OpenAI
-                        </a>
-                        {serverOpenaiAvailable && !openaiConnected && (
-                          <span className="ml-2 text-green-600">(Server key available as fallback)</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    {/* Anthropic */}
-                    <div className="grid gap-2">
-                      <Label htmlFor="anthropic-key">Anthropic API Key</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="anthropic-key"
-                          type="password"
-                          placeholder={maskedAnthropicKey || "sk-ant-..."}
-                          value={anthropicApiKey}
-                          onChange={(e) => setAnthropicApiKey(e.target.value)}
-                          autoComplete="new-password"
-                        />
-                        <Button 
-                          variant="outline" 
-                          onClick={handleVerifyAnthropic}
-                          disabled={isVerifyingAnthropic || !anthropicApiKey.trim()}
-                        >
-                          {isVerifyingAnthropic ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : anthropicStatus === "success" ? (
-                            <><CheckCircle2 className="size-4 mr-1 text-green-500" /> Valid</>
-                          ) : anthropicStatus === "error" ? (
-                            <><AlertCircle className="size-4 mr-1 text-red-500" /> Invalid</>
-                          ) : (
-                            "Verify"
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        For Claude models. Get your key from{" "}
-                        <a
-                          href="https://console.anthropic.com/settings/keys"
-                          target="_blank"
-                          rel="noopener"
-                          className="text-primary hover:underline"
-                        >
-                          Anthropic Console
-                        </a>
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    {/* Groq */}
-                    <div className="grid gap-2">
-                      <Label htmlFor="groq-key">Groq API Key (Llama)</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="groq-key"
-                          type="password"
-                          placeholder={maskedGroqKey || "gsk_..."}
-                          value={groqApiKey}
-                          onChange={(e) => setGroqApiKey(e.target.value)}
-                          autoComplete="new-password"
-                        />
-                        <Button 
-                          variant="outline" 
-                          onClick={handleVerifyGroq}
-                          disabled={isVerifyingGroq || !groqApiKey.trim()}
-                        >
-                          {isVerifyingGroq ? (
-                            <Loader2 className="size-4 animate-spin" />
-                          ) : groqStatus === "success" ? (
-                            <><CheckCircle2 className="size-4 mr-1 text-green-500" /> Valid</>
-                          ) : groqStatus === "error" ? (
-                            <><AlertCircle className="size-4 mr-1 text-red-500" /> Invalid</>
-                          ) : (
-                            "Verify"
-                          )}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        For Llama 3 models (fast & free tier available). Get your key from{" "}
-                        <a
-                          href="https://console.groq.com/keys"
-                          target="_blank"
-                          rel="noopener"
-                          className="text-primary hover:underline"
-                        >
-                          Groq Console
-                        </a>
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    <div className="grid gap-2">
-                      <Label>Connected Services</Label>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between p-3 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 rounded bg-blue-500 flex items-center justify-center">
-                              <Zap className="size-4 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">Google AI</p>
-                              <p className="text-xs text-muted-foreground">
-                                Gemini 2.5 Flash, Gemini Pro
-                              </p>
-                            </div>
-                          </div>
-                          {geminiConnected ? (
-                            <Badge variant="outline" className="gap-1">
-                              <CheckCircle2 className="size-3 text-green-500" />
-                              Connected
-                            </Badge>
-                          ) : serverGeminiAvailable ? (
-                            <Badge variant="outline" className="gap-1 text-blue-600">
-                              Server Fallback
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">Not Connected</Badge>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 rounded bg-black flex items-center justify-center">
-                              <Zap className="size-4 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">OpenAI</p>
-                              <p className="text-xs text-muted-foreground">
-                                GPT-4o, DALL-E, Whisper
-                              </p>
-                            </div>
-                          </div>
-                          {openaiConnected ? (
-                            <Badge variant="outline" className="gap-1">
-                              <CheckCircle2 className="size-3 text-green-500" />
-                              Connected
-                            </Badge>
-                          ) : serverOpenaiAvailable ? (
-                            <Badge variant="outline" className="gap-1 text-blue-600">
-                              Server Fallback
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">Not Connected</Badge>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 rounded bg-orange-500 flex items-center justify-center">
-                              <Bot className="size-4 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">Anthropic</p>
-                              <p className="text-xs text-muted-foreground">
-                                Claude 3 Opus, Sonnet, Haiku
-                              </p>
-                            </div>
-                          </div>
-                          {anthropicConnected ? (
-                            <Badge variant="outline" className="gap-1">
-                              <CheckCircle2 className="size-3 text-green-500" />
-                              Connected
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">Not Connected</Badge>
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between p-3 rounded-lg border">
-                          <div className="flex items-center gap-3">
-                            <div className="size-8 rounded bg-purple-600 flex items-center justify-center">
-                              <Zap className="size-4 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium">Groq</p>
-                              <p className="text-xs text-muted-foreground">
-                                Llama 3.3 70B, Llama 3.1 8B
-                              </p>
-                            </div>
-                          </div>
-                          {groqConnected ? (
-                            <Badge variant="outline" className="gap-1">
-                              <CheckCircle2 className="size-3 text-green-500" />
-                              Connected
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">Not Connected</Badge>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>

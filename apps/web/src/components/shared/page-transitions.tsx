@@ -1,11 +1,13 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { ReactNode } from "react";
 
+const defaultEase = [0.25, 0.1, 0.25, 1] as const;
+
 // Page transition variants
-const pageVariants = {
+const pageVariants: Variants = {
   initial: {
     opacity: 0,
     y: 20,
@@ -15,7 +17,7 @@ const pageVariants = {
     y: 0,
     transition: {
       duration: 0.3,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
   exit: {
@@ -23,13 +25,13 @@ const pageVariants = {
     y: -20,
     transition: {
       duration: 0.2,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
 };
 
 // Slide variants
-const slideVariants = {
+const slideVariants: Variants = {
   initial: {
     opacity: 0,
     x: 50,
@@ -39,7 +41,7 @@ const slideVariants = {
     x: 0,
     transition: {
       duration: 0.4,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
   exit: {
@@ -47,13 +49,13 @@ const slideVariants = {
     x: -50,
     transition: {
       duration: 0.3,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
 };
 
 // Fade variants (gentler)
-const fadeVariants = {
+const fadeVariants: Variants = {
   initial: {
     opacity: 0,
   },
@@ -74,7 +76,7 @@ const fadeVariants = {
 };
 
 // Scale variants
-const scaleVariants = {
+const scaleVariants: Variants = {
   initial: {
     opacity: 0,
     scale: 0.95,
@@ -84,7 +86,7 @@ const scaleVariants = {
     scale: 1,
     transition: {
       duration: 0.3,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
   exit: {
@@ -92,13 +94,13 @@ const scaleVariants = {
     scale: 1.05,
     transition: {
       duration: 0.2,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
 };
 
 // Staggered children animation
-const staggerContainer = {
+const staggerContainer: Variants = {
   initial: {},
   enter: {
     transition: {
@@ -108,7 +110,7 @@ const staggerContainer = {
   },
 };
 
-const staggerItem = {
+const staggerItem: Variants = {
   initial: {
     opacity: 0,
     y: 20,
@@ -118,7 +120,7 @@ const staggerItem = {
     y: 0,
     transition: {
       duration: 0.4,
-      ease: [0.25, 0.1, 0.25, 1],
+      ease: defaultEase,
     },
   },
 };
@@ -278,7 +280,7 @@ export function SlideUp({
       transition={{
         delay,
         duration,
-        ease: [0.25, 0.1, 0.25, 1],
+        ease: defaultEase,
       }}
       className={className}
     >
@@ -308,7 +310,7 @@ export function ScaleIn({
       transition={{
         delay,
         duration,
-        ease: [0.25, 0.1, 0.25, 1],
+        ease: defaultEase,
       }}
       className={className}
     >
