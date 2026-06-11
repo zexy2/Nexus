@@ -1,41 +1,48 @@
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
-import { tasks, workspaces } from "@nexus/database/schema";
-import { eq, desc, and } from "drizzle-orm";
-import { headers } from "next/headers";
+import { verifySession } from "@/lib/api-middleware";
+import { unauthorized } from "@/lib/api-response";
+import { tasks } from "@nexus/database/schema";
+import { desc, inArray } from "drizzle-orm";
+import { writeAuditLog } from "@/lib/production-guardrails";
+import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
+import {
+  parseOptionalTaskDescription,
+  parseTaskPriority,
+  parseTaskStatus,
+  parseTaskTitle,
+} from "@/lib/task-validation";
 
 // GET - List all tasks
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    const userId = session?.user?.id;
-
-    // Require authentication
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      );
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
+    const userId = session.user.id;
 
-    // Get user's workspace
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, userId),
-    });
+    const url = new URL(req.url);
+    const requestedWorkspaceId = url.searchParams.get("workspaceId");
 
-    if (!workspace) {
+    const workspaceIds = requestedWorkspaceId
+      ? await requireWorkspaceAccess(userId, requestedWorkspaceId).then((access) =>
+          access.ok ? [access.workspaceId] : []
+        )
+      : await getAccessibleWorkspaceIds(userId);
+
+    if (workspaceIds.length === 0) {
       return Response.json([], { status: 200 });
     }
 
-    // Get all tasks
     const taskList = await db.query.tasks.findMany({
-      where: eq(tasks.workspaceId, workspace.id),
+      where: inArray(tasks.workspaceId, workspaceIds),
       orderBy: [desc(tasks.createdAt)],
     });
 
     return Response.json(
       taskList.map((t) => ({
         id: t.id,
+        workspaceId: t.workspaceId,
         title: t.title,
         description: t.description,
         status: t.status,
@@ -49,7 +56,7 @@ export async function GET() {
     );
   } catch (error) {
     console.error("Failed to fetch tasks:", error);
-    return Response.json([], { status: 200 });
+    return Response.json({ error: "Failed to fetch tasks" }, { status: 500 });
   }
 }
 
@@ -67,67 +74,79 @@ export async function POST(req: Request) {
       );
     }
     
-    const { title, description, priority, status, assignToAgent } = body;
+    const { title, description, priority, status, assignToAgent, workspaceId } = body;
     
-    // Validate title
-    if (!title || (typeof title === "string" && title.trim() === "")) {
+    const normalizedTitle = parseTaskTitle(title);
+    if (!normalizedTitle) {
       return Response.json(
-        { error: "Bad Request", message: "Title is required" },
+        { error: "Bad Request", message: "Title is required and must be 500 characters or fewer" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedStatus = parseTaskStatus(status, "todo");
+    if (!normalizedStatus) {
+      return Response.json(
+        { error: "Bad Request", message: "Invalid task status" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedPriority = parseTaskPriority(priority, "medium");
+    if (!normalizedPriority) {
+      return Response.json(
+        { error: "Bad Request", message: "Invalid task priority" },
+        { status: 400 }
+      );
+    }
+
+    const normalizedDescription = parseOptionalTaskDescription(description);
+    if (normalizedDescription === null) {
+      return Response.json(
+        { error: "Bad Request", message: "Description must be a string" },
         { status: 400 }
       );
     }
     
-    if (typeof title === "string" && title.length > 500) {
-      return Response.json(
-        { error: "Bad Request", message: "Title too long (max 500 characters)" },
-        { status: 400 }
-      );
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
-    
-    const session = await auth.api.getSession({ headers: await headers() });
-    const userId = session?.user?.id;
+    const userId = session.user.id;
 
-    // Require authentication - no dev fallback
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      );
-    }
+    const workspaceAccess = workspaceId
+      ? await requireWorkspaceAccess(userId, workspaceId)
+      : { ok: true as const, workspaceId: (await ensureDefaultWorkspace(userId)).id, role: "owner" as const };
 
-    // Get or create workspace
-    let workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, userId),
-    });
-
-    if (!workspace) {
-      const [newWs] = await db
-        .insert(workspaces)
-        .values({
-          name: "My Workspace",
-          ownerId: userId,
-        })
-        .returning();
-      workspace = newWs;
+    if (!workspaceAccess.ok) {
+      return Response.json({ error: workspaceAccess.error }, { status: workspaceAccess.status });
     }
 
     // Create task
     const [task] = await db
       .insert(tasks)
       .values({
-        workspaceId: workspace.id,
-        title: title || "Untitled Task",
-        description: description || "",
-        status: status || "todo",
-        priority: priority || "medium",
+        workspaceId: workspaceAccess.workspaceId,
+        title: normalizedTitle,
+        description: normalizedDescription,
+        status: normalizedStatus,
+        priority: normalizedPriority,
         assigneeId: assignToAgent ? null : userId,
         assigneeAgentType: assignToAgent ? "supervisor" : null,
         createdBy: userId,
       })
       .returning();
 
+    await writeAuditLog({
+      userId,
+      workspaceId: workspaceAccess.workspaceId,
+      event: "task.create",
+      metadata: { taskId: task.id, title: task.title },
+    });
+
     return Response.json({
       id: task.id,
+      workspaceId: task.workspaceId,
       title: task.title,
       description: task.description,
       status: task.status,

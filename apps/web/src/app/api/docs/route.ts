@@ -1,22 +1,18 @@
 import { db } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { verifySession } from "@/lib/api-middleware";
+import { unauthorized } from "@/lib/api-response";
 import { docs, workspaces } from "@nexus/database/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { headers } from "next/headers";
+import { writeAuditLog } from "@/lib/production-guardrails";
 
 // GET - List all documents
 export async function GET() {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    const userId = session?.user?.id;
-
-    // Require authentication
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      );
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
+    const userId = session.user.id;
 
     // Get user's workspace
     const workspace = await db.query.workspaces.findFirst({
@@ -72,16 +68,11 @@ export async function POST(req: Request) {
       );
     }
     
-    const session = await auth.api.getSession({ headers: await headers() });
-    const userId = session?.user?.id;
-
-    // Require authentication
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
-      );
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
     }
+    const userId = session.user.id;
 
     // Get or create workspace
     let workspace = await db.query.workspaces.findFirst({
@@ -129,6 +120,13 @@ export async function POST(req: Request) {
         createdBy: userId,
       })
       .returning();
+
+    await writeAuditLog({
+      userId,
+      workspaceId: workspace.id,
+      event: "document.create",
+      metadata: { docId: doc.id, title: doc.title },
+    });
 
     return Response.json({
       id: doc.id,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createResearchAgent, searchTavily } from "@nexus/agents";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { enforceAiBudget } from "@/lib/production-guardrails";
 
 /**
  * Research API - Quick search with tools
@@ -22,6 +23,9 @@ export async function POST(request: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const body = await request.json();
@@ -33,6 +37,23 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (useWebSearch && !process.env.TAVILY_API_KEY) {
+      return NextResponse.json(
+        {
+          error: "TAVILY_NOT_CONFIGURED",
+          message: "Web research is not configured on this server.",
+          retryable: false,
+        },
+        { status: 503 }
+      );
+    }
+
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "research",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const agent = createResearchAgent();
     const result = await agent.execute(query, { useWebSearch, useDocSearch });
@@ -76,6 +97,9 @@ export async function GET(request: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { searchParams } = new URL(request.url);
@@ -85,6 +109,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: "Query parameter 'q' is required" },
         { status: 400 }
+      );
+    }
+    if (!process.env.TAVILY_API_KEY) {
+      return NextResponse.json(
+        {
+          error: "TAVILY_NOT_CONFIGURED",
+          message: "Web research is not configured on this server.",
+          retryable: false,
+        },
+        { status: 503 }
       );
     }
 

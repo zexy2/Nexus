@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { sessionId, documentId, prompt, agentType, existingContent } = body;
+    const { prompt, agentType, existingContent } = body;
 
     if (!prompt) {
       return new Response("prompt is required", { status: 400 });

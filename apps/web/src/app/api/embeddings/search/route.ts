@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { aiUnavailableResponse, enforceAiBudget } from "@/lib/production-guardrails";
 
 /**
  * Vector Search API - pgvector semantic search
@@ -63,6 +65,13 @@ export async function POST(request: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+  }
+  const userId = protection.user.id;
 
   try {
     const body = await request.json();
@@ -75,40 +84,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!workspaceId || typeof workspaceId !== "string") {
+      return NextResponse.json(
+        { error: "workspaceId is required" },
+        { status: 400 }
+      );
+    }
+
+    const access = await requireWorkspaceAccess(userId, workspaceId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const aiBudget = await enforceAiBudget({
+      userId,
+      email: protection.user.email,
+      kind: "embedding",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
+
     // Get query embedding
     const embedding = await getQueryEmbedding(query);
     const embeddingStr = `[${embedding.join(",")}]`;
+    const safeLimit = Number.isFinite(Number(limit))
+      ? Math.min(Math.max(Number(limit), 1), 20)
+      : 5;
 
     // Execute vector similarity search using Drizzle sql template
     // Note: pgvector uses <=> for cosine distance (1 - similarity)
-    let result;
-    
-    if (workspaceId) {
-      result = await db.execute(sql`
-        SELECT 
-          id,
-          doc_id,
-          content,
-          metadata,
-          1 - (embedding <=> ${embeddingStr}::vector) as similarity
-        FROM vectors
-        WHERE workspace_id = ${workspaceId}
-        ORDER BY embedding <=> ${embeddingStr}::vector
-        LIMIT ${limit}
-      `);
-    } else {
-      result = await db.execute(sql`
-        SELECT 
-          id,
-          doc_id,
-          content,
-          metadata,
-          1 - (embedding <=> ${embeddingStr}::vector) as similarity
-        FROM vectors
-        ORDER BY embedding <=> ${embeddingStr}::vector
-        LIMIT ${limit}
-      `);
-    }
+    const result = await db.execute(sql`
+      SELECT 
+        id,
+        doc_id,
+        content,
+        metadata,
+        1 - (embedding <=> ${embeddingStr}::vector) as similarity
+      FROM vectors
+      WHERE workspace_id = ${access.workspaceId}
+      ORDER BY embedding <=> ${embeddingStr}::vector
+      LIMIT ${safeLimit}
+    `);
     
     const rows = result as unknown as Array<{
       id: string;
@@ -131,6 +146,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Vector Search] Error:", error);
+    if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
+      return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
@@ -157,6 +175,13 @@ export async function PUT(request: NextRequest) {
   if (!protection.success) {
     return protection.response;
   }
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+  }
+  const userId = protection.user.id;
 
   try {
     const body = await request.json();
@@ -168,6 +193,25 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (typeof workspaceId !== "string") {
+      return NextResponse.json(
+        { error: "workspaceId must be a string" },
+        { status: 400 }
+      );
+    }
+
+    const access = await requireWorkspaceAccess(userId, workspaceId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const aiBudget = await enforceAiBudget({
+      userId,
+      email: protection.user.email,
+      kind: "embedding",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     // Chunk the content (simple approach - split by paragraphs)
     const chunks = content
@@ -208,7 +252,7 @@ export async function PUT(request: NextRequest) {
     const embeddingData = await embeddingResponse.json() as OpenAIEmbeddingResponse;
 
     // Delete existing vectors for this doc
-    await db.execute(sql`DELETE FROM vectors WHERE doc_id = ${docId}`);
+    await db.execute(sql`DELETE FROM vectors WHERE doc_id = ${docId} AND workspace_id = ${access.workspaceId}`);
 
     // Insert new vectors
     for (let i = 0; i < chunks.length; i++) {
@@ -222,10 +266,12 @@ export async function PUT(request: NextRequest) {
       const chunkMetadata = { ...metadata, position: i };
 
       await db.execute(sql`
-        INSERT INTO vectors (doc_id, workspace_id, content, embedding, metadata)
+        INSERT INTO vectors (source_type, source_id, doc_id, workspace_id, content, embedding, metadata)
         VALUES (
+          ${"doc"},
           ${docId},
-          ${workspaceId},
+          ${docId},
+          ${access.workspaceId},
           ${chunk},
           ${embeddingStr}::vector,
           ${JSON.stringify(chunkMetadata)}::jsonb
@@ -240,6 +286,9 @@ export async function PUT(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Vector Index] Error:", error);
+    if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
+      return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
