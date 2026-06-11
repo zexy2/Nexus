@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { enforceAiBudget } from "@/lib/production-guardrails";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import {
   startAgentTrace,
   addAgentStep,
@@ -214,8 +215,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trust the session, not the client-supplied userId.
-    body.context = { ...body.context, userId: authorized.userId };
+    // Trust the session, not the client-supplied identifiers. The workspaceId
+    // feeds RAG retrieval, so an unvalidated client value would let a user pull
+    // another workspace's documents into the agent's context (cross-tenant
+    // leak). Resolve it to a workspace the caller actually has access to.
+    const access = await requireWorkspaceAccess(authorized.userId, body.context?.workspaceId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+    body.context = {
+      ...body.context,
+      userId: authorized.userId,
+      workspaceId: access.workspaceId,
+    };
 
     const mode = body.mode || "auto";
     const agentType = mode === "auto" ? "supervisor" : mode;
