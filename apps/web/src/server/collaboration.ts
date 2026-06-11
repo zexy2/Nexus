@@ -13,9 +13,34 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
 import * as decoding from 'lib0/decoding';
+import { verifyCollabToken } from '../lib/collab-token';
 
 const PORT = parseInt(process.env.COLLABORATION_PORT || "1234", 10);
 const HOST = process.env.COLLABORATION_HOST || 'localhost';
+const AUTH_SECRET = process.env.COLLAB_AUTH_SECRET;
+
+if (!AUTH_SECRET) {
+  console.error('[Collab] FATAL: COLLAB_AUTH_SECRET is not set. Refusing to start an unauthenticated collaboration server.');
+  process.exit(1);
+}
+
+/**
+ * Authorize a websocket upgrade: the connection must carry a `token` query param
+ * that is a valid, unexpired collab token whose document matches the requested
+ * room. Without this, anyone who knows a document id could read and edit it.
+ */
+function authorizeUpgrade(reqUrl: string | undefined, host: string | undefined): boolean {
+  try {
+    const url = new URL(reqUrl || '/', `http://${host || 'localhost'}`);
+    const docName = url.pathname.replace(/^\//, '') || 'default';
+    const token = url.searchParams.get('token');
+    if (!token) return false;
+    const payload = verifyCollabToken(token, AUTH_SECRET as string);
+    return payload !== null && payload.d === docName;
+  } catch {
+    return false;
+  }
+}
 
 const messageSync = 0;
 const messageAwareness = 1;
@@ -138,8 +163,20 @@ const httpServer = http.createServer((req, res) => {
   }));
 });
 
-// Create WebSocket server
-const wss = new WebSocketServer({ server: httpServer });
+// Create WebSocket server. verifyClient rejects unauthorized upgrades before a
+// connection is ever established, so no document state is exposed to clients
+// without a valid, document-scoped token.
+const wss = new WebSocketServer({
+  server: httpServer,
+  verifyClient: (info, cb) => {
+    if (authorizeUpgrade(info.req.url, info.req.headers.host)) {
+      cb(true);
+    } else {
+      console.warn('[Collab] Rejected unauthorized connection:', info.req.url);
+      cb(false, 401, 'Unauthorized');
+    }
+  },
+});
 
 wss.on('connection', (conn, req) => {
   // Extract document name from URL path

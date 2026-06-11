@@ -324,68 +324,79 @@ export function CollaborativeEditor({
   const ydoc = useMemo(() => new Y.Doc(), []);
   const fragment = useMemo(() => ydoc.getXmlFragment("document"), [ydoc]);
 
-  // Setup WebSocket connection FIRST
+  // Setup WebSocket connection. We first fetch a short-lived, document-scoped
+  // token (the server checks the session and the user's access to this doc) and
+  // pass it to the collaboration server, which rejects connections without a
+  // valid token. This keeps realtime access aligned with the REST authorization.
   useEffect(() => {
     const wsUrl = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
-    
-    console.log(`[Collab] Connecting to ${wsUrl}/${documentId}`);
+    let wsProvider: WebsocketProvider | null = null;
+    let cancelled = false;
 
-    const wsProvider = new WebsocketProvider(
-      wsUrl,
-      documentId,
-      ydoc,
-      { connect: true }
-    );
-
-    // Set user awareness
-    wsProvider.awareness.setLocalStateField("user", {
-      id: userId,
-      name: userName,
-      color: stableUserColor,
-    });
-
-    // Connection handlers
-    wsProvider.on("status", (event: { status: string }) => {
-      console.log(`[Collab] Status: ${event.status}`);
-      setIsConnected(event.status === "connected");
-    });
-
-    wsProvider.on("sync", (synced: boolean) => {
-      console.log(`[Collab] Synced: ${synced}`);
-      setIsSynced(synced);
-    });
-
-    // Track users
-    const handleAwarenessChange = () => {
-      const states = wsProvider.awareness.getStates();
-      const users: ConnectedUser[] = [];
-      
-      states.forEach((state, clientId) => {
-        if (state.user) {
-          users.push({
-            clientId,
-            id: state.user.id,
-            name: state.user.name,
-            color: state.user.color,
-            status: state.status || "active",
-          });
+    void (async () => {
+      let token: string | null = null;
+      try {
+        const res = await fetch(`/api/collab/token?docId=${encodeURIComponent(documentId)}`);
+        if (res.ok) {
+          token = (await res.json())?.token ?? null;
+        } else {
+          console.error("[Collab] Token request rejected:", res.status);
         }
+      } catch (err) {
+        console.error("[Collab] Token request failed:", err);
+      }
+
+      if (cancelled || !token) return;
+
+      const provider = new WebsocketProvider(wsUrl, documentId, ydoc, {
+        connect: true,
+        params: { token },
       });
-      
-      setConnectedUsers(users);
-    };
+      wsProvider = provider;
 
-    wsProvider.awareness.on("change", handleAwarenessChange);
-    handleAwarenessChange();
+      provider.awareness.setLocalStateField("user", {
+        id: userId,
+        name: userName,
+        color: stableUserColor,
+      });
 
-    // Set provider state to trigger editor creation
-    setProvider(wsProvider);
+      provider.on("status", (event: { status: string }) => {
+        setIsConnected(event.status === "connected");
+      });
+
+      provider.on("sync", (synced: boolean) => {
+        setIsSynced(synced);
+      });
+
+      const handleAwarenessChange = () => {
+        const states = provider.awareness.getStates();
+        const users: ConnectedUser[] = [];
+        states.forEach((state, clientId) => {
+          if (state.user) {
+            users.push({
+              clientId,
+              id: state.user.id,
+              name: state.user.name,
+              color: state.user.color,
+              status: state.status || "active",
+            });
+          }
+        });
+        setConnectedUsers(users);
+      };
+
+      provider.awareness.on("change", handleAwarenessChange);
+      handleAwarenessChange();
+
+      setProvider(provider);
+    })();
 
     return () => {
-      console.log(`[Collab] Disconnecting from document: ${documentId}`);
-      wsProvider.awareness.off("change", handleAwarenessChange);
-      wsProvider.disconnect();
-      wsProvider.destroy();
+      cancelled = true;
+      if (wsProvider) {
+        wsProvider.disconnect();
+        wsProvider.destroy();
+      }
       ydoc.destroy();
     };
   }, [documentId, userId, userName, stableUserColor, ydoc]);
