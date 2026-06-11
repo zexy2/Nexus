@@ -12,6 +12,7 @@ import {
 import { searchWeb } from "@/lib/ai/tavily";
 import { correctiveRAG } from "@/lib/ai/crag";
 import { buildWorkspaceSearchContext, searchWorkspaceContent } from "@/lib/workspace-search";
+import { isEmbeddingsAvailable, semanticSearch, buildSemanticContext } from "@/lib/ai/embeddings";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -92,11 +93,17 @@ async function getGeminiResponse(
   };
 }
 
-// RAG context retrieval
+// RAG context retrieval: semantic (pgvector) first, keyword fallback.
 async function getRAGContext(query: string, workspaceId?: string): Promise<string> {
   if (!workspaceId) return "";
 
   try {
+    if (isEmbeddingsAvailable()) {
+      const hits = await semanticSearch(query, workspaceId, { limit: 3, minSimilarity: 0.2 });
+      if (hits.length > 0) {
+        return await buildSemanticContext(hits);
+      }
+    }
     const results = await searchWorkspaceContent(query, workspaceId, { limit: 3 });
     return buildWorkspaceSearchContext(results);
   } catch (err) {
