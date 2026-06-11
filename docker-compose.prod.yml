@@ -50,6 +50,7 @@ services:
       AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?AUTH_TRUSTED_ORIGINS is required}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
       NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:-ws://localhost:1234}
+      COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}
       DEMO_MODE: ${DEMO_MODE:-true}
       PUBLIC_SIGNUP_ENABLED: ${PUBLIC_SIGNUP_ENABLED:-false}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
@@ -113,6 +114,9 @@ services:
     environment:
       COLLABORATION_HOST: 0.0.0.0
       COLLABORATION_PORT: 1234
+      # Must match the web service so issued tokens verify. The server refuses
+      # to start without it.
+      COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}
     ports:
       - "${COLLABORATION_PORT:-1234}:1234"
 
