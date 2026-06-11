@@ -9,11 +9,14 @@ import type { AgentStepResult } from "./types";
 
 // Gemini API call helper
 async function callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  if (process.env.AI_ENABLED === "false") {
+    throw new Error("AI is disabled");
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   
   if (!apiKey) {
-    console.warn("GEMINI_API_KEY not set, using mock response");
-    return `Mock response for: ${userPrompt.slice(0, 100)}...`;
+    throw new Error("GEMINI_API_KEY is not set");
   }
   
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
@@ -60,8 +63,7 @@ export async function searchWeb(
   const apiKey = process.env.TAVILY_API_KEY;
   
   if (!apiKey) {
-    console.warn("[Activity] TAVILY_API_KEY not set");
-    return { results: [], answer: "Web search not configured" };
+    throw new Error("TAVILY_NOT_CONFIGURED");
   }
 
   const response = await fetch("https://api.tavily.com/search", {
@@ -143,8 +145,7 @@ export async function searchVectors(
   const databaseUrl = process.env.DATABASE_URL;
   
   if (!databaseUrl) {
-    console.warn("[Activity] DATABASE_URL not set, using mock");
-    return [];
+    throw new Error("DATABASE_URL is not set");
   }
 
   // Generate query embedding
@@ -199,8 +200,7 @@ export async function indexDocument(
   const databaseUrl = process.env.DATABASE_URL;
   
   if (!databaseUrl) {
-    console.warn("[Activity] DATABASE_URL not set");
-    return { chunksCreated: 0 };
+    throw new Error("DATABASE_URL is not set");
   }
 
   // Chunk content
@@ -239,8 +239,8 @@ export async function indexDocument(
       const chunkMetadata = { ...metadata, position: i };
 
       await sql`
-        INSERT INTO vectors (doc_id, workspace_id, content, embedding, metadata)
-        VALUES (${docId}, ${workspaceId}, ${chunk}, ${embeddingStr}::vector, ${JSON.stringify(chunkMetadata)}::jsonb)
+        INSERT INTO vectors (source_type, source_id, doc_id, workspace_id, content, embedding, metadata)
+        VALUES (${"doc"}, ${docId}, ${docId}, ${workspaceId}, ${chunk}, ${embeddingStr}::vector, ${JSON.stringify(chunkMetadata)}::jsonb)
       `;
     }
 
@@ -356,13 +356,65 @@ export async function saveDocument(
   content: string,
   createdBy: string
 ): Promise<string> {
-  // In production, this would save to PostgreSQL via Drizzle
-  await sleep(200);
-  
-  const documentId = crypto.randomUUID();
-  console.log(`[Activity] Saved document ${documentId}: "${title}"`);
-  
-  return documentId;
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is not set");
+  }
+
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl);
+  const blockContent = [
+    {
+      id: `workflow-${Date.now()}`,
+      type: "paragraph",
+      props: {
+        textColor: "default",
+        backgroundColor: "default",
+        textAlignment: "left",
+      },
+      content: [{ type: "text", text: content, styles: {} }],
+      children: [],
+    },
+  ];
+
+  try {
+    const rows = await sql<{ id: string }[]>`
+      INSERT INTO docs (workspace_id, title, icon_emoji, content, created_by)
+      VALUES (${workspaceId}, ${title || "Generated Document"}, ${"✨"}, ${JSON.stringify(blockContent)}::jsonb, ${createdBy})
+      RETURNING id
+    `;
+
+    const documentId = rows[0]?.id;
+    if (!documentId) {
+      throw new Error("Document insert did not return an id");
+    }
+
+    try {
+      await indexDocument(documentId, content, workspaceId, { title });
+    } catch (error) {
+      console.warn("[Activity] Document saved but embedding index failed:", error);
+    }
+
+    try {
+      await sql`
+        INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+        VALUES (
+          ${createdBy},
+          ${workspaceId},
+          ${"document.create"},
+          ${"success"},
+          ${JSON.stringify({ docId: documentId, title, source: "workflow" })}::jsonb
+        )
+      `;
+    } catch (error) {
+      console.warn("[Activity] Document saved but audit log failed:", error);
+    }
+
+    return documentId;
+  } finally {
+    await sql.end();
+  }
 }
 
 /**
@@ -373,12 +425,64 @@ export async function saveTasks(
   tasks: Array<{ title: string; description: string; priority: string }>,
   createdBy: string
 ): Promise<string[]> {
-  await sleep(300);
-  
-  const taskIds = tasks.map(() => crypto.randomUUID());
-  console.log(`[Activity] Saved ${tasks.length} tasks`);
-  
-  return taskIds;
+  const databaseUrl = process.env.DATABASE_URL;
+
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL is not set");
+  }
+
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl);
+
+  try {
+    const taskIds: string[] = [];
+
+    for (let index = 0; index < tasks.length; index++) {
+      const task = tasks[index];
+      if (!task?.title?.trim()) continue;
+
+      const priority = ["low", "medium", "high", "urgent"].includes(task.priority)
+        ? task.priority
+        : "medium";
+
+      const rows = await sql<{ id: string }[]>`
+        INSERT INTO tasks (workspace_id, title, description, status, priority, position, created_by, assignee_id)
+        VALUES (
+          ${workspaceId},
+          ${task.title.slice(0, 500)},
+          ${task.description || ""},
+          ${"todo"},
+          ${priority},
+          ${index},
+          ${createdBy},
+          ${createdBy}
+        )
+        RETURNING id
+      `;
+
+      if (rows[0]?.id) {
+        taskIds.push(rows[0].id);
+        try {
+          await sql`
+            INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+            VALUES (
+              ${createdBy},
+              ${workspaceId},
+              ${"task.create"},
+              ${"success"},
+              ${JSON.stringify({ taskId: rows[0].id, title: task.title, source: "workflow" })}::jsonb
+            )
+          `;
+        } catch (error) {
+          console.warn("[Activity] Task saved but audit log failed:", error);
+        }
+      }
+    }
+
+    return taskIds;
+  } finally {
+    await sql.end();
+  }
 }
 
 /**
