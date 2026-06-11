@@ -136,10 +136,12 @@ jobs:
         run: pnpm --filter @nexus/web exec playwright install chromium
 
       - name: Run E2E tests
-        run: pnpm --filter @nexus/web test:e2e
+        run: pnpm --filter @nexus/web test:e2e -- --project=chromium
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AI_ENABLED: "true"
+          TEMPORAL_NAMESPACE: default
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
