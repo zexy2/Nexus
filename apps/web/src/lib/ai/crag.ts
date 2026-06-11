@@ -8,7 +8,8 @@
  * Reference: https://arxiv.org/abs/2401.15884
  */
 
-import { searchWeb, TavilySearchResult, TavilySearchResponse } from "./tavily";
+import { searchWeb } from "./tavily";
+import { searchWorkspaceContent } from "@/lib/workspace-search";
 
 // Simple RAG document interface
 interface RAGDocument {
@@ -22,52 +23,11 @@ interface RAGDocument {
 
 // Local search using the search API with semantic embeddings
 async function searchSimilarDocuments(query: string, workspaceId?: string): Promise<RAGDocument[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  
+  if (!workspaceId) return [];
+
   try {
-    // First try semantic search (POST endpoint with embeddings)
-    const semanticResponse = await fetch(`${baseUrl}/api/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query,
-        options: {
-          limit: 5,
-          useSemantic: true,
-          includeContext: true,
-        }
-      }),
-    });
-    
-    if (semanticResponse.ok) {
-      const data = await semanticResponse.json();
-      if (data.results && data.results.length > 0) {
-        console.log("[CRAG] Using semantic search results");
-        return (data.results || []).map((r: { content: string; id?: string; score?: number; title?: string }) => ({
-          content: r.content || "",
-          metadata: {
-            source: r.title || "local",
-            docId: r.id,
-            similarity: r.score,
-          }
-        }));
-      }
-    }
-    
-    // Fallback to keyword search (GET endpoint)
-    console.log("[CRAG] Falling back to keyword search");
-    const response = await fetch(
-      `${baseUrl}/api/search?q=${encodeURIComponent(query)}&limit=5`,
-      { method: 'GET' }
-    );
-    
-    if (!response.ok) {
-      console.warn("[CRAG] Search API failed, returning empty results");
-      return [];
-    }
-    
-    const data = await response.json();
-    return (data.results || []).map((r: { content: string; id?: string; score?: number; title?: string }) => ({
+    const results = await searchWorkspaceContent(query, workspaceId, { limit: 5 });
+    return results.map((r) => ({
       content: r.content || "",
       metadata: {
         source: r.title || "local",
@@ -248,7 +208,6 @@ export async function correctiveRAG(
 ): Promise<CRAGResult> {
   const {
     maxCorrections = 3,
-    relevanceThreshold = 0.5,
     minRelevantDocs = 2,
     includeWebSearch = true,
     useGeminiForEval = true
@@ -304,6 +263,11 @@ export async function correctiveRAG(
     if (relevantDocs.length >= minRelevantDocs) {
       console.log(`[CRAG] Found ${relevantDocs.length} relevant documents`);
       result.relevantDocuments = evaluatedDocs;
+      break;
+    }
+
+    if (evaluatedDocs.length === 0 && !includeWebSearch) {
+      console.log("[CRAG] No local documents found; skipping query refinement");
       break;
     }
 
