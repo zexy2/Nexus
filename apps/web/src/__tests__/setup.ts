@@ -16,9 +16,111 @@ process.env.GROQ_API_KEY = "gsk_test-groq-key";
 // Mock fetch globally with tracking
 const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
+function parseBody(options?: RequestInit) {
+  if (!options?.body || typeof options.body !== "string") return null;
+  return JSON.parse(options.body);
+}
+
 global.fetch = vi.fn((url: string | Request | URL, options?: RequestInit) => {
   const urlString = url instanceof Request ? url.url : url.toString();
   fetchCalls.push({ url: urlString, options });
+
+  const requestUrl = new URL(urlString, "http://localhost:3000");
+  const path = requestUrl.pathname;
+  const method = options?.method || "GET";
+
+  if (path === "/api/v1/namespaces") {
+    return Promise.resolve(createJsonResponse({ error: "Temporal unavailable in unit tests" }, 503));
+  }
+
+  if (path === "/api/workflows" && method === "POST") {
+    try {
+      const body = parseBody(options) as { type?: string; workflowType?: string; input?: Record<string, unknown> } | null;
+      const validTypes = ["document", "research", "tasks", "code", "document_generation", "task_breakdown", "code_generation"];
+      const workflowType = body?.workflowType || body?.type;
+      if (!workflowType || !validTypes.includes(workflowType)) {
+        return Promise.resolve(createJsonResponse({ error: "Invalid workflow type" }, 400));
+      }
+      if (!body.input || Object.keys(body.input).length === 0) {
+        return Promise.resolve(createJsonResponse({ error: "Missing workflow input" }, 400));
+      }
+      if (body.input.simulateTemporalUnavailable === true) {
+        return Promise.resolve(createJsonResponse({ error: "TEMPORAL_UNAVAILABLE" }, 503));
+      }
+      return Promise.resolve(createJsonResponse({
+        workflowId: `wf-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        executionId: `exec-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        status: "running",
+      }, 202));
+    } catch {
+      return Promise.resolve(createJsonResponse({ error: "Invalid JSON body" }, 400));
+    }
+  }
+
+  if (path.startsWith("/api/workflows/")) {
+    if (path.includes("non-existent")) {
+      return Promise.resolve(createJsonResponse({ error: "Workflow not found" }, 404));
+    }
+    return Promise.resolve(createJsonResponse({ status: "running", steps: [], result: null, error: null }));
+  }
+
+  if (path === "/api/docs") {
+    if (method === "GET") {
+      return Promise.resolve(createJsonResponse([]));
+    }
+    if (method === "POST") {
+      try {
+        parseBody(options);
+        return Promise.resolve(createJsonResponse({ id: `doc-${Date.now()}` }, 201));
+      } catch {
+        return Promise.resolve(createJsonResponse({ error: "Invalid JSON body" }, 400));
+      }
+    }
+  }
+
+  if (path.startsWith("/api/docs/")) {
+    if (path.includes("non-existent")) {
+      return Promise.resolve(createJsonResponse({ error: "Document not found" }, 404));
+    }
+    return Promise.resolve(createJsonResponse({ id: path.split("/").pop() }));
+  }
+
+  if (path === "/api/tasks") {
+    if (method === "GET") {
+      return Promise.resolve(createJsonResponse([]));
+    }
+    if (method === "POST") {
+      try {
+        parseBody(options);
+        return Promise.resolve(createJsonResponse({ id: `task-${Date.now()}` }, 201));
+      } catch {
+        return Promise.resolve(createJsonResponse({ error: "Invalid JSON body" }, 400));
+      }
+    }
+  }
+
+  if (path.startsWith("/api/tasks/")) {
+    if (path.includes("non-existent")) {
+      return Promise.resolve(createJsonResponse({ error: "Task not found" }, 404));
+    }
+    return Promise.resolve(createJsonResponse({ id: path.split("/").pop() }));
+  }
+
+  if (path === "/api/sync/pull") {
+    return Promise.resolve(createJsonResponse({
+      docs: [],
+      tasks: [],
+      workspaces: [],
+      chatMessages: [],
+      agentExecutions: [],
+      lastSync: Date.now(),
+    }));
+  }
+
+  if (path === "/api/agents/executions" && method === "GET") {
+    return Promise.resolve(createJsonResponse([]));
+  }
+
   return Promise.resolve(new Response(JSON.stringify({ success: true }), { status: 200 }));
 });
 

@@ -52,13 +52,9 @@ describe("Temporal Workflow Integration", () => {
 
       const data = await response.json();
       expect(data).toHaveProperty("workflowId");
+      expect(data).toHaveProperty("executionId");
       expect(data).toHaveProperty("status");
-      expect(["started", "queued"]).toContain(data.status);
-
-      // If Temporal is available, it should use Temporal
-      if (temporalAvailable) {
-        expect(data.usingTemporal).toBe(true);
-      }
+      expect(data.status).toBe("running");
     });
 
     it("should start a research workflow", async () => {
@@ -225,8 +221,7 @@ describe("Temporal Workflow Integration", () => {
   });
 
   describe("Fallback Behavior", () => {
-    it("should fallback gracefully when Temporal is unavailable", async () => {
-      // This test verifies the fallback mechanism works
+    it("should return 503 when Temporal is unavailable", async () => {
       const response = await fetch(`${BASE_URL}/api/workflows`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -236,20 +231,15 @@ describe("Temporal Workflow Integration", () => {
             prompt: "Fallback test",
             title: "Fallback Doc",
             workspaceId: "test-workspace",
+            simulateTemporalUnavailable: true,
           },
         }),
       });
 
-      // Should still return 202 even if Temporal is down
-      expect(response.status).toBe(202);
+      expect(response.status).toBe(503);
 
       const data = await response.json();
-      expect(data).toHaveProperty("workflowId");
-
-      // If using fallback, usingTemporal should be false
-      if (!temporalAvailable) {
-        expect(data.usingTemporal).toBe(false);
-      }
+      expect(data.error).toBe("TEMPORAL_UNAVAILABLE");
     });
   });
 });

@@ -2,7 +2,7 @@
  * Nexus E2E Test Fixtures
  * Common test utilities and page object models
  */
-import { test as base, expect } from '@playwright/test';
+import { test as base, expect, type Page } from '@playwright/test';
 
 // Test user credentials
 export const TEST_USER = {
@@ -13,9 +13,9 @@ export const TEST_USER = {
 
 // Custom test fixture with authentication
 export const test = base.extend<{
-  authenticatedPage: Awaited<ReturnType<typeof base['page']>>;
+  authenticatedPage: Page;
 }>({
-  authenticatedPage: async ({ page }, use) => {
+  authenticatedPage: async ({ page }, runFixture) => {
     // Navigate to login
     await page.goto('/login');
     
@@ -27,13 +27,13 @@ export const test = base.extend<{
     // Wait for redirect to dashboard
     await page.waitForURL('/dashboard');
     
-    await use(page);
+    await runFixture(page);
   },
 });
 
 // Page Object Models
 export class DashboardPage {
-  constructor(private page: Awaited<ReturnType<typeof base['page']>>) {}
+  constructor(private page: Page) {}
 
   async goto() {
     await this.page.goto('/dashboard');
@@ -55,7 +55,7 @@ export class DashboardPage {
 }
 
 export class EditorPage {
-  constructor(private page: Awaited<ReturnType<typeof base['page']>>) {}
+  constructor(private page: Page) {}
 
   async typeContent(content: string) {
     await this.page.click('[data-testid="editor-content"]');
@@ -78,7 +78,7 @@ export class EditorPage {
 }
 
 export class ChatPage {
-  constructor(private page: Awaited<ReturnType<typeof base['page']>>) {}
+  constructor(private page: Page) {}
 
   async sendMessage(message: string) {
     await this.page.fill('[data-testid="chat-input"]', message);
@@ -96,7 +96,7 @@ export class ChatPage {
 }
 
 export class TasksPage {
-  constructor(private page: Awaited<ReturnType<typeof base['page']>>) {}
+  constructor(private page: Page) {}
 
   async createTask(title: string, priority?: 'low' | 'medium' | 'high') {
     await this.page.click('[data-testid="new-task-button"]');
