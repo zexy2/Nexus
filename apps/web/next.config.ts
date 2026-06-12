@@ -39,6 +39,31 @@ const nextConfig: NextConfig = {
 
   // Baseline security headers applied to every response.
   async headers() {
+    // Content-Security-Policy. The app needs inline scripts/styles (Next.js,
+    // Tailwind, BlockNote), the configured image/video CDNs, and a WebSocket
+    // connection to the collaboration server. Ships as Report-Only by default
+    // so it can't break the UI; set CSP_ENFORCE=true to enforce after reviewing
+    // violation reports.
+    const collabWs = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https://images.unsplash.com https://cdn.coverr.co https://*.pexels.com",
+      "font-src 'self' data:",
+      `connect-src 'self' ${collabWs} ws: wss:`,
+      "media-src 'self' blob: https://cdn.coverr.co",
+      "worker-src 'self' blob:",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join("; ");
+    const cspKey =
+      process.env.CSP_ENFORCE === "true"
+        ? "Content-Security-Policy"
+        : "Content-Security-Policy-Report-Only";
+
     return [
       {
         source: "/:path*",
@@ -55,6 +80,7 @@ const nextConfig: NextConfig = {
             value: "camera=(), microphone=(), geolocation=()",
           },
           { key: "X-DNS-Prefetch-Control", value: "on" },
+          { key: cspKey, value: csp },
         ],
       },
     ];
