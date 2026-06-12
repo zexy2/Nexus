@@ -308,6 +308,7 @@ class SyncEngine {
   private _pendingMutations: PendingMutation[] = [];
   private statusListeners: Set<(status: SyncStatus) => void> = new Set();
   private syncInterval: ReturnType<typeof setInterval> | null = null;
+  private eventSource: EventSource | null = null;
   private lastSyncAttempt: number = 0;
   private syncBackoff: number = 5000; // Start with 5 seconds
   private maxBackoff: number = 60000; // Max 1 minute
@@ -342,8 +343,35 @@ class SyncEngine {
     window.addEventListener("online", () => {
       // Delay sync after coming online to avoid burst
       setTimeout(() => this.sync(), 2000);
+      this.connectRealtime();
     });
     window.addEventListener("offline", () => this.setStatus("disconnected"));
+
+    // Near-real-time updates: when the server signals a change in one of our
+    // workspaces, pull immediately instead of waiting for the 10s poll. The
+    // interval above stays as a fallback, so this is a pure enhancement.
+    this.connectRealtime();
+  }
+
+  // Subscribe to server-sent change signals (Postgres NOTIFY -> SSE).
+  private connectRealtime(): void {
+    if (typeof EventSource === "undefined" || this.eventSource) return;
+    try {
+      const es = new EventSource(`${this.serverUrl}/api/sync/stream`);
+      es.addEventListener("change", () => {
+        // A doc/task changed in one of our workspaces — sync now.
+        this.sync();
+      });
+      es.onerror = () => {
+        // Connection dropped (offline, restart, or unsupported). Close and let
+        // the browser/our online handler reconnect; polling keeps working.
+        es.close();
+        if (this.eventSource === es) this.eventSource = null;
+      };
+      this.eventSource = es;
+    } catch {
+      // SSE unavailable — polling continues as the fallback.
+    }
   }
 
   private setStatus(status: SyncStatus): void {
@@ -520,6 +548,8 @@ class SyncEngine {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
     }
+    this.eventSource?.close();
+    this.eventSource = null;
     this.ws?.close();
   }
 }
