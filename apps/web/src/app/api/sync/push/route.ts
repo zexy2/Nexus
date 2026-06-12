@@ -285,11 +285,16 @@ function prepareDataForDb(data: Record<string, unknown>): Record<string, unknown
   for (const [key, value] of Object.entries(data)) {
     // Convert timestamp numbers to Date objects for date fields
     if (
-      (key === "createdAt" || key === "updatedAt" || key === "startedAt" || 
+      (key === "createdAt" || key === "updatedAt" || key === "startedAt" ||
        key === "completedAt" || key === "dueDate" || key === "joinedAt") &&
       typeof value === "number"
     ) {
       result[key] = new Date(value);
+    } else if (key === "isArchived" && typeof value === "boolean") {
+      // docs.is_archived is an integer column (0/1) for sync compatibility, but
+      // the client models it as a boolean. Coerce so the insert/update doesn't
+      // fail with "column is of type integer but expression is of type boolean".
+      result[key] = value ? 1 : 0;
     } else {
       result[key] = value;
     }

@@ -46,6 +46,10 @@ export NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
 export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export AUTH_TRUSTED_ORIGINS="${AUTH_TRUSTED_ORIGINS:-http://localhost:3000}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-local-dev-secret-change-me}"
+# Shared secret for the realtime collaboration server (web issues tokens, the
+# collab server verifies them). Both must match; the collab server refuses to
+# start without it.
+export COLLAB_AUTH_SECRET="${COLLAB_AUTH_SECRET:-local-collab-secret-change-me}"
 
 export DEMO_MODE="${DEMO_MODE:-true}"
 export NEXT_PUBLIC_DEMO_MODE="${NEXT_PUBLIC_DEMO_MODE:-true}"
