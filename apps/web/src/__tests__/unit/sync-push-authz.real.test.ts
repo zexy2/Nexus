@@ -31,16 +31,20 @@ function chain() {
   return b;
 }
 
+const valuesSpy = vi.fn();
 vi.mock("@/lib/db", () => ({
   db: {
     select: () => chain(),
     insert: () => ({
-      values: () => ({
-        onConflictDoUpdate: (...a: unknown[]) => {
-          insertSpy(...a);
-          return Promise.resolve(undefined);
-        },
-      }),
+      values: (data: unknown) => {
+        valuesSpy(data);
+        return {
+          onConflictDoUpdate: (...a: unknown[]) => {
+            insertSpy(...a);
+            return Promise.resolve(undefined);
+          },
+        };
+      },
     }),
     update: () => ({ set: () => ({ where: () => Promise.resolve(undefined) }) }),
     delete: () => ({ where: () => Promise.resolve(undefined) }),
@@ -104,6 +108,25 @@ describe("POST /api/sync/push — cross-tenant insert protection (C1)", () => {
 
     expect(res.status).toBe(200);
     expect(insertSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("coerces a boolean isArchived to the integer the column expects", async () => {
+    selectResults = [[{ id: "ws-1" }], []];
+
+    const res = await POST(
+      syncRequest({
+        id: "m-arch",
+        table: "docs",
+        operation: "insert",
+        // The client models isArchived as a boolean; docs.is_archived is integer.
+        data: { id: "doc-arch", workspaceId: "ws-1", title: "x", isArchived: false },
+        timestamp: Date.now(),
+      }) as never
+    );
+
+    expect(res.status).toBe(200);
+    const inserted = valuesSpy.mock.calls[0][0] as { isArchived: unknown };
+    expect(inserted.isArchived).toBe(0); // not `false`
   });
 
   it("allows re-syncing (upserting) a row in the user's own workspace", async () => {
