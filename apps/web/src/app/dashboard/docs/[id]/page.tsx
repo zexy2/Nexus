@@ -225,17 +225,24 @@ export default function DocDetailPage() {
       let prompt = "";
       let agentMode = "writer";
 
+      // These actions paste the result straight into a document, so the model
+      // must return ONLY the transformed text — no conversational preamble
+      // ("Elbette...", "İşte..."), no trailing commentary, no code fences.
+      const ONLY_RESULT =
+        `\n\nÖNEMLİ: Yalnızca sonuç metnini döndür. "Elbette", "İşte", "Tabii" gibi giriş cümleleri, ` +
+        `sonunda açıklama/yorum veya "---" ayraçları EKLEME. Çıktın doğrudan dokümana yapıştırılacak.`;
+
       switch (action) {
         case "summarize":
-          prompt = `Bu metni Türkçe olarak özetle:\n\n${textContent}`;
+          prompt = `Aşağıdaki metni Türkçe özetle.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
           agentMode = "research";
           break;
         case "expand":
-          prompt = `Bu metni genişlet, daha detaylı hale getir:\n\n${textContent}`;
+          prompt = `Aşağıdaki metni genişlet ve daha detaylı hale getir.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
           agentMode = "writer";
           break;
         case "improve":
-          prompt = `Bu metnin yazımını iyileştir, daha akıcı ve profesyonel hale getir:\n\n${textContent}`;
+          prompt = `Aşağıdaki metnin yazımını iyileştir; daha akıcı ve profesyonel yap.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
           agentMode = "writer";
           break;
         case "tasks":
@@ -282,7 +289,23 @@ export default function DocDetailPage() {
 
       if (!response.ok) throw new Error("AI request failed");
 
-      const result = await response.text();
+      const rawResult = await response.text();
+
+      // Safety net: strip any conversational framing the model still added, so
+      // only the transformed text lands in the document.
+      const cleanAiText = (raw: string): string => {
+        const lines = raw.trim().split("\n");
+        const first = (lines[0] || "").trim();
+        if (lines.length > 1 && /^(elbette|i̇şte|işte|tabii?|harika|peki)\b/i.test(first) && first.endsWith(":")) {
+          lines.shift();
+        }
+        return lines
+          .join("\n")
+          .replace(/^(\s*---\s*\n?)+/, "")
+          .replace(/(\n?\s*---\s*)+\s*$/, "")
+          .trim();
+      };
+      const result = cleanAiText(rawResult);
 
       // Metni BlockNote formatına dönüştür
       const textToBlockNoteContent = (text: string) => {
