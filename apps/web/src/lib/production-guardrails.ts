@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { auditLogs, rateLimitBuckets } from "@nexus/database/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { getOllamaConfig, hasAnyLlmProvider, isLocalOnly } from "@/lib/ai/providers";
 
 export type PersistentLimitResult = {
   allowed: boolean;
@@ -73,12 +74,15 @@ export function getAiUsageLimits(isAdmin = false) {
 }
 
 export function getAiProviderStatus() {
+  const localOnly = isLocalOnly();
   return {
     aiEnabled: isAiEnabled(),
     geminiAvailable: !!process.env.GEMINI_API_KEY,
     openaiAvailable: !!process.env.OPENAI_API_KEY,
     tavilyAvailable: !!process.env.TAVILY_API_KEY,
-    primaryProvider: "gemini",
+    localAiAvailable: getOllamaConfig() !== null,
+    localOnly,
+    primaryProvider: localOnly ? "ollama" : "gemini",
   };
 }
 
@@ -165,10 +169,12 @@ export async function enforceAiBudget(options: {
     };
   }
 
-  if (!process.env.GEMINI_API_KEY && (options.kind === "chat" || options.kind === "workflow" || options.kind === "research")) {
+  // A chat/workflow/research turn needs an LLM — accept any configured provider,
+  // including a local Ollama server (privacy mode), not just Gemini.
+  if (!hasAnyLlmProvider() && (options.kind === "chat" || options.kind === "workflow" || options.kind === "research")) {
     return {
       ok: false as const,
-      response: aiUnavailableResponse("Gemini is not configured on this server."),
+      response: aiUnavailableResponse("No AI provider is configured on this server."),
     };
   }
 

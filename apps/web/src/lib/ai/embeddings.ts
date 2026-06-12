@@ -10,10 +10,14 @@
 import { sql, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { docs } from "@nexus/database/schema";
+import { isLocalOnly } from "@/lib/ai/providers";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 
 export function isEmbeddingsAvailable(): boolean {
+  // Privacy mode: never send document chunks to OpenAI for embedding. Semantic
+  // RAG is skipped and retrieval falls back to local keyword search.
+  if (isLocalOnly()) return false;
   return !!process.env.OPENAI_API_KEY;
 }
 

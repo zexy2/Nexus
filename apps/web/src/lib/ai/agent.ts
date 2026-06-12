@@ -16,6 +16,7 @@ import { z } from "zod";
 import { searchWeb } from "@/lib/ai/tavily";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { createDocument, createTask } from "@/lib/ai/chat-actions";
+import { isLocalOnly } from "@/lib/ai/providers";
 
 export interface AgentRunContext {
   userId: string;
@@ -138,11 +139,17 @@ export async function runAgent(opts: {
     }),
   };
 
+  // In privacy mode, drop web search — it would send the query to an external
+  // service. Everything else (workspace, doc/task) stays local.
+  const activeTools = isLocalOnly()
+    ? { searchWorkspace: tools.searchWorkspace, createDocument: tools.createDocument, createTask: tools.createTask }
+    : tools;
+
   const result = await generateText({
     model,
     system: SUPERVISOR_SYSTEM,
     messages: messages as any,
-    tools,
+    tools: activeTools,
     stopWhen: stepCountIs(maxSteps),
   });
 

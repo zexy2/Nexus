@@ -13,8 +13,9 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { db } from "@/lib/db";
 import { userSettings } from "@nexus/database/schema";
 import { eq } from "drizzle-orm";
+import { getOllamaConfig, isLocalOnly } from "@/lib/ai/providers";
 
-export type ModelProvider = "gemini" | "openai" | "anthropic" | "groq";
+export type ModelProvider = "gemini" | "openai" | "anthropic" | "groq" | "ollama";
 
 export interface ModelConfig {
   model: any;
@@ -31,14 +32,37 @@ const serverOpenai = process.env.OPENAI_API_KEY
   ? createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
+// Local Ollama via its OpenAI-compatible endpoint (privacy-first self-hosting).
+const ollamaCfg = getOllamaConfig();
+const ollama = ollamaCfg
+  ? createOpenAI({ baseURL: ollamaCfg.baseURL, apiKey: ollamaCfg.apiKey })
+  : null;
+
+function ollamaConfig(): ModelConfig | null {
+  if (!ollama || !ollamaCfg) return null;
+  return { model: ollama(ollamaCfg.model), modelName: ollamaCfg.model, provider: "ollama" };
+}
+
 // Get user's preferred model. Provider credentials are server-managed in v1.
 export async function getUserModelConfig(userId: string): Promise<ModelConfig> {
+  // Privacy mode: everything runs on the local Ollama server.
+  if (isLocalOnly()) {
+    const local = ollamaConfig();
+    if (local) return local;
+  }
+
   try {
     const settings = await db.query.userSettings.findFirst({
       where: eq(userSettings.userId, userId),
     });
 
     const defaultModel = settings?.defaultModel || "gemini-2.5-flash";
+
+    // Explicit local model selection (e.g. "ollama:llama3.1" or "ollama").
+    if (defaultModel.startsWith("ollama")) {
+      const local = ollamaConfig();
+      if (local) return local;
+    }
 
     // Determine provider from model name
     let provider: ModelProvider = "gemini";
@@ -91,6 +115,9 @@ export async function getUserModelConfig(userId: string): Promise<ModelConfig> {
     if (serverOpenai) {
       return { model: serverOpenai("gpt-4o-mini"), modelName: "gpt-4o-mini", provider: "openai" };
     }
+    // Last resort: a configured local Ollama server.
+    const local = ollamaConfig();
+    if (local) return local;
 
     throw new Error("No server-managed AI provider key is configured");
   } catch (error) {
@@ -101,6 +128,8 @@ export async function getUserModelConfig(userId: string): Promise<ModelConfig> {
     if (serverOpenai) {
       return { model: serverOpenai("gpt-4o-mini"), modelName: "gpt-4o-mini", provider: "openai" };
     }
+    const local = ollamaConfig();
+    if (local) return local;
     throw error;
   }
 }
