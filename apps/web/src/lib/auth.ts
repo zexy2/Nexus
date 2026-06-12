@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "@nexus/database/schema";
+import { actionEmailHtml, isEmailConfigured, sendEmail } from "./email";
 
 const socialProviders = {
   ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
@@ -39,7 +40,40 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: process.env.NODE_ENV === "production",
+    // Only require verification when we can actually send the email — otherwise
+    // production sign-ups would be permanently locked out (verification on, no
+    // mail provider). Configure RESEND_API_KEY to enforce it.
+    requireEmailVerification: process.env.NODE_ENV === "production" && isEmailConfigured(),
+    sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Nexus — Şifre sıfırlama",
+        text: `Şifreni sıfırlamak için: ${url}`,
+        html: actionEmailHtml({
+          heading: "Şifre sıfırlama",
+          body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
+          ctaLabel: "Şifreyi sıfırla",
+          url,
+        }),
+      });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: isEmailConfigured(),
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Nexus — E-posta adresini doğrula",
+        text: `E-posta adresini doğrulamak için: ${url}`,
+        html: actionEmailHtml({
+          heading: "E-postanı doğrula",
+          body: "Nexus hesabını etkinleştirmek için e-posta adresini doğrula.",
+          ctaLabel: "E-postamı doğrula",
+          url,
+        }),
+      });
+    },
   },
   socialProviders,
   session: {
