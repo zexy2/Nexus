@@ -1,18 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Chat agent definitions and single-agent execution.
  *
- * These specialist personas back both the manual supervisor fallback in the
- * chat route and the direct agent mode (user picks a specific agent).
+ * Specialist personas used by the chat route's direct agent mode (the user
+ * picks a specific agent). Auto mode uses the tool-calling agent in agent.ts.
  */
-import { generateText } from "ai";
-
-export interface AgentResult {
-  success: boolean;
-  output: string;
-  data?: any;
-}
-
 export const AGENTS = {
   research: {
     name: "Araştırmacı",
@@ -95,50 +86,3 @@ Türkçe yanıt ver.`,
 } as const;
 
 export type AgentType = keyof typeof AGENTS;
-
-export const SUPERVISOR_PROMPT = `You are Nexus AI Supervisor, orchestrating a team of specialized AI agents.
-
-Your team:
-- 🔍 **research**: Finding information, data analysis
-- ✍️ **writer**: Creating documents and content
-- 💻 **coder**: Writing code and technical tasks
-- 📋 **task**: Project planning and task management
-
-INSTRUCTIONS:
-1. Analyze the user's request
-2. Decide which agent(s) to use
-3. If multiple agents needed, execute them in order
-4. Synthesize results into a cohesive response
-
-RESPONSE FORMAT:
-First line MUST be a JSON array of agents to use: ["research", "writer"]
-Or empty array if you can answer directly: []
-
-Then provide your response.
-
-EXAMPLES:
-- "Write a blog post about AI" → ["research", "writer"]
-- "Create a Python script" → ["coder"]
-- "What's the weather?" → [] (no agents, answer directly)
-- "Research competitors and create a task list" → ["research", "task"]`;
-
-// Execute a single agent
-export async function executeAgent(
-  agentType: AgentType,
-  query: string,
-  context: string,
-  model: any
-): Promise<AgentResult> {
-  const agent = AGENTS[agentType];
-
-  const { text } = await generateText({
-    model,
-    system: agent.systemPrompt,
-    prompt: `${context ? `Context from previous agents:\n${context}\n\n` : ""}User request: ${query}`,
-  });
-
-  return {
-    success: true,
-    output: text,
-  };
-}
