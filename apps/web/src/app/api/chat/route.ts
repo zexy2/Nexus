@@ -2,10 +2,10 @@
 /**
  * Chat API Route — multi-agent orchestration.
  *
- * Thin orchestration layer: model selection (lib/ai/model-config), RAG
- * (lib/ai/chat-rag), agent personas (lib/ai/chat-agents) and persistence
- * side-effects (lib/ai/chat-actions) live in their own modules. LangGraph is
- * loaded dynamically because its types are unavailable at build time.
+ * Auto mode runs an autonomous tool-calling agent (lib/ai/agent): the model
+ * decides which tools to call and chains them. Direct mode runs a single named
+ * persona (lib/ai/chat-agents). Model selection, RAG and persistence live in
+ * their own lib/ai modules.
  */
 import { generateText } from "ai";
 import { auth } from "@/lib/auth";
@@ -15,87 +15,13 @@ import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { isAiQuotaError, aiQuotaResponse } from "@/lib/ai/quota";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { getRAGContext } from "@/lib/ai/chat-rag";
-import { AGENTS, SUPERVISOR_PROMPT, executeAgent, type AgentType } from "@/lib/ai/chat-agents";
-import { applyAutoSave, createDocument } from "@/lib/ai/chat-actions";
+import { AGENTS, type AgentType } from "@/lib/ai/chat-agents";
+import { createDocument } from "@/lib/ai/chat-actions";
+import { runAgent } from "@/lib/ai/agent";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
 
 // Allow streaming responses up to 60 seconds for agent operations
 export const maxDuration = 60;
-
-// LangGraph imports (dynamically loaded to avoid build issues)
-let createSupervisor: any = null;
-let HumanMessage: any = null;
-
-async function initLangGraph() {
-  if (createSupervisor) return true;
-  try {
-    const agents = await import("@nexus/agents");
-    const messages = await import("@langchain/core/messages");
-    createSupervisor = agents.createSupervisor;
-    HumanMessage = messages.HumanMessage;
-    return true;
-  } catch (e) {
-    console.warn("LangGraph not available, using fallback:", e);
-    return false;
-  }
-}
-
-// LangGraph-based multi-agent execution
-async function executeWithLangGraph(
-  userMessage: string,
-  ragContext: string,
-  workspaceId: string,
-  userId: string
-): Promise<{ success: boolean; output: string; agentsUsed: string[] }> {
-  try {
-    const langGraphReady = await initLangGraph();
-    if (!langGraphReady || !createSupervisor || !HumanMessage) {
-      return { success: false, output: "LangGraph not available", agentsUsed: [] };
-    }
-
-    const supervisor = createSupervisor({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-      apiKey: process.env.GEMINI_API_KEY,
-    });
-
-    const initialState = {
-      messages: [new HumanMessage(userMessage)],
-      currentAgent: null,
-      agentResults: {},
-      plan: [],
-      completed: [],
-      context: {
-        workspaceId,
-        userId,
-        sessionId: `session-${Date.now()}`,
-        ragContext,
-      },
-      finalOutput: undefined,
-    };
-
-    const result = await supervisor.invoke(initialState);
-
-    const agentsUsed = result.completed || [];
-    const output = result.finalOutput ||
-      Object.values(result.agentResults || {})
-        .map((r: any) => r.output)
-        .join("\n\n") ||
-      "No response generated.";
-
-    return { success: true, output, agentsUsed };
-  } catch (error) {
-    console.error("LangGraph error:", error);
-    if (isAiQuotaError(error)) {
-      throw error;
-    }
-    return {
-      success: false,
-      output: `Error with LangGraph: ${error}`,
-      agentsUsed: [],
-    };
-  }
-}
 
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -267,123 +193,57 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
     }
   }
 
-  // Auto mode: Use LangGraph Supervisor for multi-agent orchestration
+  // Auto mode: autonomous tool-calling agent. The model is given tools
+  // (workspace search, web search, document/task creation) and decides which to
+  // call, chains them across steps, and synthesizes the answer — no regex
+  // orchestration. Tools are bound to this user's verified workspace.
   const workspaceId = (await ensureDefaultWorkspace(userId)).id;
-  const ragContext = await getRAGContext(userMessage, workspaceId);
 
-  const USE_LANGGRAPH = process.env.USE_LANGGRAPH !== "false"; // Default to true
-
-  if (USE_LANGGRAPH) {
-    let langGraphResult: Awaited<ReturnType<typeof executeWithLangGraph>>;
-    try {
-      langGraphResult = await executeWithLangGraph(
-        userMessage + (ragContext ? `\n\nWorkspace Context:\n${ragContext}` : ""),
-        ragContext,
-        workspaceId,
-        userId
-      );
-    } catch (error) {
-      if (isAiQuotaError(error)) {
-        await writeAuditLog({
-          userId,
-          workspaceId,
-          event: "ai.provider_rate_limited",
-          metadata: { provider, modelName },
-        });
-        return aiQuotaResponse();
-      }
-      throw error;
-    }
-
-    if (langGraphResult.success) {
-      const finalResponse = await applyAutoSave({
-        userId,
-        userMessage,
-        agentsUsed: langGraphResult.agentsUsed,
-        finalResponse: langGraphResult.output,
-        separator: "\n\n",
-      });
-      return new Response(finalResponse);
-    }
-  }
-
-  // Fallback: Manual supervisor logic if LangGraph fails or is disabled
-  let planResponse = "";
+  let agentResult: Awaited<ReturnType<typeof runAgent>>;
   try {
-    const result = await generateText({
+    agentResult = await runAgent({
       model,
-      system: SUPERVISOR_PROMPT,
-      prompt: userMessage,
+      messages: chatMessages,
+      context: { userId, workspaceId },
+      maxSteps: 6,
     });
-    planResponse = result.text;
   } catch (error) {
-    if (isAiQuotaError(error)) return aiQuotaResponse();
-    throw error;
-  }
-
-  // Extract agent plan from response
-  let agentPlan: AgentType[] = [];
-  const planMatch = planResponse.match(/\[([^\]]*)\]/);
-  if (planMatch) {
-    try {
-      agentPlan = JSON.parse(`[${planMatch[1]}]`).filter(
-        (a: string) => AGENTS[a as AgentType]
-      );
-    } catch {}
-  }
-
-  // If no agents needed, respond directly (simple queries)
-  if (agentPlan.length === 0) {
-    const systemWithRAG = `You are Nexus AI, a helpful, intelligent assistant. Be concise and informative.${ragContext ? `\n\nYou have access to the user's workspace context:${ragContext}` : ""}`;
-
-    try {
-      const { text } = await generateText({
-        model,
-        system: systemWithRAG,
-        messages: chatMessages,
+    if (isAiQuotaError(error)) {
+      await writeAuditLog({
+        userId,
+        workspaceId,
+        event: "ai.provider_rate_limited",
+        metadata: { provider, modelName },
       });
-      return new Response(text);
-    } catch (error) {
-      if (isAiQuotaError(error)) return aiQuotaResponse();
-      throw error;
+      return aiQuotaResponse();
     }
-  }
-
-  // Execute agents in sequence with RAG context
-  let context = ragContext;
-  const agentOutputs: { agent: AgentType; output: string }[] = [];
-
-  try {
-    for (const agentType of agentPlan) {
-      const result = await executeAgent(agentType, userMessage, context, model);
-      agentOutputs.push({ agent: agentType, output: result.output });
-      context += `\n\n[${AGENTS[agentType].name}]:\n${result.output}`;
-    }
-  } catch (error) {
-    if (isAiQuotaError(error)) return aiQuotaResponse();
     throw error;
   }
 
-  // Build final response - show agent output directly without heavy formatting
-  let finalResponse = "";
-  if (agentOutputs.length === 1) {
-    finalResponse = agentOutputs[0].output;
-  } else {
-    for (const { agent, output } of agentOutputs) {
-      const agentInfo = AGENTS[agent];
-      finalResponse += `### ${agentInfo.emoji} ${agentInfo.name}\n\n${output}\n\n`;
-    }
-  }
-
-  finalResponse = await applyAutoSave({
+  await writeAuditLog({
     userId,
-    userMessage,
-    agentsUsed: agentPlan,
-    finalResponse,
-    taskSource: agentOutputs.find(a => a.agent === "task")?.output || "",
-    docSource: agentOutputs.find(a => a.agent === "writer")?.output || "",
-    separator: "\n",
+    workspaceId,
+    event: "ai.agent_run",
+    metadata: {
+      toolsUsed: agentResult.toolsUsed,
+      steps: agentResult.steps,
+      createdDocs: agentResult.createdDocs.length,
+      createdTasks: agentResult.createdTasks.length,
+    },
   });
+
+  // The agent already performed any saves via its tools; surface what it did.
+  let finalResponse = agentResult.text;
+  if (agentResult.createdDocs.length > 0) {
+    finalResponse +=
+      `\n\n📄 **Kaydedilen dokümanlar:**\n` +
+      agentResult.createdDocs.map((d) => `- ${d.title}`).join("\n");
+  }
+  if (agentResult.createdTasks.length > 0) {
+    finalResponse +=
+      `\n\n✅ **Oluşturulan görevler:**\n` +
+      agentResult.createdTasks.map((t) => `- ${t.title}`).join("\n");
+  }
 
   return new Response(finalResponse);
 }
