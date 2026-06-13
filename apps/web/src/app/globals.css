@@ -337,24 +337,30 @@
 }
 
 /* Premium glass effect - landonorris.com inspired */
+/* Flat surfaces, not glassmorphism. The blurred translucent panels everywhere
+   were the strongest "AI template" tell; these are now solid cards with a thin
+   border so content sits on a calm, opaque surface. */
 .glass-premium {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 
 .dark .glass-premium {
-  background: rgba(0, 0, 0, 0.6);
+  background: #0c0c0c;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Ultra glass - more transparent */
+/* Used for overlays/popovers — a light blur is acceptable there, kept minimal. */
 .glass-ultra {
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--popover);
+  border: 1px solid var(--border);
+}
+
+.dark .glass-ultra {
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* Glass card with glow */
@@ -863,19 +869,17 @@ html.lenis, html.lenis body {
 
 /* Dashboard hero gradient */
 .dashboard-hero-gradient {
-  background: 
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(255, 255, 255, 0.1), transparent),
-    radial-gradient(ellipse 60% 40% at 80% 0%, rgba(255, 255, 255, 0.05), transparent);
+  /* A single, barely-there top wash instead of layered glowy ellipses. */
+  background: radial-gradient(ellipse 70% 40% at 50% -30%, rgba(255, 255, 255, 0.04), transparent);
 }
 
-/* Bento card hover effects */
+/* Card hover: just a quiet border change, no lift/float. */
 .bento-card {
-  transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: border-color 0.2s ease;
 }
 
 .bento-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 /* Tracking tighter utility for headlines */
@@ -899,25 +903,10 @@ html.lenis, html.lenis body {
   border-radius: 1.5rem;
 }
 
-.gradient-border::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: conic-gradient(
-    from var(--gradient-angle, 0deg),
-    transparent 0%,
-    rgba(255, 255, 255, 0.1) 10%,
-    transparent 20%
-  );
-  animation: gradient-rotate 4s linear infinite;
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.gradient-border:hover::before {
-  opacity: 1;
+/* The rotating conic shimmer was a decorative tell; gradient-border is now just
+   a plain bordered surface. */
+.gradient-border {
+  border: 1px solid var(--border);
 }
 
 /* Noise texture overlay */

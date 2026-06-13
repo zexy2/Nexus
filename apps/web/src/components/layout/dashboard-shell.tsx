@@ -425,9 +425,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   return (
     <>
-      {/* Noise texture overlay */}
-      <div className="noise-overlay" />
-
       {/* Top bar */}
       <TopBar onMenuClick={() => setMobileMenuOpen(true)} syncState={syncState} />
 
