@@ -73,6 +73,7 @@ import {
   Cpu,
   Layers,
 } from "lucide-react";
+import { useT } from "@/lib/i18n/provider";
 
 // Workflow types
 type WorkflowType = "document" | "research" | "task" | "code";
@@ -369,6 +370,7 @@ function MetricCard({ metric, index }: { metric: MetricItem; index: number }) {
 
 // Metrics Dashboard Component with Premium Animations
 function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
+  const t = useT();
   const totalExecutions = executions?.length || 0;
   const completedToday = executions?.filter(e => {
     const today = new Date();
@@ -385,27 +387,27 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
 
   const metrics: MetricItem[] = [
     { 
-      label: "Total Executions", 
+      label: t('agents.metricTotal'), 
       value: totalExecutions, 
       isNumeric: true,
       icon: BarChart3, 
       color: "text-white/70",
       bg: "bg-white/5",
       glow: "bg-white/10",
-      caption: "Recorded in workflow history",
+      caption: t('agents.metricTotalCaption'),
     },
     { 
-      label: "Completed Today", 
+      label: t('agents.metricCompleted'), 
       value: completedToday, 
       isNumeric: true,
       icon: Target, 
       color: "text-white/70",
       bg: "bg-white/5",
       glow: "bg-white/10",
-      caption: "Completed since local midnight",
+      caption: t('agents.metricCompletedCaption'),
     },
     { 
-      label: "Success Rate", 
+      label: t('agents.metricSuccess'), 
       value: successRate, 
       isNumeric: true,
       suffix: "%",
@@ -413,10 +415,10 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       color: "text-white/70",
       bg: "bg-white/5",
       glow: "bg-white/10",
-      caption: "Completed divided by total",
+      caption: t('agents.metricSuccessCaption'),
     },
     { 
-      label: "Avg Response", 
+      label: t('agents.metricAvg'), 
       value: avgDuration > 0 ? Number((avgDuration / 1000).toFixed(1)) : 0, 
       isNumeric: avgDuration > 0,
       suffix: "s",
@@ -425,7 +427,7 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       color: "text-white/70",
       bg: "bg-white/5",
       glow: "bg-white/10",
-      caption: "Average completed duration",
+      caption: t('agents.metricAvgCaption'),
     },
   ];
 
@@ -605,6 +607,7 @@ function WorkflowLauncher({
 }: { 
   onLaunch: (type: WorkflowType, input: Record<string, string>) => Promise<void>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<WorkflowType>("document");
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -630,7 +633,7 @@ function WorkflowLauncher({
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Plus className="size-4" />
-          New Workflow
+          {t('agents.newWorkflow')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
@@ -980,6 +983,7 @@ ${JSON.stringify(execution.input, null, 2)}
 
 export default function AgentsPage() {
   const router = useRouter();
+  const t = useT();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeWorkflows, setActiveWorkflows] = useState<WorkflowExecution[]>([]);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, string>>({});
@@ -1330,20 +1334,20 @@ export default function AgentsPage() {
       <div className="relative z-10 px-4 md:px-6 lg:px-8">
         {/* Premium Hero Header */}
         <PremiumHeroHeader
-          label="AI WORKSPACE"
-          title="AI Agents"
+          label={t('agents.label')}
+          title={t('agents.title')}
           description={
             <>
-              <span className="text-white/70">{AGENT_TYPES.length}</span> agent types available
+              <span className="text-white/70">{AGENT_TYPES.length}</span> {t('agents.typesAvailable')}
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-white/70">{activeWorkflows.filter(w => w.status === "running").length}</span> workflows running
+              <span className="text-white/70">{activeWorkflows.filter(w => w.status === "running").length}</span> {t('agents.workflowsRunning')}
             </>
           }
           action={
             <div className="flex items-center gap-3">
               <Badge variant="outline" className="gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.03] border-white/20">
                 <Activity className="size-3 text-emerald-400" />
-                <span className="text-white/70">System Healthy</span>
+                <span className="text-white/70">{t('agents.systemHealthy')}</span>
               </Badge>
               <WorkflowLauncher onLaunch={launchWorkflow} />
             </div>
@@ -1359,16 +1363,16 @@ export default function AgentsPage() {
         <section>
           <Tabs defaultValue="agents" className="space-y-6">
             <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-auto bg-white/[0.03] backdrop-blur-xl rounded-full p-1 border border-white/[0.08]">
-              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">Agents</TabsTrigger>
+              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">{t('agents.tabAgents')}</TabsTrigger>
               <TabsTrigger value="workflows" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">
-                <span className="hidden sm:inline">Active </span>Workflows
+                {t('agents.tabWorkflows')}
                 {activeWorkflows.filter(w => w.status === "running").length > 0 && (
                   <Badge variant="secondary" className="ml-2 size-5 p-0 justify-center text-xs rounded-full bg-violet-500/20 text-violet-400">
                     {activeWorkflows.filter(w => w.status === "running").length}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">History</TabsTrigger>
+              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">{t('agents.tabHistory')}</TabsTrigger>
             </TabsList>
 
           {/* Agents Tab */}
@@ -1439,21 +1443,21 @@ export default function AgentsPage() {
                                   : "bg-white/30"
                               }`}
                             />
-                            {status}
+                            {status === "active" ? t('agents.statusActive') : t('agents.statusDisabled')}
                           </Badge>
                         </div>
                         <h3 className="mt-4 text-base md:text-lg font-semibold text-white">{agent.name}</h3>
-                        <p className="text-xs md:text-sm text-white/50 mt-1 line-clamp-2 min-h-[2.5rem]">{agent.description}</p>
+                        <p className="text-xs md:text-sm text-white/50 mt-1 line-clamp-2 min-h-[2.5rem]">{t(`agents.desc.${agent.id}`)}</p>
                       </div>
                       <div className="p-4 pt-0 md:p-6 md:pt-0">
                         <div className="flex items-center justify-between text-xs md:text-sm pt-3 border-t border-white/5">
                           <div className="flex items-center gap-1.5 text-white/40">
                             <CheckCircle2 className="size-3.5 md:size-4 text-white/40" />
-                            <span>{stats.tasksCompleted} tasks</span>
+                            <span>{stats.tasksCompleted} {t('agents.tasksLabel')}</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-white/40">
                             <Zap className="size-3.5 md:size-4 text-white/40" />
-                            <span>{stats.avgResponseTime === "—" ? "—" : `${stats.avgResponseTime} avg`}</span>
+                            <span>{stats.avgResponseTime === "—" ? "—" : `${stats.avgResponseTime} ${t('agents.avgLabel')}`}</span>
                           </div>
                         </div>
                       </div>
@@ -1482,10 +1486,10 @@ export default function AgentsPage() {
                         </div>
                         <div>
                           <CardTitle className="text-lg md:text-xl font-semibold">
-                            {agent.name} Configuration
+                            {agent.name} {t('agents.configuration')}
                           </CardTitle>
                           <CardDescription className="text-sm text-muted-foreground/80">
-                            {agent.description}
+                            {t(`agents.desc.${agent.id}`)}
                           </CardDescription>
                         </div>
                       </div>
