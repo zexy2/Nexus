@@ -128,50 +128,21 @@ export function PremiumStatCard({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
-        'group relative p-5 rounded-2xl overflow-hidden cursor-default',
-        'bg-white/[0.03] backdrop-blur-xl',
-        'border border-white/[0.08]',
-        'transition-all duration-300',
-        isHovered && 'border-white/20 bg-white/[0.05]',
+        'group relative p-5 rounded-2xl cursor-default',
+        'bg-card border border-white/[0.08]',
+        'transition-colors duration-200',
+        isHovered && 'border-white/20',
         className
       )}
     >
-      {/* Hover glow effect */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isHovered ? 1 : 0 }}
-        className={cn(
-          'absolute inset-0 -z-10 blur-2xl transition-opacity duration-500',
-          colors.glow
-        )}
-      />
-
-      {/* Border gradient on hover */}
-      <div
-        className={cn(
-          'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500',
-          'bg-gradient-to-br from-white/10 via-transparent to-transparent'
-        )}
-      />
-
       <div className="relative flex items-center gap-4">
-        {/* Animated Icon */}
-        <motion.div
+        {/* Icon */}
+        <div
           ref={iconRef}
-          animate={{
-            scale: isHovered ? 1.1 : 1,
-            rotate: isHovered ? 5 : 0,
-          }}
-          transition={{ type: 'spring', stiffness: 300 }}
-          className={cn(
-            'w-12 h-12 rounded-xl flex items-center justify-center',
-            'transition-colors duration-300',
-            colors.bg,
-            isHovered && 'bg-opacity-80'
-          )}
+          className={cn('w-12 h-12 rounded-xl flex items-center justify-center', colors.bg)}
         >
           <Icon className={cn('w-6 h-6', colors.text)} />
-        </motion.div>
+        </div>
 
         {/* Value & Label */}
         <div className="flex-1">

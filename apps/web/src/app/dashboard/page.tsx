@@ -323,7 +323,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen pb-32">
       {/* Hero Section */}
-      <section className="relative min-h-[44vh] flex items-center justify-center px-6 pt-12 pb-16">
+      <section className="relative flex flex-col items-center justify-center text-center px-6 pt-12 pb-12">
         {/* Background gradient */}
         <div className="absolute inset-0 dashboard-hero-gradient pointer-events-none" />
 
@@ -344,7 +344,7 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.1 }}
-            className="text-display-lg font-bold tracking-tightest mb-6"
+            className="font-display text-4xl md:text-6xl font-bold tracking-tight mb-4"
           >
             {t(`dashboard.greeting${getGreeting()}`)}
           </motion.h1>
@@ -391,22 +391,6 @@ export default function DashboardPage() {
           </motion.div>
         </div>
 
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        >
-          <motion.div
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="flex flex-col items-center gap-2 text-muted-foreground"
-          >
-            <span className="text-[10px] uppercase tracking-widest">{t('dashboard.scroll')}</span>
-            <div className="h-8 w-[1px] bg-gradient-to-b from-muted-foreground to-transparent" />
-          </motion.div>
-        </motion.div>
       </section>
 
       {/* Stats Section */}
@@ -428,10 +412,7 @@ export default function DashboardPage() {
                 transition={{ delay: index * 0.1 }}
               >
                 <HoverTilt tiltAmount={5}>
-                  <div className="relative p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors overflow-hidden group">
-                    {/* Background glow */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
+                  <div className="relative p-6 rounded-2xl bg-card border border-white/10 hover:border-white/20 transition-colors">
                     <div className="relative">
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-caption text-muted-foreground">{stat.label}</span>

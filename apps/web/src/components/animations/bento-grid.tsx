@@ -3,7 +3,6 @@
 import { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { HoverTilt } from './magnetic-button';
 
 interface BentoCardProps {
   title?: string;
@@ -30,8 +29,6 @@ export function BentoCard({
   className,
   colSpan = 1,
   rowSpan = 1,
-  gradient,
-  glowColor,
   href,
   onClick,
   interactive = true,
@@ -47,56 +44,24 @@ export function BentoCard({
     2: 'row-span-1 md:row-span-2',
   }[rowSpan];
 
-  const CardWrapper = interactive ? HoverTilt : 'div';
-  const wrapperProps = interactive ? { tiltAmount: 5 } : {};
-
   const content = (
-    <motion.div
+    <div
       className={cn(
-        'relative group overflow-hidden',
-        'rounded-3xl',
-        'bg-card/80 backdrop-blur-xl',
-        'border border-white/10',
-        'transition-all duration-500',
-        'hover:border-white/20',
-        interactive && 'cursor-pointer',
+        'relative rounded-2xl border border-white/10 bg-card',
+        interactive && 'bento-card cursor-pointer',
         colSpanClass,
         rowSpanClass,
         className
       )}
-      whileHover={interactive ? { y: -4 } : undefined}
-      data-cursor={interactive ? 'pointer' : undefined}
     >
-      {/* Background gradient */}
-      <div
-        className={cn(
-          'absolute inset-0 opacity-30 group-hover:opacity-50 transition-opacity duration-500',
-          gradient || 'bg-gradient-to-br from-white/5 via-transparent to-transparent'
-        )}
-      />
-
-      {/* Glow effect */}
-      {glowColor && (
-        <div
-          className={cn(
-            'absolute -inset-px rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl',
-            glowColor
-          )}
-        />
-      )}
-
-      {/* Content */}
       <div className="relative h-full p-6 md:p-8 flex flex-col">
         {/* Header */}
         {(icon || title || subtitle) && (
           <div className="mb-4">
             {icon && (
-              <motion.div
-                className="mb-4 h-12 w-12 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-              >
+              <div className="mb-4 h-12 w-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
                 {icon}
-              </motion.div>
+              </div>
             )}
             {subtitle && (
               <span className="text-label text-muted-foreground mb-1 block">
@@ -104,7 +69,7 @@ export function BentoCard({
               </span>
             )}
             {title && (
-              <h3 className="text-title font-bold tracking-tight">
+              <h3 className="text-title font-semibold tracking-tight">
                 {title}
               </h3>
             )}
@@ -121,17 +86,7 @@ export function BentoCard({
         {/* Children */}
         {children && <div className="flex-1">{children}</div>}
       </div>
-
-      {/* Shine effect on hover */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none overflow-hidden rounded-3xl">
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-      </div>
-
-      {/* Border glow */}
-      <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-        <div className="absolute inset-[-1px] rounded-3xl bg-gradient-to-b from-white/20 to-transparent" style={{ maskImage: 'linear-gradient(to bottom, black, transparent)' }} />
-      </div>
-    </motion.div>
+    </div>
   );
 
   if (href) {
