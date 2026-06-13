@@ -971,3 +971,44 @@ html.lenis, html.lenis body {
 .animation-delay-2000 {
   animation-delay: 2000ms;
 }
+
+
+/* ===========================================
+   BlockNote editor theming
+   The editor shipped with theme="light" — a white card on a black app, which
+   looked pasted-in. It now renders dark; these overrides drop BlockNote's grey
+   surface to transparent so it sits directly on the app's own background, and
+   align its font + accents with the rest of the UI.
+   =========================================== */
+.bn-container {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--foreground);
+  --bn-colors-menu-background: #0c0c0c;
+  --bn-colors-menu-text: var(--foreground);
+  --bn-colors-tooltip-background: #0c0c0c;
+  --bn-colors-tooltip-text: var(--foreground);
+  --bn-colors-hovered-background: rgba(255, 255, 255, 0.06);
+  --bn-colors-hovered-text: var(--foreground);
+  --bn-colors-selected-background: rgba(255, 255, 255, 0.12);
+  --bn-colors-selected-text: var(--foreground);
+  --bn-colors-disabled-background: rgba(255, 255, 255, 0.04);
+  --bn-colors-disabled-text: rgba(255, 255, 255, 0.35);
+  --bn-colors-shadow: rgba(0, 0, 0, 0.5);
+  --bn-colors-border: rgba(255, 255, 255, 0.1);
+  --bn-colors-side-menu: rgba(255, 255, 255, 0.45);
+  --bn-font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+}
+
+/* Make the editing surface transparent so it blends with the dark container. */
+.bn-container .bn-editor,
+.bn-container .ProseMirror {
+  background: transparent !important;
+}
+
+/* Placeholder + headings read in the app's foreground, not BlockNote grey. */
+.bn-container .ProseMirror h1,
+.bn-container .ProseMirror h2,
+.bn-container .ProseMirror h3 {
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+}

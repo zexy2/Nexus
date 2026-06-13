@@ -283,7 +283,7 @@ function CollaborativeEditorInner({
           editor={editor}
           editable={editable}
           onChange={handleChange}
-          theme="light"
+          theme="dark"
           className="py-4"
         />
       </div>
