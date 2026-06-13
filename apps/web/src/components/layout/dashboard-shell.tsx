@@ -270,11 +270,10 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
 
             <Link href="/dashboard" className="flex items-center gap-2">
               <motion.div
-                whileHover={{ rotate: 180 }}
-                transition={{ duration: 0.5 }}
-                className="h-9 w-9 rounded-lg bg-gradient-to-br from-foreground to-foreground/80 flex items-center justify-center"
+                suppressHydrationWarning
+                className="relative h-9 w-9 rounded-lg bg-gradient-to-br from-foreground to-foreground/80 flex items-center justify-center"
               >
-                <div className="absolute inset-[2px] rounded-[6px] bg-background" />
+                <div suppressHydrationWarning className="absolute inset-[2px] rounded-[6px] bg-background" />
                 <span className="relative text-foreground font-bold text-sm">N</span>
               </motion.div>
               <span className="hidden md:inline font-semibold text-sm">Nexus</span>
