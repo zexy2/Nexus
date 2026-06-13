@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/button';
 import { SkeletonDashboard } from '@/components/shared';
 import { formatRelativeDate } from '@/lib/format';
 import { cleanDocTitle } from '@/lib/text';
+import { useT, useLocale } from '@/lib/i18n/provider';
 import { useUIStore } from '@/lib/store';
 import {
   BentoGrid,
@@ -77,9 +78,9 @@ function formatRelativeTime(timestamp: string | number) {
 // Get greeting based on time
 function getGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return 'Morning';
+  if (hour < 18) return 'Afternoon';
+  return 'Evening';
 }
 
 // Animated number component
@@ -94,6 +95,7 @@ function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string
 
 // Agent card with premium styling
 function AgentCard({ agent, index }: { agent: Agent; index: number }) {
+  const t = useT();
   const isActive = agent.status !== 'idle';
 
   return (
@@ -150,7 +152,7 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
           'text-[10px] font-medium uppercase tracking-wider px-2 py-1 rounded-full',
           isActive ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-white/5'
         )}>
-          {agent.status}
+          {t(`dashboard.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}`)}
         </span>
       </div>
     </motion.div>
@@ -183,6 +185,7 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
 
 // Task item with checkbox
 function TaskItem({ task, index, onToggle }: { task: Task; index: number; onToggle: () => void }) {
+  const t = useT();
   const [checked, setChecked] = useState(false);
 
   const priorityColors: Record<string, string> = {
@@ -220,7 +223,7 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
       </span>
 
       <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {task.priority}
+        {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
       </span>
     </motion.div>
   );
@@ -228,6 +231,8 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
 
 // Main Dashboard Page
 export default function DashboardPage() {
+  const t = useT();
+  const { locale } = useLocale();
   const [docs, setDocs] = useState<Document[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -291,8 +296,8 @@ export default function DashboardPage() {
                 icon: meta.icon,
                 status,
                 description: execution
-                  ? `${execution.status} • ${formatRelativeTime(execution.createdAt)}`
-                  : 'No recent executions',
+                  ? `${t(`dashboard.exec${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)} • ${formatRelativeTime(execution.createdAt)}`
+                  : t('dashboard.noRecentExecutions'),
               };
             });
 
@@ -330,7 +335,7 @@ export default function DashboardPage() {
             transition={{ duration: 0.8 }}
           >
             <span className="text-label text-muted-foreground mb-4 block">
-              {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </span>
           </motion.div>
 
@@ -341,7 +346,7 @@ export default function DashboardPage() {
             transition={{ duration: 0.8, delay: 0.1 }}
             className="text-display-lg font-bold tracking-tightest mb-6"
           >
-            {getGreeting()}
+            {t(`dashboard.greeting${getGreeting()}`)}
           </motion.h1>
 
           {/* Description */}
@@ -351,7 +356,7 @@ export default function DashboardPage() {
             transition={{ duration: 0.8, delay: 0.2 }}
             className="text-body-lg text-muted-foreground max-w-2xl mx-auto mb-8"
           >
-            {activeAgents} of {totalAgents} agents are working. Your workspace is ready for AI workflows.
+            {activeAgents}/{totalAgents} {t('dashboard.agentsStatus')}
           </motion.p>
 
           {/* Quick actions */}
@@ -368,7 +373,7 @@ export default function DashboardPage() {
                 className="rounded-full px-8 gap-2"
               >
                 <Plus className="h-4 w-4" />
-                New Document
+                {t('dashboard.newDocument')}
               </Button>
             </MagneticButton>
 
@@ -380,7 +385,7 @@ export default function DashboardPage() {
                 className="rounded-full px-8 gap-2 glass-premium border-white/20"
               >
                 <Sparkles className="h-4 w-4" />
-                Ask AI
+                {t('dashboard.askAi')}
               </Button>
             </MagneticButton>
           </motion.div>
@@ -398,7 +403,7 @@ export default function DashboardPage() {
             transition={{ duration: 2, repeat: Infinity }}
             className="flex flex-col items-center gap-2 text-muted-foreground"
           >
-            <span className="text-[10px] uppercase tracking-widest">Scroll</span>
+            <span className="text-[10px] uppercase tracking-widest">{t('dashboard.scroll')}</span>
             <div className="h-8 w-[1px] bg-gradient-to-b from-muted-foreground to-transparent" />
           </motion.div>
         </motion.div>
@@ -410,10 +415,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {/* Stats Cards */}
             {([
-              { label: 'Tasks Completed', value: tasks.filter((task) => task.status === 'done').length, icon: <CheckCircle2 className="h-5 w-5" /> },
-              { label: 'Documents', value: docs.length, icon: <FileText className="h-5 w-5" /> },
-              { label: 'AI Interactions', value: agents.filter((agent) => agent.description !== 'No recent executions').length, icon: <MessageSquare className="h-5 w-5" /> },
-              { label: 'Active Agents', value: activeAgents, suffix: `/${totalAgents}`, icon: <Bot className="h-5 w-5" /> },
+              { label: t('dashboard.statTasksCompleted'), value: tasks.filter((task) => task.status === 'done').length, icon: <CheckCircle2 className="h-5 w-5" /> },
+              { label: t('dashboard.statDocuments'), value: docs.length, icon: <FileText className="h-5 w-5" /> },
+              { label: t('dashboard.statAiInteractions'), value: agents.filter((agent) => agent.description !== t('dashboard.noRecentExecutions')).length, icon: <MessageSquare className="h-5 w-5" /> },
+              { label: t('dashboard.statActiveAgents'), value: activeAgents, suffix: `/${totalAgents}`, icon: <Bot className="h-5 w-5" /> },
             ] as Array<{ label: string; value: number; trend?: string; suffix?: string; icon: ReactNode }>).map((stat, index) => (
               <motion.div
                 key={stat.label}
@@ -465,8 +470,8 @@ export default function DashboardPage() {
         <BentoGrid columns={3} gap="md">
           {/* Agent Activity - Takes 2 rows */}
           <BentoCard
-            title="Agent Activity"
-            subtitle="AI WORKSPACE"
+            title={t('dashboard.bentoAgentActivity')}
+            subtitle={t('dashboard.bentoAiWorkspace')}
             colSpan={1}
             rowSpan={2}
             className="min-h-[500px]"
@@ -478,15 +483,15 @@ export default function DashboardPage() {
               ))}
             </div>
             <Link href="/dashboard/agents" className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              View all agents
+              {t('dashboard.viewAllAgents')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </BentoCard>
 
           {/* Recent Documents */}
           <BentoCard
-            title="Recent Documents"
-            subtitle="WORKSPACE"
+            title={t('dashboard.bentoRecentDocs')}
+            subtitle={t('dashboard.bentoWorkspace')}
             colSpan={2}
             className="min-h-[280px]"
             interactive={false}
@@ -494,9 +499,9 @@ export default function DashboardPage() {
             {docs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8">
                 <FileText className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground mb-4">No documents yet</p>
+                <p className="text-muted-foreground mb-4">{t('dashboard.noDocuments')}</p>
                 <Button size="sm" onClick={() => openModal('createDocument')}>
-                  Create your first doc
+                  {t('dashboard.createFirstDoc')}
                 </Button>
               </div>
             ) : (
@@ -510,8 +515,8 @@ export default function DashboardPage() {
 
           {/* Priority Tasks */}
           <BentoCard
-            title="Priority Tasks"
-            subtitle="TODAY"
+            title={t('dashboard.bentoPriorityTasks')}
+            subtitle={t('dashboard.bentoToday')}
             colSpan={2}
             className="min-h-[280px]"
             interactive={false}
@@ -519,9 +524,9 @@ export default function DashboardPage() {
             {tasks.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8">
                 <ListTodo className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground mb-4">No tasks yet</p>
+                <p className="text-muted-foreground mb-4">{t('dashboard.noTasks')}</p>
                 <Button size="sm" onClick={() => openModal('createTask')}>
-                  Create your first task
+                  {t('dashboard.createFirstTask')}
                 </Button>
               </div>
             ) : (
@@ -535,17 +540,17 @@ export default function DashboardPage() {
 
           {/* Quick Actions */}
           <BentoCard
-            title="Quick Actions"
+            title={t('dashboard.bentoQuickActions')}
             colSpan={1}
             gradient="bg-gradient-to-br from-white/10 to-transparent"
             interactive={false}
           >
             <div className="grid grid-cols-2 gap-3 mt-4">
               {([
-                { icon: <FileText className="h-5 w-5" />, label: 'New Doc', action: 'createDocument' },
-                { icon: <ListTodo className="h-5 w-5" />, label: 'New Task', action: 'createTask' },
-                { icon: <Sparkles className="h-5 w-5" />, label: 'Ask AI', action: 'aiAssistant' },
-                { icon: <MessageSquare className="h-5 w-5" />, label: 'Chat', href: '/dashboard/chat' },
+                { icon: <FileText className="h-5 w-5" />, label: t('dashboard.qaNewDoc'), action: 'createDocument' },
+                { icon: <ListTodo className="h-5 w-5" />, label: t('dashboard.qaNewTask'), action: 'createTask' },
+                { icon: <Sparkles className="h-5 w-5" />, label: t('dashboard.qaAskAi'), action: 'aiAssistant' },
+                { icon: <MessageSquare className="h-5 w-5" />, label: t('dashboard.qaChat'), href: '/dashboard/chat' },
               ] as Array<{
                 icon: ReactNode;
                 label: string;
