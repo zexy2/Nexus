@@ -1443,7 +1443,7 @@ export default function AgentsPage() {
                           </Badge>
                         </div>
                         <h3 className="mt-4 text-base md:text-lg font-semibold text-white">{agent.name}</h3>
-                        <p className="text-xs md:text-sm text-white/50 mt-1">{agent.description}</p>
+                        <p className="text-xs md:text-sm text-white/50 mt-1 line-clamp-2 min-h-[2.5rem]">{agent.description}</p>
                       </div>
                       <div className="p-4 pt-0 md:p-6 md:pt-0">
                         <div className="flex items-center justify-between text-xs md:text-sm pt-3 border-t border-white/5">

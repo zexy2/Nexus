@@ -306,7 +306,7 @@ function SettingsContent() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-4xl mx-auto py-4 md:py-8 px-4 md:px-6">
+        <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
             <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full h-auto gap-1">
               <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">

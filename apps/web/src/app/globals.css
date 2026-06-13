@@ -8,6 +8,10 @@
    Notion-inspired B&W minimalism with premium feel
    =========================================== */
 @theme inline {
+  /* Extra-small breakpoint. The codebase already uses `xs:` utilities (e.g. to
+     reveal settings-tab labels above ~480px); without this declaration Tailwind
+     v4 silently drops them, so those labels never appeared. */
+  --breakpoint-xs: 30rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);

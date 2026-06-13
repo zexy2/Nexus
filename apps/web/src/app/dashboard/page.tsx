@@ -16,6 +16,11 @@ import {
   MessageSquare,
   CheckCircle2,
   ArrowUpRight,
+  BrainCircuit,
+  Search,
+  Code,
+  Kanban,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SkeletonDashboard } from '@/components/shared';
@@ -49,7 +54,7 @@ interface Task {
 interface Agent {
   id: string;
   name: string;
-  avatar: string;
+  icon: LucideIcon;
   status: 'thinking' | 'idle' | 'writing' | 'working';
   description: string;
 }
@@ -106,10 +111,10 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
         {/* Avatar */}
         <div className="relative">
           <div className={cn(
-            'h-12 w-12 rounded-xl flex items-center justify-center text-2xl',
+            'h-12 w-12 rounded-xl flex items-center justify-center',
             isActive ? 'bg-white/10' : 'bg-white/5'
           )}>
-            {agent.avatar}
+            <agent.icon className="h-5 w-5 text-white/80" />
           </div>
           {isActive && (
             <motion.span
@@ -258,12 +263,12 @@ export default function DashboardPage() {
 
         if (executionsRes.ok) {
           const executions = await executionsRes.json() as Execution[];
-          const agentMeta: Record<Execution['agentType'], { name: string; avatar: string }> = {
-            supervisor: { name: 'Supervisor', avatar: '🧠' },
-            researcher: { name: 'Researcher', avatar: '🔍' },
-            writer: { name: 'Writer', avatar: '✍️' },
-            coder: { name: 'Coder', avatar: '💻' },
-            project_manager: { name: 'Task Manager', avatar: '📋' },
+          const agentMeta: Record<Execution['agentType'], { name: string; icon: LucideIcon }> = {
+            supervisor: { name: 'Supervisor', icon: BrainCircuit },
+            researcher: { name: 'Researcher', icon: Search },
+            writer: { name: 'Writer', icon: FileText },
+            coder: { name: 'Coder', icon: Code },
+            project_manager: { name: 'Task Manager', icon: Kanban },
           };
           const latestByAgent = new Map<Execution['agentType'], Execution>();
 
@@ -273,7 +278,7 @@ export default function DashboardPage() {
             }
           }
 
-          const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; avatar: string }]>)
+          const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; icon: LucideIcon }]>)
             .map(([agentType, meta]) => {
               const execution = latestByAgent.get(agentType);
               const status: Agent['status'] =
@@ -283,7 +288,7 @@ export default function DashboardPage() {
               return {
                 id: agentType,
                 name: meta.name,
-                avatar: meta.avatar,
+                icon: meta.icon,
                 status,
                 description: execution
                   ? `${execution.status} • ${formatRelativeTime(execution.createdAt)}`

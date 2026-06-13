@@ -430,11 +430,17 @@ export default function DocDetailPage() {
 
   if (error || !doc) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4">
-        <FileText className="size-16 text-muted-foreground" />
+      <div className="flex flex-col items-center justify-center h-screen gap-3 px-6 text-center">
+        <FileText className="size-16 text-muted-foreground/60" />
         <h2 className="text-xl font-semibold">Document not found</h2>
-        <p className="text-muted-foreground">{error}</p>
-        <Link href="/dashboard/docs">
+        <p className="text-muted-foreground max-w-sm">
+          This document may have been deleted or moved, or the link is no longer
+          valid.
+        </p>
+        {error && error !== "Document not found" && (
+          <p className="text-xs text-muted-foreground/70 max-w-sm">{error}</p>
+        )}
+        <Link href="/dashboard/docs" className="mt-2">
           <Button>Back to Documents</Button>
         </Link>
       </div>
