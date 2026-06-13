@@ -63,7 +63,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter"
+              className="relative text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter"
             >
               {/* Outline layer (always visible) */}
               <span 

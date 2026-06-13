@@ -63,8 +63,9 @@ export const useUIStore = create<UIState>()(
       theme: 'system',
       setTheme: (theme) => set({ theme }),
 
-      // View preferences
-      documentsView: 'grid',
+      // View preferences. Default to the denser list view: doc cards carry only a
+      // title + date, so list scans far better than a sparse grid.
+      documentsView: 'list',
       setDocumentsView: (view) => set({ documentsView: view }),
       tasksView: 'kanban',
       setTasksView: (view) => set({ tasksView: view }),

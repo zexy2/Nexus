@@ -318,7 +318,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen pb-32">
       {/* Hero Section */}
-      <section className="relative min-h-[60vh] flex items-center justify-center px-6 pt-16 pb-24">
+      <section className="relative min-h-[44vh] flex items-center justify-center px-6 pt-12 pb-16">
         {/* Background gradient */}
         <div className="absolute inset-0 dashboard-hero-gradient pointer-events-none" />
 
