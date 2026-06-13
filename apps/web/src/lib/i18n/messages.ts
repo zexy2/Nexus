@@ -287,6 +287,12 @@ export const messages = {
         close: "Kapat",
         execution: "Yürütme",
       },
+      wf: {
+        document: { desc: "AI ajanlarıyla kapsamlı dökümanlar oluşturun", topic: "Konu", format: "Biçim", context: "Ek Bağlam" },
+        research: { desc: "Herhangi bir konuda derinlemesine araştırma yapın", query: "Araştırma Sorgusu", depth: "Araştırma Derinliği", sources: "Tercih Edilen Kaynaklar" },
+        task: { desc: "Karmaşık projeleri uygulanabilir görevlere bölün", goal: "Proje Hedefi", timeline: "Zaman Çizelgesi", requirements: "Gereksinimler" },
+        code: { desc: "En iyi pratiklerle üretime hazır kod üretin", task: "Görev Açıklaması", language: "Dil", context: "Kod Bağlamı" },
+      },
     },
   },
   en: {
@@ -568,6 +574,12 @@ export const messages = {
         copyJson: "Copy JSON",
         close: "Close",
         execution: "Execution",
+      },
+      wf: {
+        document: { desc: "Generate comprehensive documents using AI agents", topic: "Topic", format: "Format", context: "Additional Context" },
+        research: { desc: "Conduct thorough research on any topic", query: "Research Query", depth: "Research Depth", sources: "Preferred Sources" },
+        task: { desc: "Break down complex projects into actionable tasks", goal: "Project Goal", timeline: "Timeline", requirements: "Requirements" },
+        code: { desc: "Generate production-ready code with best practices", task: "Task Description", language: "Language", context: "Code Context" },
       },
     },
   },

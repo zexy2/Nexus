@@ -676,7 +676,7 @@ function WorkflowLauncher({
                       <div>
                         <p className="font-medium text-sm">{cfg.name}</p>
                         <p className="text-xs text-muted-foreground line-clamp-1">
-                          {cfg.description}
+                          {t(`agents.wf.${type}.desc`)}
                         </p>
                       </div>
                     </div>
@@ -688,15 +688,17 @@ function WorkflowLauncher({
 
           {/* Dynamic Form Fields */}
           <div className="space-y-3 border-t pt-4">
-            {config.fields.map((field) => (
+            {config.fields.map((field) => {
+              const fieldLabel = t(`agents.wf.${selectedType}.${field.name}`);
+              return (
               <div key={field.name} className="space-y-1.5">
-                <Label htmlFor={field.name}>{field.label}</Label>
+                <Label htmlFor={field.name}>{fieldLabel}</Label>
                 {field.type === "text" && (
                   <Input
                     id={field.name}
                     value={formData[field.name] || ""}
                     onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                    placeholder={fieldLabel}
                   />
                 )}
                 {field.type === "textarea" && (
@@ -704,7 +706,7 @@ function WorkflowLauncher({
                     id={field.name}
                     value={formData[field.name] || ""}
                     onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                    placeholder={fieldLabel}
                     rows={3}
                   />
                 )}
@@ -714,7 +716,7 @@ function WorkflowLauncher({
                     onValueChange={(value) => setFormData({ ...formData, [field.name]: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                      <SelectValue placeholder={fieldLabel} />
                     </SelectTrigger>
                     <SelectContent>
                       {field.options?.map((option) => (
@@ -726,7 +728,8 @@ function WorkflowLauncher({
                   </Select>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
