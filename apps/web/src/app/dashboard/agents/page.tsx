@@ -450,12 +450,14 @@ function ExecutionDetailDialog({
   open: boolean; 
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   if (!execution) return null;
 
   const agent = AGENT_TYPES.find(a => a.id === execution.agentType);
   const status = statusConfig[execution.status as keyof typeof statusConfig] || statusConfig.pending;
   const StatusIcon = status.icon;
   const AgentIcon = agent?.icon || BrainCircuit;
+  const statusKey = (execution.status in statusConfig ? execution.status : "pending") as keyof typeof statusConfig;
 
   const formatJson = (obj: unknown) => {
     try {
@@ -476,10 +478,10 @@ function ExecutionDetailDialog({
             </div>
             <div>
               <DialogTitle className="flex items-center gap-2">
-                {agent?.name || execution.agentType} Execution
+                {agent?.name || execution.agentType} {t('agents.modal.execution')}
                 <Badge variant="secondary" className={`gap-1 ${status.bg}`}>
                   <StatusIcon className={`size-3 ${status.color} ${execution.status === "running" ? "animate-spin" : ""}`} />
-                  {status.label}
+                  {t(`agents.modal.status${statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}`)}
                 </Badge>
               </DialogTitle>
               <DialogDescription>
@@ -494,26 +496,26 @@ function ExecutionDetailDialog({
             {/* Timing Information */}
             <div className="grid grid-cols-3 gap-4 p-3 bg-muted rounded-lg">
               <div>
-                <p className="text-xs text-muted-foreground">Started</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.started')}</p>
                 <p className="text-sm font-medium">
                   {execution.startedAt ? new Date(execution.startedAt).toLocaleString() : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Completed</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.completed')}</p>
                 <p className="text-sm font-medium">
                   {execution.completedAt ? new Date(execution.completedAt).toLocaleString() : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Duration</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.duration')}</p>
                 <p className="text-sm font-medium">{execution.duration || "-"}</p>
               </div>
             </div>
 
             {/* Input */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Input</Label>
+              <Label className="text-sm font-medium">{t('agents.modal.input')}</Label>
               <pre className="p-3 bg-muted rounded-lg text-sm overflow-x-auto max-h-40">
                 {formatJson(execution.input)}
               </pre>
@@ -524,7 +526,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <Activity className="size-4 text-blue-500" />
-                  Workflow Steps
+                  {t('agents.modal.workflowSteps')}
                 </Label>
                 <div className="space-y-2">
                   {steps.map((step, index) => (
@@ -562,7 +564,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-green-500" />
-                  Output
+                  {t('agents.modal.output')}
                 </Label>
                 <pre className="p-3 bg-green-50 dark:bg-green-950 rounded-lg text-sm overflow-x-auto max-h-60 text-green-800 dark:text-green-200">
                   {formatJson(execution.output)}
@@ -575,7 +577,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <XCircle className="size-4 text-red-500" />
-                  Error
+                  {t('agents.modal.error')}
                 </Label>
                 <pre className="p-3 bg-red-50 dark:bg-red-950 rounded-lg text-sm overflow-x-auto max-h-40 text-red-800 dark:text-red-200">
                   {execution.error}
@@ -590,10 +592,10 @@ function ExecutionDetailDialog({
             navigator.clipboard.writeText(JSON.stringify(execution, null, 2));
           }}>
             <Copy className="size-4 mr-2" />
-            Copy JSON
+            {t('agents.modal.copyJson')}
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t('agents.modal.close')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -640,17 +642,17 @@ function WorkflowLauncher({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="size-5 text-primary" />
-            Launch AI Workflow
+            {t('agents.modal.launchTitle')}
           </DialogTitle>
           <DialogDescription>
-            Start a new AI-powered workflow to accomplish complex tasks
+            {t('agents.modal.launchDesc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Workflow Type Selection */}
           <div className="space-y-2">
-            <Label>Workflow Type</Label>
+            <Label>{t('agents.modal.workflowType')}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(Object.entries(workflowConfig) as [WorkflowType, typeof config][]).map(([type, cfg]) => {
                 const Icon = cfg.icon;
@@ -730,18 +732,18 @@ function WorkflowLauncher({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleLaunch} disabled={isLaunching} className="gap-2">
             {isLaunching ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Launching...
+                {t('agents.modal.launching')}
               </>
             ) : (
               <>
                 <Sparkles className="size-4" />
-                Launch Workflow
+                {t('agents.modal.launchBtn')}
               </>
             )}
           </Button>
@@ -764,6 +766,7 @@ function ActiveWorkflowCard({
   onSaveToDocuments?: (execution: WorkflowExecution) => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const config = workflowConfig[execution.type];
   const Icon = config.icon;
   const status = statusConfig[execution.status];
@@ -858,7 +861,7 @@ ${JSON.stringify(execution.input, null, 2)}
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className={`gap-1.5 rounded-full px-2.5 py-0.5 ${status.bg}`}>
               <StatusIcon className={`size-3 ${status.color}`} />
-              {status.label}
+              {t(`agents.modal.status${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)}
             </Badge>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -869,11 +872,11 @@ ${JSON.stringify(execution.input, null, 2)}
               <DropdownMenuContent align="end" className="glass-premium border-white/10">
                 <DropdownMenuItem className="gap-2">
                   <Eye className="size-4" />
-                  View Details
+                  {t('agents.modal.viewDetails')}
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2">
                   <Copy className="size-4" />
-                  Copy ID
+                  {t('agents.modal.copyId')}
                 </DropdownMenuItem>
                 {execution.status === "completed" && (
                   <>
@@ -883,7 +886,7 @@ ${JSON.stringify(execution.input, null, 2)}
                       onClick={handleSaveToDocuments}
                     >
                       <FileText className="size-4" />
-                      Save to Documents
+                      {t('agents.modal.saveToDocs')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -894,7 +897,7 @@ ${JSON.stringify(execution.input, null, 2)}
                     onClick={() => onCancel(execution.id)}
                   >
                     <XCircle className="size-4" />
-                    Cancel Workflow
+                    {t('agents.modal.cancelWorkflow')}
                   </DropdownMenuItem>
                 )}
                 {(execution.status === "completed" || execution.status === "failed") && onRetry && (
@@ -903,7 +906,7 @@ ${JSON.stringify(execution.input, null, 2)}
                     onClick={() => onRetry(execution)}
                   >
                     <RefreshCw className="size-4" />
-                    Run Again
+                    {t('agents.modal.runAgain')}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -916,7 +919,7 @@ ${JSON.stringify(execution.input, null, 2)}
           <>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{execution.currentStep || "Processing..."}</span>
+                <span className="text-muted-foreground">{execution.currentStep || t('agents.modal.processing')}</span>
                 <span className="font-medium">{execution.progress}%</span>
               </div>
               <Progress value={execution.progress} className="h-2 rounded-full" />
@@ -929,7 +932,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={() => onCancel?.(execution.id)}
               >
                 <XCircle className="size-3.5" />
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </>
@@ -946,7 +949,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={handleSaveToDocuments}
               >
                 <FileText className="size-3.5" />
-                Save to Documents
+                {t('agents.modal.saveToDocs')}
               </Button>
               <Button 
                 variant="outline" 
@@ -955,7 +958,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={() => onRetry?.(execution)}
               >
                 <RefreshCw className="size-3.5" />
-                Run Again
+                {t('agents.modal.runAgain')}
               </Button>
             </div>
           </div>
@@ -963,7 +966,7 @@ ${JSON.stringify(execution.input, null, 2)}
         {execution.status === "failed" && (
           <div className="space-y-3">
             <div className="p-3 bg-red-500/10 rounded-2xl text-sm text-red-400">
-              ✗ {execution.error || "An error occurred"}
+              ✗ {execution.error || t('agents.modal.errorOccurred')}
             </div>
             <Button 
               variant="outline" 
@@ -972,7 +975,7 @@ ${JSON.stringify(execution.input, null, 2)}
               onClick={() => onRetry?.(execution)}
             >
               <RefreshCw className="size-3.5" />
-              Retry
+              {t('agents.modal.retry')}
             </Button>
           </div>
         )}
