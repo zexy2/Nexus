@@ -428,10 +428,7 @@ export default function DashboardPage() {
                 transition={{ delay: index * 0.1 }}
               >
                 <HoverTilt tiltAmount={5}>
-                  <div className="relative p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-colors overflow-hidden group">
-                    {/* Background glow */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
+                  <div className="relative p-6 rounded-2xl bg-card border border-white/10 hover:border-white/20 transition-colors">
                     <div className="relative">
                       <div className="flex items-center justify-between mb-4">
                         <span className="text-caption text-muted-foreground">{stat.label}</span>
