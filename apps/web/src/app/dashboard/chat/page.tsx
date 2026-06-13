@@ -490,7 +490,7 @@ function EmptyState() {
         className="relative mb-8"
       >
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center backdrop-blur-xl">
-          <span className="text-4xl font-bold text-white">N</span>
+          <Sparkles className="h-9 w-9 text-white" />
         </div>
         {/* Glow */}
         <div className="absolute inset-0 rounded-2xl bg-white/10 blur-2xl -z-10" />

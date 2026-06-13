@@ -1365,9 +1365,9 @@ export default function AgentsPage() {
         {/* Content */}
         <section>
           <Tabs defaultValue="agents" className="space-y-6">
-            <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-auto bg-white/[0.03] backdrop-blur-xl rounded-full p-1 border border-white/[0.08]">
-              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">{t('agents.tabAgents')}</TabsTrigger>
-              <TabsTrigger value="workflows" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">
+            <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-auto">
+              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2">{t('agents.tabAgents')}</TabsTrigger>
+              <TabsTrigger value="workflows" className="text-xs sm:text-sm px-4 py-2">
                 {t('agents.tabWorkflows')}
                 {activeWorkflows.filter(w => w.status === "running").length > 0 && (
                   <Badge variant="secondary" className="ml-2 size-5 p-0 justify-center text-xs rounded-full bg-violet-500/20 text-violet-400">
@@ -1375,7 +1375,7 @@ export default function AgentsPage() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">{t('agents.tabHistory')}</TabsTrigger>
+              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2">{t('agents.tabHistory')}</TabsTrigger>
             </TabsList>
 
           {/* Agents Tab */}
