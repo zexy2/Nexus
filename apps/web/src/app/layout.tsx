@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono, Newsreader, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LocaleProvider } from "@/lib/i18n/provider";
 
 // Primary body font - Clean, modern
 const inter = Inter({
@@ -64,7 +65,9 @@ export default function RootLayout({
         className={`${inter.variable} ${geistMono.variable} ${newsreader.variable} ${playfairDisplay.variable} antialiased`}
         suppressHydrationWarning
       >
-        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+        <LocaleProvider>
+          <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+        </LocaleProvider>
       </body>
     </html>
   );
