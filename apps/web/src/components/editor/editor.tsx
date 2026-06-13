@@ -35,7 +35,7 @@ function EditorComponent({ initialContent, onChange, editable = true }: EditorPr
         editor={editor}
         editable={editable}
         onChange={handleChange}
-        theme="light"
+        theme="dark"
         className="py-4"
       />
     </div>
