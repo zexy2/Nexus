@@ -13,6 +13,7 @@ import {
   type LucideIcon 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/provider';
 
 interface StatItem {
   icon: LucideIcon;
@@ -144,7 +145,7 @@ function AnimatedStatCard({
       </div>
 
       {/* Subtle pulse for "In Progress" */}
-      {stat.label === 'Devam Ediyor' && stat.value > 0 && (
+      {index === 2 && stat.value > 0 && (
         <motion.div
           animate={{ 
             scale: [1, 1.5, 1],
@@ -163,6 +164,7 @@ function AnimatedStatCard({
 }
 
 export function StatsOverview({ stats }: StatsOverviewProps) {
+  const t = useT();
   // Monochrome icon tiles — colour is reserved for meaning (the kanban column
   // status dots / priority flags), not decorative stat icons.
   const neutral = {
@@ -171,11 +173,11 @@ export function StatsOverview({ stats }: StatsOverviewProps) {
     glowColor: 'bg-white/10',
   };
   const statItems: StatItem[] = [
-    { icon: ListTodo, value: stats.total, label: 'Toplam', ...neutral },
-    { icon: Circle, value: stats.todo, label: 'Yapılacak', ...neutral },
-    { icon: Clock, value: stats.inProgress, label: 'Devam Ediyor', ...neutral },
-    { icon: CheckCircle2, value: stats.done, label: 'Tamamlandı', ...neutral },
-    { icon: Sparkles, value: stats.aiTasks, label: 'AI Görevleri', ...neutral },
+    { icon: ListTodo, value: stats.total, label: t('tasks.statTotal'), ...neutral },
+    { icon: Circle, value: stats.todo, label: t('tasks.statTodo'), ...neutral },
+    { icon: Clock, value: stats.inProgress, label: t('tasks.statInProgress'), ...neutral },
+    { icon: CheckCircle2, value: stats.done, label: t('tasks.statDone'), ...neutral },
+    { icon: Sparkles, value: stats.aiTasks, label: t('tasks.statAi'), ...neutral },
   ];
 
   return (

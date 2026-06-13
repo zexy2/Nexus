@@ -80,6 +80,8 @@ import {
 } from "@/components/shared";
 import { showToast } from "@/components/shared/toast-provider";
 import { cn } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/format";
+import { useT, useLocale } from "@/lib/i18n/provider";
 
 // Premium Components
 import { TasksBackground } from "./_components/tasks-background";
@@ -197,15 +199,14 @@ function SortableTaskCard({
 
   const isAI = !!task.assigneeAgentType;
   const priority = priorityConfig[task.priority];
+  const t = useT();
+  const { locale } = useLocale();
 
   const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return "Bugün";
-    if (days === 1) return "Dün";
-    if (days < 7) return `${days} gün önce`;
-    return date.toLocaleDateString("tr-TR");
+    const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+    if (days === 0) return t('tasks.today');
+    if (days === 1) return t('tasks.yesterday');
+    return formatRelativeDate(date, locale);
   };
 
   return (
@@ -284,10 +285,10 @@ function SortableTaskCard({
                       )}
                     >
                       <priority.icon className="w-3 h-3" />
-                      {priority.label}
+                      {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>Öncelik: {priority.label}</TooltipContent>
+                  <TooltipContent>{t('tasks.priorityLabel')}: {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
 
@@ -301,7 +302,7 @@ function SortableTaskCard({
                         AI
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent>AI Ajanına atandı</TooltipContent>
+                    <TooltipContent>{t('tasks.aiAssigned')}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
@@ -349,6 +350,7 @@ function SortableTaskCard({
 function TaskCardOverlay({ task }: { task: Task }) {
   const priority = priorityConfig[task.priority];
   const isAI = !!task.assigneeAgentType;
+  const t = useT();
 
   return (
     <div className="glass-premium border-white/20 rounded-2xl p-4 shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black w-[280px]">
@@ -376,7 +378,7 @@ function TaskCardOverlay({ task }: { task: Task }) {
               )}
             >
               <priority.icon className="w-3 h-3" />
-              {priority.label}
+              {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
             </span>
             {isAI && (
               <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
@@ -404,6 +406,7 @@ function KanbanColumn({
   onEdit: (task: Task) => void;
 }) {
   const Icon = column.icon;
+  const t = useT();
   
   // Add droppable to enable dropping tasks on the column itself
   const { setNodeRef, isOver } = useDroppable({
@@ -441,7 +444,7 @@ function KanbanColumn({
           <div className={cn("p-2 rounded-xl", colors.bg, colors.border, "border")}>
             <Icon className={cn("w-4 h-4", colors.icon)} />
           </div>
-          <h3 className="font-semibold text-sm md:text-base">{column.title}</h3>
+          <h3 className="font-semibold text-sm md:text-base">{t(`tasks.col${column.id === 'todo' ? 'Todo' : column.id === 'in_progress' ? 'InProgress' : 'Done'}`)}</h3>
           <span
             className={cn(
               "px-2 py-0.5 rounded-full text-xs font-medium",
@@ -490,7 +493,7 @@ function KanbanColumn({
                 )}
               >
                 <Icon className="w-8 h-8 mb-2 opacity-50" />
-                <p className="text-sm">{isOver ? "Buraya bırak" : "Görev yok"}</p>
+                <p className="text-sm">{isOver ? t('tasks.dropHere') : t('tasks.noTasks')}</p>
               </motion.div>
             )}
           </div>
@@ -502,6 +505,7 @@ function KanbanColumn({
 
 export default function TasksPage() {
   const { engine, userId, workspaceId } = useLocalFirstContext();
+  const t = useT();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Track the in-progress drag so background sync doesn't clobber it.
@@ -563,7 +567,7 @@ export default function TasksPage() {
       console.error("Failed to load tasks:", error);
       // Offline with no cache is the only case the user sees nothing.
       if (!renderedFromCache) {
-        showToast.error("Görevler yüklenemedi");
+        showToast.error(t('tasks.toastLoadFailed'));
         setTasks([]);
       }
     } finally {
@@ -692,7 +696,7 @@ export default function TasksPage() {
             status: targetStatus,
             updatedAt: Date.now(),
           });
-          showToast.success("Görev taşındı");
+          showToast.success(t('tasks.toastMoved'));
           return;
         }
       }
@@ -704,10 +708,10 @@ export default function TasksPage() {
       });
 
       if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
-      showToast.success("Görev taşındı");
+      showToast.success(t('tasks.toastMoved'));
     } catch (error) {
       console.error("Failed to persist task move:", error);
-      showToast.error("Görev taşınamadı");
+      showToast.error(t('tasks.toastMoveFailed'));
       void fetchTasks();
     } finally {
       activeIdRef.current = null;
@@ -723,7 +727,7 @@ export default function TasksPage() {
 
   const handleCreateTask = useCallback(async () => {
     if (!newTask.title.trim()) {
-      showToast.warning("Lütfen görev başlığı girin");
+      showToast.warning(t('tasks.toastEnterTitle'));
       return;
     }
 
@@ -746,7 +750,7 @@ export default function TasksPage() {
         updatedAt: now,
       });
       resetNewTask();
-      showToast.success("Görev oluşturuldu");
+      showToast.success(t('tasks.toastCreated'));
       return;
     }
 
@@ -770,10 +774,10 @@ export default function TasksPage() {
       const created = normalizeTask(await response.json());
       setTasks((prev) => [created, ...prev]);
       resetNewTask();
-      showToast.success("Görev oluşturuldu");
+      showToast.success(t('tasks.toastCreated'));
     } catch (error) {
       console.error("Failed to create task:", error);
-      showToast.error("Görev oluşturulamadı");
+      showToast.error(t('tasks.toastCreateFailed'));
     }
   }, [newTask, engine, workspaceId, userId, resetNewTask]);
 
@@ -793,7 +797,7 @@ export default function TasksPage() {
           updatedAt: Date.now(),
         });
         setEditingTask(null);
-        showToast.success("Görev güncellendi");
+        showToast.success(t('tasks.toastUpdated'));
         return;
       }
     }
@@ -823,10 +827,10 @@ export default function TasksPage() {
         prev.map((t) => (t.id === editingTask.id ? updated : t))
       );
       setEditingTask(null);
-      showToast.success("Görev güncellendi");
+      showToast.success(t('tasks.toastUpdated'));
     } catch (error) {
       console.error("Failed to update task:", error);
-      showToast.error("Görev güncellenemedi");
+      showToast.error(t('tasks.toastUpdateFailed'));
       void fetchTasks();
     }
   }, [editingTask, engine, fetchTasks]);
@@ -839,10 +843,10 @@ export default function TasksPage() {
     if (engine) {
       try {
         await engine.mutate<SyncTask>("tasks", "delete", { id } as SyncTask);
-        showToast.success("Görev silindi");
+        showToast.success(t('tasks.toastDeleted'));
       } catch (error) {
         console.error("Failed to delete task:", error);
-        showToast.error("Görev silinemedi");
+        showToast.error(t('tasks.toastDeleteFailed'));
         setTasks(previousTasks);
       }
       return;
@@ -854,10 +858,10 @@ export default function TasksPage() {
       if (!response.ok) {
         throw new Error(`Failed to delete task: ${response.status}`);
       }
-      showToast.success("Görev silindi");
+      showToast.success(t('tasks.toastDeleted'));
     } catch (error) {
       console.error("Failed to delete task:", error);
-      showToast.error("Görev silinemedi");
+      showToast.error(t('tasks.toastDeleteFailed'));
       setTasks(previousTasks);
     }
   }, [tasks, engine]);
@@ -905,7 +909,7 @@ export default function TasksPage() {
             <div className="relative flex-1 sm:flex-none sm:w-64">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <Input
-                placeholder="Görev ara..."
+                placeholder={t('tasks.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-white/[0.03] border-white/10 rounded-full w-full text-white placeholder:text-white/40"
@@ -924,11 +928,11 @@ export default function TasksPage() {
                 </div>
               </SelectTrigger>
               <SelectContent className="bg-black/90 backdrop-blur-xl border-white/10">
-                <SelectItem value="all">Tümü</SelectItem>
-                <SelectItem value="urgent">Acil</SelectItem>
-                <SelectItem value="high">Yüksek</SelectItem>
-                <SelectItem value="medium">Orta</SelectItem>
-                <SelectItem value="low">Düşük</SelectItem>
+                <SelectItem value="all">{t('tasks.filterAll')}</SelectItem>
+                <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
+                <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
+                <SelectItem value="medium">{t('tasks.prioMedium')}</SelectItem>
+                <SelectItem value="low">{t('tasks.prioLow')}</SelectItem>
               </SelectContent>
             </Select>
           </motion.div>
@@ -974,17 +978,17 @@ export default function TasksPage() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Yeni Görev Oluştur</DialogTitle>
+            <DialogTitle>{t('tasks.dialogCreateTitle')}</DialogTitle>
             <DialogDescription>
-              Kendiniz için veya AI ajanına görev atayın
+              {t('tasks.dialogCreateDesc')}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div>
-              <Label className="text-sm font-medium">Başlık</Label>
+              <Label className="text-sm font-medium">{t('tasks.fieldTitle')}</Label>
               <Input
-                placeholder="Görev başlığı..."
+                placeholder={t('tasks.fieldTitlePlaceholder')}
                 value={newTask.title}
                 onChange={(e) =>
                   setNewTask((prev) => ({ ...prev, title: e.target.value }))
@@ -995,9 +999,9 @@ export default function TasksPage() {
             </div>
 
             <div>
-              <Label className="text-sm font-medium">Açıklama</Label>
+              <Label className="text-sm font-medium">{t('tasks.fieldDesc')}</Label>
               <Textarea
-                placeholder="Görev açıklaması..."
+                placeholder={t('tasks.fieldDescPlaceholder')}
                 value={newTask.description}
                 onChange={(e) =>
                   setNewTask((prev) => ({ ...prev, description: e.target.value }))
@@ -1007,7 +1011,7 @@ export default function TasksPage() {
             </div>
 
             <div>
-              <Label className="text-sm font-medium">Öncelik</Label>
+              <Label className="text-sm font-medium">{t('tasks.fieldPriority')}</Label>
               <Select
                 value={newTask.priority}
                 onValueChange={(value: TaskPriority) =>
@@ -1021,25 +1025,25 @@ export default function TasksPage() {
                   <SelectItem value="low">
                     <span className="flex items-center gap-2">
                       <Flag className="w-4 h-4 text-neutral-400" />
-                      Düşük
+                      {t('tasks.prioLow')}
                     </span>
                   </SelectItem>
                   <SelectItem value="medium">
                     <span className="flex items-center gap-2">
                       <Flag className="w-4 h-4 text-blue-500" />
-                      Orta
+                      {t('tasks.prioMedium')}
                     </span>
                   </SelectItem>
                   <SelectItem value="high">
                     <span className="flex items-center gap-2">
                       <ArrowUpCircle className="w-4 h-4 text-amber-500" />
-                      Yüksek
+                      {t('tasks.prioHigh')}
                     </span>
                   </SelectItem>
                   <SelectItem value="urgent">
                     <span className="flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-500" />
-                      Acil
+                      {t('tasks.prioUrgent')}
                     </span>
                   </SelectItem>
                 </SelectContent>
@@ -1064,21 +1068,21 @@ export default function TasksPage() {
                 className="text-sm flex items-center gap-2 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 text-white/70" />
-                AI Ajanına Ata
+                {t('tasks.assignToAgent')}
               </Label>
             </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-              İptal
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleCreateTask}
               disabled={!newTask.title.trim()}
               className="bg-neutral-900 hover:bg-neutral-800 text-white"
             >
-              Oluştur
+              {t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1088,13 +1092,13 @@ export default function TasksPage() {
       <Dialog open={!!editingTask} onOpenChange={() => setEditingTask(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Görevi Düzenle</DialogTitle>
+            <DialogTitle>{t('tasks.dialogEditTitle')}</DialogTitle>
           </DialogHeader>
 
           {editingTask && (
             <div className="space-y-4 py-4">
               <div>
-                <Label className="text-sm font-medium">Başlık</Label>
+                <Label className="text-sm font-medium">{t('tasks.fieldTitle')}</Label>
                 <Input
                   value={editingTask.title}
                   onChange={(e) =>
@@ -1105,7 +1109,7 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <Label className="text-sm font-medium">Açıklama</Label>
+                <Label className="text-sm font-medium">{t('tasks.fieldDesc')}</Label>
                 <Textarea
                   value={editingTask.description}
                   onChange={(e) =>
@@ -1116,7 +1120,7 @@ export default function TasksPage() {
               </div>
 
               <div>
-                <Label className="text-sm font-medium">Öncelik</Label>
+                <Label className="text-sm font-medium">{t('tasks.fieldPriority')}</Label>
                 <Select
                   value={editingTask.priority}
                   onValueChange={(value: TaskPriority) =>
@@ -1127,16 +1131,16 @@ export default function TasksPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Düşük</SelectItem>
-                    <SelectItem value="medium">Orta</SelectItem>
-                    <SelectItem value="high">Yüksek</SelectItem>
-                    <SelectItem value="urgent">Acil</SelectItem>
+                    <SelectItem value="low">{t('tasks.prioLow')}</SelectItem>
+                    <SelectItem value="medium">{t('tasks.prioMedium')}</SelectItem>
+                    <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
+                    <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label className="text-sm font-medium">Durum</Label>
+                <Label className="text-sm font-medium">{t('tasks.fieldStatus')}</Label>
                 <Select
                   value={editingTask.status}
                   onValueChange={(value: TaskStatus) =>
@@ -1147,9 +1151,9 @@ export default function TasksPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todo">Yapılacak</SelectItem>
-                    <SelectItem value="in_progress">Devam Ediyor</SelectItem>
-                    <SelectItem value="done">Tamamlandı</SelectItem>
+                    <SelectItem value="todo">{t('tasks.colTodo')}</SelectItem>
+                    <SelectItem value="in_progress">{t('tasks.colInProgress')}</SelectItem>
+                    <SelectItem value="done">{t('tasks.colDone')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1158,13 +1162,13 @@ export default function TasksPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingTask(null)}>
-              İptal
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleUpdateTask}
               className="bg-neutral-900 hover:bg-neutral-800 text-white"
             >
-              Kaydet
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
