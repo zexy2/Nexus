@@ -8,6 +8,7 @@ import { signOut, useSession } from '@/lib/auth-client';
 import { useZeroStatus } from '@/lib/sync/zero';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
+import { useT } from '@/lib/i18n/provider';
 import {
   Home,
   ListTodo,
@@ -41,11 +42,11 @@ import { SmoothScrollProvider } from '@/components/animations';
 
 // Navigation items
 const navItems = [
-  { label: 'Home', href: '/dashboard', icon: Home, shortcut: '⌘1' },
-  { label: 'Chat', href: '/dashboard/chat', icon: MessageSquare, shortcut: '⌘2' },
-  { label: 'Tasks', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘3' },
-  { label: 'Docs', href: '/dashboard/docs', icon: FileText, shortcut: '⌘4' },
-  { label: 'Agents', href: '/dashboard/agents', icon: Bot, shortcut: '⌘5' },
+  { key: 'home', href: '/dashboard', icon: Home, shortcut: '⌘1' },
+  { key: 'chat', href: '/dashboard/chat', icon: MessageSquare, shortcut: '⌘2' },
+  { key: 'tasks', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘3' },
+  { key: 'docs', href: '/dashboard/docs', icon: FileText, shortcut: '⌘4' },
+  { key: 'agents', href: '/dashboard/agents', icon: Bot, shortcut: '⌘5' },
 ];
 
 // Sync status types
@@ -55,6 +56,7 @@ type SyncState = 'synced' | 'syncing' | 'offline';
 function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
   const pathname = usePathname();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const t = useT();
 
   return (
     <motion.nav
@@ -108,7 +110,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
             )}
 
             <item.icon className="relative z-10 h-4 w-4" />
-            <span className="relative z-10 hidden md:inline">{item.label}</span>
+            <span className="relative z-10 hidden md:inline">{t(`nav.${item.key}`)}</span>
           </Link>
         );
       })}
@@ -121,6 +123,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
   const pathname = usePathname();
   const router = useRouter();
   const { openModal } = useUIStore();
+  const t = useT();
 
   return (
     <AnimatePresence>
@@ -180,7 +183,7 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
                     )}
                   >
                     <item.icon className="h-5 w-5" />
-                    <span className="font-medium">{item.label}</span>
+                    <span className="font-medium">{t(`nav.${item.key}`)}</span>
                   </Link>
                 );
               })}
@@ -217,6 +220,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
   const { openModal } = useUIStore();
+  const t = useT();
 
   const user = session?.user;
   const userName = user?.name || 'User';
@@ -291,7 +295,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               {syncState === 'synced' && <Cloud className="h-3 w-3" />}
               {syncState === 'syncing' && <RefreshCw className="h-3 w-3 animate-spin" />}
               {syncState === 'offline' && <CloudOff className="h-3 w-3" />}
-              <span className="capitalize">{syncState}</span>
+              <span className="capitalize">{t(`nav.${syncState}`)}</span>
             </motion.div>
           </div>
 
