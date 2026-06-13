@@ -48,43 +48,24 @@ interface PremiumStatCardProps {
   className?: string;
 }
 
+// Monochrome by design: the brand is B&W minimalism, so stat-card icon tiles are
+// all neutral. The `color` prop is kept for API compatibility but every variant
+// resolves to the same neutral treatment — colour is reserved for elements that
+// carry meaning (status, priority), not decorative stat icons.
+const NEUTRAL_STYLE = {
+  text: 'text-white/70',
+  bg: 'bg-white/5',
+  glow: 'bg-white/10',
+  border: 'border-white/10',
+} as const;
+
 const colorConfig = {
-  blue: {
-    text: 'text-blue-400',
-    bg: 'bg-blue-500/10',
-    glow: 'bg-blue-500/20',
-    border: 'border-blue-500/20',
-  },
-  amber: {
-    text: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    glow: 'bg-amber-500/20',
-    border: 'border-amber-500/20',
-  },
-  emerald: {
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    glow: 'bg-emerald-500/20',
-    border: 'border-emerald-500/20',
-  },
-  violet: {
-    text: 'text-violet-400',
-    bg: 'bg-violet-500/10',
-    glow: 'bg-violet-500/20',
-    border: 'border-violet-500/20',
-  },
-  neutral: {
-    text: 'text-white/60',
-    bg: 'bg-white/5',
-    glow: 'bg-white/10',
-    border: 'border-white/10',
-  },
-  rose: {
-    text: 'text-rose-400',
-    bg: 'bg-rose-500/10',
-    glow: 'bg-rose-500/20',
-    border: 'border-rose-500/20',
-  },
+  blue: NEUTRAL_STYLE,
+  amber: NEUTRAL_STYLE,
+  emerald: NEUTRAL_STYLE,
+  violet: NEUTRAL_STYLE,
+  neutral: NEUTRAL_STYLE,
+  rose: NEUTRAL_STYLE,
 };
 
 export function PremiumStatCard({

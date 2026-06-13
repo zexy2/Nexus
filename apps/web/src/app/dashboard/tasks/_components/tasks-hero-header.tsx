@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { gsap } from 'gsap';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/lib/i18n/provider';
 
 interface TasksHeroHeaderProps {
   stats: {
@@ -16,6 +17,7 @@ interface TasksHeroHeaderProps {
 }
 
 export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
+  const t = useT();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const fillRef = useRef<HTMLSpanElement>(null);
 
@@ -53,7 +55,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
             transition={{ duration: 0.6 }}
             className="text-xs md:text-sm font-medium tracking-[0.2em] text-white/40 mb-4 block uppercase"
           >
-            Task Management
+            {t('tasks.label')}
           </motion.span>
 
           {/* Animated Title with Outline + Fill Effect */}
@@ -63,7 +65,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter"
+              className="relative text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter"
             >
               {/* Outline layer (always visible) */}
               <span 
@@ -72,7 +74,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
                   WebkitTextStroke: '1px rgba(255,255,255,0.2)',
                 }}
               >
-                Görevler
+                {t('tasks.title')}
               </span>
               
               {/* Fill layer (animated clip-path) */}
@@ -83,7 +85,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
                   clipPath: 'inset(0 100% 0 0)',
                 }}
               >
-                Görevler
+                {t('tasks.title')}
               </span>
             </motion.h1>
 
@@ -92,7 +94,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1, duration: 1 }}
-              className="absolute -inset-x-10 -inset-y-4 bg-gradient-to-r from-blue-500/10 via-transparent to-emerald-500/10 blur-3xl -z-10"
+              className="absolute -inset-x-10 -inset-y-4 bg-gradient-to-r from-white/10 via-transparent to-white/5 blur-3xl -z-10"
             />
           </div>
 
@@ -103,11 +105,11 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
             transition={{ delay: 0.4 }}
             className="text-base md:text-lg text-white/50"
           >
-            <span className="text-white/70 font-medium">{stats.total}</span> görev 
+            <span className="text-white/70 font-medium">{stats.total}</span> {t('tasks.unitTasks')} 
             <span className="mx-2 text-white/20">•</span>
-            <span className="text-amber-400/80">{stats.inProgress}</span> devam ediyor
+            <span className="text-white/70">{stats.inProgress}</span> {t('tasks.unitInProgress')}
             <span className="mx-2 text-white/20">•</span>
-            <span className="text-violet-400/80">{stats.aiTasks}</span> AI atandı
+            <span className="text-white/70">{stats.aiTasks}</span> {t('tasks.unitAi')}
           </motion.p>
         </div>
 
@@ -122,7 +124,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
             className="gap-2 rounded-full px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
           >
             <Plus className="w-4 h-4" />
-            Yeni Görev
+            {t('tasks.newTask')}
           </Button>
         </motion.div>
       </div>

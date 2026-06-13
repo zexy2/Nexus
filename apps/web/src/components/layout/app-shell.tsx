@@ -130,10 +130,30 @@ function SyncStatusBadge({ state, pendingChanges = 0 }: { state: SyncState; pend
   );
 }
 
-// Animated storage bar
-function StorageBar({ used = 2.4, total = 10 }: { used?: number; total?: number }) {
-  const percentage = (used / total) * 100;
+// Real local storage usage from the Storage API (the browser's estimate of how
+// much this origin's IndexedDB/cache is using). Renders nothing when the
+// browser can't report it, rather than showing a made-up figure.
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function StorageBar() {
   const progressRef = useRef<HTMLDivElement>(null);
+  const [estimate, setEstimate] = useState<{ usage: number; quota: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return;
+    navigator.storage
+      .estimate()
+      .then((e) => setEstimate({ usage: e.usage ?? 0, quota: e.quota ?? 0 }))
+      .catch(() => setEstimate(null));
+  }, []);
+
+  if (!estimate || estimate.quota === 0) return null;
+
+  const percentage = Math.min((estimate.usage / estimate.quota) * 100, 100);
 
   return (
     <div className="space-y-2">
@@ -143,7 +163,7 @@ function StorageBar({ used = 2.4, total = 10 }: { used?: number; total?: number 
           Storage
         </span>
         <span className="font-mono text-muted-foreground">
-          {used.toFixed(1)} / {total} GB
+          {formatBytes(estimate.usage)} / {formatBytes(estimate.quota)}
         </span>
       </div>
       <div className="h-1.5 bg-muted rounded-full overflow-hidden">

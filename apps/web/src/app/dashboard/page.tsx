@@ -16,9 +16,16 @@ import {
   MessageSquare,
   CheckCircle2,
   ArrowUpRight,
+  BrainCircuit,
+  Search,
+  Code,
+  Kanban,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SkeletonDashboard } from '@/components/shared';
+import { formatRelativeDate } from '@/lib/format';
+import { cleanDocTitle } from '@/lib/text';
 import { useUIStore } from '@/lib/store';
 import {
   BentoGrid,
@@ -47,7 +54,7 @@ interface Task {
 interface Agent {
   id: string;
   name: string;
-  avatar: string;
+  icon: LucideIcon;
   status: 'thinking' | 'idle' | 'writing' | 'working';
   description: string;
 }
@@ -60,18 +67,11 @@ interface Execution {
   createdAt: number;
 }
 
-// Format relative time
+// Format relative time — delegates to the shared, locale-aware formatter so the
+// dashboard reads the same as the rest of the app (no more English "6d ago"
+// mixed into a Turkish UI).
 function formatRelativeTime(timestamp: string | number) {
-  const value = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
-  const diff = Date.now() - value;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+  return formatRelativeDate(timestamp, 'tr');
 }
 
 // Get greeting based on time
@@ -111,10 +111,10 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
         {/* Avatar */}
         <div className="relative">
           <div className={cn(
-            'h-12 w-12 rounded-xl flex items-center justify-center text-2xl',
+            'h-12 w-12 rounded-xl flex items-center justify-center',
             isActive ? 'bg-white/10' : 'bg-white/5'
           )}>
-            {agent.avatar}
+            <agent.icon className="h-5 w-5 text-white/80" />
           </div>
           {isActive && (
             <motion.span
@@ -172,7 +172,7 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
           {doc.iconEmoji || '📄'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate group-hover:text-white transition-colors">{doc.title}</p>
+          <p className="font-medium truncate group-hover:text-white transition-colors">{cleanDocTitle(doc.title)}</p>
           <p className="text-xs text-muted-foreground">{formatRelativeTime(doc.updatedAt)}</p>
         </div>
         <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -263,12 +263,12 @@ export default function DashboardPage() {
 
         if (executionsRes.ok) {
           const executions = await executionsRes.json() as Execution[];
-          const agentMeta: Record<Execution['agentType'], { name: string; avatar: string }> = {
-            supervisor: { name: 'Supervisor', avatar: '🧠' },
-            researcher: { name: 'Researcher', avatar: '🔍' },
-            writer: { name: 'Writer', avatar: '✍️' },
-            coder: { name: 'Coder', avatar: '💻' },
-            project_manager: { name: 'Task Manager', avatar: '📋' },
+          const agentMeta: Record<Execution['agentType'], { name: string; icon: LucideIcon }> = {
+            supervisor: { name: 'Supervisor', icon: BrainCircuit },
+            researcher: { name: 'Researcher', icon: Search },
+            writer: { name: 'Writer', icon: FileText },
+            coder: { name: 'Coder', icon: Code },
+            project_manager: { name: 'Task Manager', icon: Kanban },
           };
           const latestByAgent = new Map<Execution['agentType'], Execution>();
 
@@ -278,7 +278,7 @@ export default function DashboardPage() {
             }
           }
 
-          const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; avatar: string }]>)
+          const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; icon: LucideIcon }]>)
             .map(([agentType, meta]) => {
               const execution = latestByAgent.get(agentType);
               const status: Agent['status'] =
@@ -288,7 +288,7 @@ export default function DashboardPage() {
               return {
                 id: agentType,
                 name: meta.name,
-                avatar: meta.avatar,
+                icon: meta.icon,
                 status,
                 description: execution
                   ? `${execution.status} • ${formatRelativeTime(execution.createdAt)}`
@@ -318,7 +318,7 @@ export default function DashboardPage() {
   return (
     <div className="relative min-h-screen pb-32">
       {/* Hero Section */}
-      <section className="relative min-h-[60vh] flex items-center justify-center px-6 pt-16 pb-24">
+      <section className="relative min-h-[44vh] flex items-center justify-center px-6 pt-12 pb-16">
         {/* Background gradient */}
         <div className="absolute inset-0 dashboard-hero-gradient pointer-events-none" />
 

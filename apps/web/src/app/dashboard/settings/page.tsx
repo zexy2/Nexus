@@ -36,7 +36,10 @@ import {
   Loader2,
   Save,
   Upload,
+  Languages,
 } from "lucide-react";
+import { useT, useLocale } from "@/lib/i18n/provider";
+import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
 
 interface SettingsData {
   profile: {
@@ -81,6 +84,8 @@ function SettingsContent() {
   const requestedTab = searchParams.get("tab");
   const defaultTab = requestedTab === "api" ? "ai" : requestedTab || "profile";
   const { data: session } = useSession();
+  const t = useT();
+  const { locale, setLocale } = useLocale();
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -265,7 +270,7 @@ function SettingsContent() {
       <div className="flex flex-col h-screen">
         <header className="flex items-center gap-4 border-b px-6 py-3">
           <SidebarTrigger />
-          <h1 className="text-xl font-semibold">Settings</h1>
+          <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
         </header>
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -280,17 +285,17 @@ function SettingsContent() {
       <header className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 border-b border-border dark:border-neutral-800 px-4 md:px-6 py-3 shrink-0">
         <div className="flex items-center gap-4">
           <SidebarTrigger />
-          <h1 className="text-lg md:text-xl font-semibold">Settings</h1>
+          <h1 className="text-lg md:text-xl font-semibold">{t("settings.title")}</h1>
         </div>
         <div className="ml-0 sm:ml-auto flex items-center gap-2 w-full sm:w-auto">
           {hasChanges() && !saveSuccess && (
-            <span className="text-xs text-amber-600">Unsaved changes</span>
+            <span className="text-xs text-amber-600">{t("common.unsavedChanges")}</span>
           )}
           <Button 
             onClick={handleSave} 
             disabled={isSaving} 
             className="flex-1 sm:flex-none"
-            aria-label="Save Changes"
+            aria-label={t("common.saveChanges")}
           >
             {isSaving ? (
               <Loader2 className="size-4 mr-2 animate-spin" />
@@ -299,35 +304,35 @@ function SettingsContent() {
             ) : (
               <Save className="size-4 mr-2" />
             )}
-            {saveSuccess ? "Saved!" : "Save Changes"}
+            {saveSuccess ? t("common.saved") : t("common.saveChanges")}
           </Button>
         </div>
       </header>
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
-        <div className="w-full max-w-4xl mx-auto py-4 md:py-8 px-4 md:px-6">
+        <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
             <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full h-auto gap-1">
               <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <User className="size-3 md:size-4" />
-                <span className="hidden xs:inline">Profile</span>
+                <span className="hidden xs:inline">{t("settings.tabs.profile")}</span>
               </TabsTrigger>
               <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bot className="size-3 md:size-4" />
-                <span className="hidden xs:inline">AI</span>
+                <span className="hidden xs:inline">{t("settings.tabs.ai")}</span>
               </TabsTrigger>
               <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bell className="size-3 md:size-4" />
-                <span className="hidden xs:inline">Alerts</span>
+                <span className="hidden xs:inline">{t("settings.tabs.notifications")}</span>
               </TabsTrigger>
               <TabsTrigger value="appearance" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Palette className="size-3 md:size-4" />
-                <span className="hidden xs:inline">Theme</span>
+                <span className="hidden xs:inline">{t("settings.tabs.appearance")}</span>
               </TabsTrigger>
               <TabsTrigger value="sync" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Database className="size-3 md:size-4" />
-                <span className="hidden xs:inline">Sync</span>
+                <span className="hidden xs:inline">{t("settings.tabs.sync")}</span>
               </TabsTrigger>
             </TabsList>
 
@@ -335,9 +340,9 @@ function SettingsContent() {
             <TabsContent value="profile">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">Profile Settings</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t("settings.profile.title")}</CardTitle>
                   <CardDescription className="text-xs md:text-sm">
-                    Manage your account information and preferences
+                    {t("settings.profile.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 md:space-y-6 p-4 pt-0 md:p-6 md:pt-0">
@@ -360,10 +365,10 @@ function SettingsContent() {
                         onClick={() => avatarInputRef.current?.click()}
                       >
                         <Upload className="size-3 mr-2" />
-                        <span className="hidden xs:inline">Change</span> Avatar
+                        {t("settings.profile.changeAvatar")}
                       </Button>
                       <p className="text-xs text-muted-foreground hidden sm:block">
-                        JPG, PNG or GIF. Max 2MB
+                        {t("settings.profile.avatarHint")}
                       </p>
                     </div>
                   </div>
@@ -372,7 +377,7 @@ function SettingsContent() {
 
                   <div className="grid gap-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="name" className="text-sm">Display Name</Label>
+                      <Label htmlFor="name" className="text-sm">{t("settings.profile.displayName")}</Label>
                       <Input
                         id="name"
                         value={name}
@@ -381,7 +386,7 @@ function SettingsContent() {
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="email" className="text-sm">Email</Label>
+                      <Label htmlFor="email" className="text-sm">{t("settings.profile.email")}</Label>
                       <Input
                         id="email"
                         type="email"
@@ -390,7 +395,7 @@ function SettingsContent() {
                         className="bg-muted text-sm"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Email cannot be changed. Contact support for assistance.
+                        {t("settings.profile.emailHint")}
                       </p>
                     </div>
                   </div>
@@ -402,15 +407,15 @@ function SettingsContent() {
             <TabsContent value="ai">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">AI Configuration</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t("settings.ai.title")}</CardTitle>
                   <CardDescription className="text-xs md:text-sm">
-                    Configure AI models and behavior
+                    {t("settings.ai.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 md:space-y-6 p-4 pt-0 md:p-6 md:pt-0">
                   <div className="grid gap-4">
                     <div className="grid gap-2">
-                      <Label className="text-sm">Default AI Model</Label>
+                      <Label className="text-sm">{t("settings.ai.defaultModel")}</Label>
                       <Select
                         value={defaultModel}
                         onValueChange={(value) => {
@@ -447,7 +452,7 @@ function SettingsContent() {
                                   )}
                                   {!available && (
                                     <Badge variant="outline" className="text-xs text-muted-foreground">
-                                      Not configured
+                                      {t("settings.ai.notConfigured")}
                                     </Badge>
                                   )}
                                 </div>
@@ -458,7 +463,7 @@ function SettingsContent() {
                       </Select>
 	                      {availableModels.length === 0 && (
 	                        <p className="text-xs text-amber-600">
-	                          No server-managed AI providers are configured. Ask an administrator to set a provider secret.
+	                          {t("settings.ai.noProviders")}
 	                        </p>
 	                      )}
 	                    </div>
@@ -466,28 +471,28 @@ function SettingsContent() {
                     <div className="rounded-lg border p-4 dark:border-neutral-700">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="text-sm font-medium">Server-managed Gemini</p>
+                          <p className="text-sm font-medium">{t("settings.ai.serverManaged")}</p>
                           <p className="text-xs text-muted-foreground">
-                            AI access is controlled by the demo server. No personal API key is required.
+                            {t("settings.ai.serverManagedHint")}
                           </p>
                         </div>
                         <Badge variant={serverGeminiAvailable ? "secondary" : "outline"}>
-                          {serverGeminiAvailable ? "Available" : "Unavailable"}
+                          {serverGeminiAvailable ? t("settings.ai.available") : t("settings.ai.unavailable")}
                         </Badge>
                       </div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-md bg-muted/60 p-3">
-                          <p className="text-xs text-muted-foreground">Workflow quota</p>
-                          <p className="text-sm font-semibold">{usageLimits.workflowsPerDay}/day</p>
+                          <p className="text-xs text-muted-foreground">{t("settings.ai.workflowQuota")}</p>
+                          <p className="text-sm font-semibold">{usageLimits.workflowsPerDay}{t("settings.ai.perDay")}</p>
                         </div>
                         <div className="rounded-md bg-muted/60 p-3">
-                          <p className="text-xs text-muted-foreground">Chat quota</p>
-                          <p className="text-sm font-semibold">{usageLimits.chatMessagesPerDay}/day</p>
+                          <p className="text-xs text-muted-foreground">{t("settings.ai.chatQuota")}</p>
+                          <p className="text-sm font-semibold">{usageLimits.chatMessagesPerDay}{t("settings.ai.perDay")}</p>
                         </div>
                       </div>
                       {!serverGeminiAvailable && (
                         <p className="mt-3 text-xs text-amber-600">
-                          AI is temporarily unavailable until the server Gemini key is configured.
+                          {t("settings.ai.unavailableNotice")}
                         </p>
                       )}
                     </div>
@@ -495,13 +500,13 @@ function SettingsContent() {
                     <Separator />
 
                     <div className="space-y-4">
-                      <h4 className="text-sm font-medium">Agent Behavior</h4>
+                      <h4 className="text-sm font-medium">{t("settings.ai.agentBehavior")}</h4>
                       
                       <div className="flex items-center justify-between">
                         <div>
-                          <Label>Auto-save AI outputs</Label>
+                          <Label>{t("settings.ai.autoSave")}</Label>
                           <p className="text-xs text-muted-foreground">
-                            Automatically save documents created by agents
+                            {t("settings.ai.autoSaveHint")}
                           </p>
                         </div>
                         <Switch
@@ -519,17 +524,17 @@ function SettingsContent() {
             <TabsContent value="notifications">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">Notifications</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t("settings.notifications.title")}</CardTitle>
                   <CardDescription className="text-xs md:text-sm">
-                    Configure how you receive notifications
+                    {t("settings.notifications.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 p-4 pt-0 md:p-6 md:pt-0">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <Label className="text-sm">Email Notifications</Label>
+                      <Label className="text-sm">{t("settings.notifications.email")}</Label>
                       <p className="text-xs text-muted-foreground">
-                        Receive updates via email
+                        {t("settings.notifications.emailHint")}
                       </p>
                     </div>
                     <Switch
@@ -542,9 +547,9 @@ function SettingsContent() {
 
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <Label className="text-sm">Agent Notifications</Label>
+                      <Label className="text-sm">{t("settings.notifications.agent")}</Label>
                       <p className="text-xs text-muted-foreground">
-                        Get notified when agents complete tasks
+                        {t("settings.notifications.agentHint")}
                       </p>
                     </div>
                     <Switch
@@ -557,9 +562,9 @@ function SettingsContent() {
 
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <Label className="text-sm">Task Reminders</Label>
+                      <Label className="text-sm">{t("settings.notifications.reminders")}</Label>
                       <p className="text-xs text-muted-foreground">
-                        Remind me about upcoming deadlines
+                        {t("settings.notifications.remindersHint")}
                       </p>
                     </div>
                     <Switch
@@ -575,23 +580,40 @@ function SettingsContent() {
             <TabsContent value="appearance">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">Appearance</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t("settings.appearance.title")}</CardTitle>
                   <CardDescription className="text-xs md:text-sm">
-                    Customize the look and feel
+                    {t("settings.appearance.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 md:space-y-6 p-4 pt-0 md:p-6 md:pt-0">
                   <div className="grid gap-4">
                     <div className="grid gap-2">
-                      <Label className="text-sm">Theme</Label>
+                      <Label className="text-sm">{t("settings.appearance.theme")}</Label>
                       <Select value={theme} onValueChange={setTheme}>
                         <SelectTrigger className="text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="light">Light</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="system">System</SelectItem>
+                          <SelectItem value="light">{t("settings.appearance.themeLight")}</SelectItem>
+                          <SelectItem value="dark">{t("settings.appearance.themeDark")}</SelectItem>
+                          <SelectItem value="system">{t("settings.appearance.themeSystem")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label className="text-sm flex items-center gap-2">
+                        <Languages className="size-4" />
+                        {t("settings.appearance.language")}
+                      </Label>
+                      <Select value={locale} onValueChange={(v) => setLocale(v as typeof locale)}>
+                        <SelectTrigger className="text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LOCALES.map((l) => (
+                            <SelectItem key={l} value={l}>{LOCALE_LABELS[l]}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -600,9 +622,9 @@ function SettingsContent() {
 
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0">
-                        <Label className="text-sm">Compact Mode</Label>
+                        <Label className="text-sm">{t("settings.appearance.compact")}</Label>
                         <p className="text-xs text-muted-foreground">
-                          Reduce spacing and padding
+                          {t("settings.appearance.compactHint")}
                         </p>
                       </div>
                       <Switch
@@ -619,28 +641,27 @@ function SettingsContent() {
             <TabsContent value="sync">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">Sync & Storage</CardTitle>
+                  <CardTitle className="text-base md:text-lg">{t("settings.sync.title")}</CardTitle>
                   <CardDescription className="text-xs md:text-sm">
-                    Configure local-first sync settings
+                    {t("settings.sync.description")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 md:space-y-6 p-4 pt-0 md:p-6 md:pt-0">
                   <div className="p-3 md:p-4 rounded-lg border dark:border-neutral-700 bg-muted/30 dark:bg-neutral-700/30 space-y-2">
                     <div className="flex items-center gap-2">
                       <Database className="size-4 md:size-5 text-primary" />
-                      <span className="font-medium text-sm md:text-base">Local-First Architecture</span>
+                      <span className="font-medium text-sm md:text-base">{t("settings.sync.localFirst")}</span>
                     </div>
                     <p className="text-xs md:text-sm text-muted-foreground">
-                      Your data is stored locally first, then synced to the cloud.
-                      This ensures fast performance and offline capability.
+                      {t("settings.sync.localFirstHint")}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <Label className="text-sm">Offline Mode</Label>
+                      <Label className="text-sm">{t("settings.sync.offlineMode")}</Label>
                       <p className="text-xs text-muted-foreground">
-                        Work without internet connection
+                        {t("settings.sync.offlineModeHint")}
                       </p>
                     </div>
                     <Switch
@@ -652,16 +673,16 @@ function SettingsContent() {
                   <Separator />
 
                   <div className="grid gap-2">
-                    <Label className="text-sm">Sync Frequency</Label>
+                    <Label className="text-sm">{t("settings.sync.frequency")}</Label>
                     <Select value={syncFrequency} onValueChange={setSyncFrequency}>
                       <SelectTrigger className="text-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="realtime">Real-time</SelectItem>
-                        <SelectItem value="5min">Every 5 minutes</SelectItem>
-                        <SelectItem value="15min">Every 15 minutes</SelectItem>
-                        <SelectItem value="manual">Manual only</SelectItem>
+                        <SelectItem value="realtime">{t("settings.sync.frequencyRealtime")}</SelectItem>
+                        <SelectItem value="5min">{t("settings.sync.frequency5min")}</SelectItem>
+                        <SelectItem value="15min">{t("settings.sync.frequency15min")}</SelectItem>
+                        <SelectItem value="manual">{t("settings.sync.frequencyManual")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -669,7 +690,7 @@ function SettingsContent() {
                   <Separator />
 
                   <div className="space-y-2">
-                    <Label className="text-sm">Storage Usage</Label>
+                    <Label className="text-sm">{t("settings.sync.storageUsage")}</Label>
                     <div className="flex items-center gap-3 md:gap-4">
                       <div className="flex-1 h-2 rounded-full bg-muted dark:bg-neutral-700 overflow-hidden">
                         <div

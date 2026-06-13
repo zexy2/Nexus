@@ -61,6 +61,9 @@ import {
 import { showToast } from "@/components/shared/toast-provider";
 import { useUIStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/format";
+import { cleanDocTitle } from "@/lib/text";
+import { useT, useLocale } from "@/lib/i18n/provider";
 import Link from "next/link";
 
 // Document type
@@ -120,19 +123,10 @@ function DocumentCard({
   onToggleFavorite: (id: string) => void;
 }) {
   const [isHovered, setIsHovered] = useState(false);
-
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (minutes < 60) return `${minutes} dakika önce`;
-    if (hours < 24) return `${hours} saat önce`;
-    if (days < 7) return `${days} gün önce`;
-    return date.toLocaleDateString("tr-TR");
-  };
+  const t = useT();
+  const { locale } = useLocale();
+  const formatDate = (date: Date) => formatRelativeDate(date, locale);
+  const displayTitle = cleanDocTitle(doc.title);
 
   if (viewMode === "list") {
     return (
@@ -158,13 +152,13 @@ function DocumentCard({
               href={`/dashboard/docs/${doc.id}`}
               className="font-medium hover:underline truncate"
             >
-              {doc.title}
+              {displayTitle}
             </Link>
             {doc.isFavorite && (
-              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />
+              <Star className="w-3.5 h-3.5 text-white fill-white flex-shrink-0" />
             )}
             {doc.isAI && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full flex-shrink-0">
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-xs rounded-full flex-shrink-0">
                 <Sparkles className="w-3 h-3" />
                 AI
               </span>
@@ -220,7 +214,7 @@ function DocumentCard({
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {doc.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle"}
+                    {doc.isFavorite ? t('docs.favRemove') : t('docs.favAdd')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -238,7 +232,7 @@ function DocumentCard({
                       className="flex items-center gap-2"
                     >
                       <Eye className="w-4 h-4" />
-                      Görüntüle
+                      {t('common.view')}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
@@ -247,7 +241,7 @@ function DocumentCard({
                       className="flex items-center gap-2"
                     >
                       <Edit3 className="w-4 h-4" />
-                      Düzenle
+                      {t('common.edit')}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -256,14 +250,14 @@ function DocumentCard({
                     className="flex items-center gap-2"
                   >
                     <Copy className="w-4 h-4" />
-                    Çoğalt
+                    {t('common.duplicate')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => onArchive(doc.id)}
                     className="flex items-center gap-2"
                   >
                     <Archive className="w-4 h-4" />
-                    Arşivle
+                    {t('common.archive')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -271,7 +265,7 @@ function DocumentCard({
                     className="flex items-center gap-2 text-red-600 focus:text-red-600"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Sil
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -299,7 +293,7 @@ function DocumentCard({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isHovered ? 1 : 0 }}
-        className="absolute inset-0 -z-10 blur-2xl bg-blue-500/10 transition-opacity duration-500"
+        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-500"
       />
 
       {/* Gradient border on hover */}
@@ -313,7 +307,7 @@ function DocumentCard({
           className="absolute top-4 right-4 z-10"
           animate={{ scale: isHovered ? 1.1 : 1 }}
         >
-          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+          <Star className="w-4 h-4 text-white fill-white" />
         </motion.div>
       )}
 
@@ -326,7 +320,7 @@ function DocumentCard({
 
         {/* Title */}
         <h3 className="font-semibold mb-2 line-clamp-2 group-hover:text-white/80 transition-colors">
-          {doc.title}
+          {displayTitle}
         </h3>
 
         {/* Preview text */}
@@ -347,9 +341,9 @@ function DocumentCard({
       <div className="px-5 pb-5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {doc.isAI && (
-            <span className="flex items-center gap-1 px-2 py-1 bg-violet-500/20 text-violet-400 text-xs rounded-full">
+            <span className="flex items-center gap-1 px-2 py-1 bg-white/10 text-white/70 text-xs rounded-full">
               <Sparkles className="w-3 h-3" />
-              AI Oluşturdu
+              {t('docs.aiBadge')}
             </span>
           )}
           {doc.tags && doc.tags.length > 0 && (
@@ -391,7 +385,7 @@ function DocumentCard({
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {doc.isFavorite ? "Favorilerden çıkar" : "Favorilere ekle"}
+                      {doc.isFavorite ? t('docs.favRemove') : t('docs.favAdd')}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -411,7 +405,7 @@ function DocumentCard({
                         <Copy className="w-4 h-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Çoğalt</TooltipContent>
+                    <TooltipContent>{t('common.duplicate')}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
@@ -433,7 +427,7 @@ function DocumentCard({
                     className="flex items-center gap-2"
                   >
                     <Archive className="w-4 h-4" />
-                    Arşivle
+                    {t('common.archive')}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -441,7 +435,7 @@ function DocumentCard({
                     className="flex items-center gap-2 text-red-600 focus:text-red-600"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Sil
+                    {t('common.delete')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -466,6 +460,7 @@ export default function DocsPage() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const { documentsView, setDocumentsView } = useUIStore();
+  const t = useT();
 
   // Fetch documents: local-first (instant cache + offline), then refresh online.
   const fetchDocuments = useCallback(async () => {
@@ -557,7 +552,7 @@ export default function DocsPage() {
   // Handlers
   const handleCreateDocument = useCallback(async () => {
     if (!newDocTitle.trim()) {
-      showToast.warning("Lütfen döküman adı girin");
+      showToast.warning(t('docs.toastEnterName'));
       return;
     }
 
@@ -578,7 +573,7 @@ export default function DocsPage() {
       setNewDocTitle("");
       setNewDocEmoji("📄");
       setIsCreateOpen(false);
-      showToast.success("Döküman oluşturuldu");
+      showToast.success(t('docs.toastCreated'));
       return;
     }
 
@@ -615,10 +610,10 @@ export default function DocsPage() {
       setNewDocTitle("");
       setNewDocEmoji("📄");
       setIsCreateOpen(false);
-      showToast.success("Döküman oluşturuldu");
+      showToast.success(t('docs.toastCreated'));
     } catch (error) {
       console.error("Failed to create document:", error);
-      showToast.error("Döküman oluşturulamadı");
+      showToast.error(t('docs.toastCreateFailed'));
     } finally {
       setIsCreating(false);
     }
@@ -626,7 +621,7 @@ export default function DocsPage() {
 
   const handleDuplicate = useCallback(async (id: string) => {
     if (!(engine && workspaceId && userId)) {
-      showToast.error("Çoğaltma için bağlantı bekleniyor");
+      showToast.error(t('docs.toastDupWaiting'));
       return;
     }
     const source = await engine.get<SyncDoc>("docs", id);
@@ -643,7 +638,7 @@ export default function DocsPage() {
       createdAt: now,
       updatedAt: now,
     });
-    showToast.success("Döküman çoğaltıldı");
+    showToast.success(t('docs.toastDuplicated'));
   }, [engine, workspaceId, userId]);
 
   // Soft-delete/archive: mark the doc archived locally and queue the sync. This
@@ -664,12 +659,12 @@ export default function DocsPage() {
 
   const handleArchive = useCallback(async (id: string) => {
     await archiveDoc(id);
-    showToast.info("Döküman arşivlendi");
+    showToast.info(t('docs.toastArchived'));
   }, [archiveDoc]);
 
   const handleDelete = useCallback(async (id: string) => {
     await archiveDoc(id);
-    showToast.success("Döküman silindi");
+    showToast.success(t('docs.toastDeleted'));
   }, [archiveDoc]);
 
   const handleToggleFavorite = useCallback((id: string) => {
@@ -696,15 +691,15 @@ export default function DocsPage() {
       <div className="relative z-10 px-4 md:px-6 lg:px-8">
         {/* Premium Hero Header */}
         <PremiumHeroHeader
-          label="DOCUMENT MANAGEMENT"
-          title="Dökümanlar"
+          label={t('docs.label')}
+          title={t('docs.title')}
           description={
             <>
-              <span className="text-white/70 font-medium">{stats.total}</span> döküman
+              <span className="text-white/70 font-medium">{stats.total}</span> {t('docs.unitDocs')}
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-amber-400/80">{stats.favorites}</span> favori
+              <span className="text-white/70">{stats.favorites}</span> {t('docs.unitFavorites')}
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-violet-400/80">{stats.aiGenerated}</span> AI oluşturdu
+              <span className="text-white/70">{stats.aiGenerated}</span> {t('docs.unitAi')}
             </>
           }
           action={
@@ -713,7 +708,7 @@ export default function DocsPage() {
               className="gap-2 rounded-full px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
             >
               <Plus className="w-4 h-4" />
-              Yeni Döküman
+              {t('docs.newDoc')}
             </Button>
           }
         />
@@ -724,21 +719,21 @@ export default function DocsPage() {
             <PremiumStatCard
               icon={FileText}
               value={stats.total}
-              label="Toplam Döküman"
+              label={t('docs.statTotal')}
               color="blue"
               delay={0.2}
             />
             <PremiumStatCard
               icon={Star}
               value={stats.favorites}
-              label="Favori"
+              label={t('docs.statFavorites')}
               color="amber"
               delay={0.28}
             />
             <PremiumStatCard
               icon={Sparkles}
               value={stats.aiGenerated}
-              label="AI Oluşturdu"
+              label={t('docs.statAi')}
               color="violet"
               delay={0.36}
             />
@@ -757,7 +752,7 @@ export default function DocsPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <Input
-                placeholder="Döküman ara..."
+                placeholder={t('docs.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 bg-white/[0.03] border-white/10 rounded-full w-full text-white placeholder:text-white/40"
@@ -783,7 +778,7 @@ export default function DocsPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    {showFavoritesOnly ? "Tümünü göster" : "Sadece favoriler"}
+                    {showFavoritesOnly ? t('docs.showAll') : t('docs.onlyFavorites')}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -793,7 +788,7 @@ export default function DocsPage() {
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2 rounded-full border-white/20">
                     <SortAsc className="w-4 h-4" />
-                    Sırala
+                    {t('docs.sort')}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48 bg-black/90 backdrop-blur-xl border-white/10">
@@ -802,28 +797,28 @@ export default function DocsPage() {
                     className={cn(sortBy === "updated" && "bg-white/10")}
                   >
                     <Clock className="w-4 h-4 mr-2" />
-                    Son güncellenen
+                    {t('docs.sortUpdated')}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setSortBy("created")}
                     className={cn(sortBy === "created" && "bg-white/10")}
                   >
                     <Calendar className="w-4 h-4 mr-2" />
-                    Oluşturulma tarihi
+                    {t('docs.sortCreated')}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setSortBy("title")}
                   className={cn(sortBy === "title" && "bg-white/10")}
                 >
                   <SortAsc className="w-4 h-4 mr-2" />
-                  Başlık (A-Z)
+                  {t('docs.sortTitle')}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setSortBy("favorite")}
                   className={cn(sortBy === "favorite" && "bg-white/10")}
                 >
                   <Star className="w-4 h-4 mr-2" />
-                  Favoriler önce
+                  {t('docs.sortFavorite')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -845,7 +840,7 @@ export default function DocsPage() {
                       <Grid3X3 className="w-4 h-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Izgara görünümü</TooltipContent>
+                  <TooltipContent>{t('docs.gridView')}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
 
@@ -864,7 +859,7 @@ export default function DocsPage() {
                       <List className="w-4 h-4" />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>Liste görünümü</TooltipContent>
+                  <TooltipContent>{t('docs.listView')}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
@@ -880,20 +875,20 @@ export default function DocsPage() {
             searchQuery ? (
               <EmptyState
                 type="search"
-                title="Sonuç bulunamadı"
-                description={`"${searchQuery}" araması için döküman bulunamadı`}
+                title={t('docs.searchEmptyTitle')}
+                description={`"${searchQuery}"`}
                 action={{
-                  label: "Aramayı temizle",
+                  label: t('docs.clearSearch'),
                   onClick: () => setSearchQuery(""),
                 }}
               />
             ) : (
               <EmptyState
                 type="documents"
-              title="Henüz döküman yok"
-              description="İlk dökümanınızı oluşturarak başlayın"
+              title={t('docs.emptyTitle')}
+              description={t('docs.emptyDesc')}
               action={{
-                label: "Yeni Döküman",
+                label: t('docs.newDoc'),
                 onClick: () => setIsCreateOpen(true),
                 icon: <Plus className="w-4 h-4" />,
               }}
@@ -941,8 +936,8 @@ export default function DocsPage() {
 
             {/* Results count */}
             <div className="mt-6 text-center text-sm text-white/40">
-              {filteredDocuments.length} döküman gösteriliyor
-              {showFavoritesOnly && " (sadece favoriler)"}
+              {filteredDocuments.length} {t('docs.shown')}
+              {showFavoritesOnly && ` ${t('docs.onlyFavoritesSuffix')}`}
             </div>
           </motion.div>
         )}
@@ -953,9 +948,9 @@ export default function DocsPage() {
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="sm:max-w-md bg-black/90 backdrop-blur-xl border-white/10">
           <DialogHeader>
-            <DialogTitle>Yeni Döküman Oluştur</DialogTitle>
+            <DialogTitle>{t('docs.dialogTitle')}</DialogTitle>
             <DialogDescription>
-              Dökümanınız için bir başlık ve ikon seçin
+              {t('docs.dialogDesc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -963,7 +958,7 @@ export default function DocsPage() {
             {/* Emoji picker */}
             <div>
               <label className="text-sm font-medium mb-2 block">
-                İkon
+                {t('docs.iconLabel')}
               </label>
               <div className="flex flex-wrap gap-2 p-3 bg-white/5 rounded-2xl max-h-32 overflow-y-auto">
                 {emojiOptions.map((emoji) => (
@@ -986,12 +981,12 @@ export default function DocsPage() {
             {/* Title input */}
             <div>
               <label className="text-sm font-medium mb-2 block">
-                Başlık
+                {t('docs.titleLabel')}
               </label>
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{newDocEmoji}</span>
                 <Input
-                  placeholder="Döküman başlığı..."
+                  placeholder={t('docs.titlePlaceholder')}
                   value={newDocTitle}
                   onChange={(e) => setNewDocTitle(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreateDocument()}
@@ -1004,13 +999,13 @@ export default function DocsPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateOpen(false)} className="rounded-full border-white/20">
-              İptal
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleCreateDocument}
               className="rounded-full"
             >
-              Oluştur
+              {t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>

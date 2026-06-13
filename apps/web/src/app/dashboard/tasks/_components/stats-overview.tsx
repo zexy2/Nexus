@@ -13,6 +13,7 @@ import {
   type LucideIcon 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n/provider';
 
 interface StatItem {
   icon: LucideIcon;
@@ -144,7 +145,7 @@ function AnimatedStatCard({
       </div>
 
       {/* Subtle pulse for "In Progress" */}
-      {stat.label === 'Devam Ediyor' && stat.value > 0 && (
+      {index === 2 && stat.value > 0 && (
         <motion.div
           animate={{ 
             scale: [1, 1.5, 1],
@@ -155,7 +156,7 @@ function AnimatedStatCard({
             repeat: Infinity,
             ease: 'easeInOut',
           }}
-          className="absolute top-3 right-3 w-2 h-2 rounded-full bg-amber-400"
+          className="absolute top-3 right-3 w-2 h-2 rounded-full bg-white/60"
         />
       )}
     </motion.div>
@@ -163,47 +164,20 @@ function AnimatedStatCard({
 }
 
 export function StatsOverview({ stats }: StatsOverviewProps) {
+  const t = useT();
+  // Monochrome icon tiles — colour is reserved for meaning (the kanban column
+  // status dots / priority flags), not decorative stat icons.
+  const neutral = {
+    color: 'text-white/70',
+    bg: 'bg-white/5',
+    glowColor: 'bg-white/10',
+  };
   const statItems: StatItem[] = [
-    { 
-      icon: ListTodo, 
-      value: stats.total, 
-      label: 'Toplam', 
-      color: 'text-blue-400', 
-      bg: 'bg-blue-500/10',
-      glowColor: 'bg-blue-500/20',
-    },
-    { 
-      icon: Circle, 
-      value: stats.todo, 
-      label: 'Yapılacak', 
-      color: 'text-white/60', 
-      bg: 'bg-white/5',
-      glowColor: 'bg-white/10',
-    },
-    { 
-      icon: Clock, 
-      value: stats.inProgress, 
-      label: 'Devam Ediyor', 
-      color: 'text-amber-400', 
-      bg: 'bg-amber-500/10',
-      glowColor: 'bg-amber-500/20',
-    },
-    { 
-      icon: CheckCircle2, 
-      value: stats.done, 
-      label: 'Tamamlandı', 
-      color: 'text-emerald-400', 
-      bg: 'bg-emerald-500/10',
-      glowColor: 'bg-emerald-500/20',
-    },
-    { 
-      icon: Sparkles, 
-      value: stats.aiTasks, 
-      label: 'AI Görevleri', 
-      color: 'text-violet-400', 
-      bg: 'bg-violet-500/10',
-      glowColor: 'bg-violet-500/20',
-    },
+    { icon: ListTodo, value: stats.total, label: t('tasks.statTotal'), ...neutral },
+    { icon: Circle, value: stats.todo, label: t('tasks.statTodo'), ...neutral },
+    { icon: Clock, value: stats.inProgress, label: t('tasks.statInProgress'), ...neutral },
+    { icon: CheckCircle2, value: stats.done, label: t('tasks.statDone'), ...neutral },
+    { icon: Sparkles, value: stats.aiTasks, label: t('tasks.statAi'), ...neutral },
   ];
 
   return (

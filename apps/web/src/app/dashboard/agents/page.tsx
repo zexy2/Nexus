@@ -73,6 +73,7 @@ import {
   Cpu,
   Layers,
 } from "lucide-react";
+import { useT } from "@/lib/i18n/provider";
 
 // Workflow types
 type WorkflowType = "document" | "research" | "task" | "code";
@@ -101,7 +102,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Document Generation",
     description: "Generate comprehensive documents using AI agents",
     icon: FileText,
-    color: "bg-emerald-500",
+    color: "bg-white/10",
     fields: [
       { name: "topic", label: "Topic", type: "text" },
       { name: "format", label: "Format", type: "select", options: ["report", "article", "documentation", "proposal"] },
@@ -112,7 +113,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Deep Research",
     description: "Conduct thorough research on any topic",
     icon: Search,
-    color: "bg-blue-500",
+    color: "bg-white/10",
     fields: [
       { name: "query", label: "Research Query", type: "text" },
       { name: "depth", label: "Research Depth", type: "select", options: ["quick", "standard", "deep", "comprehensive"] },
@@ -123,7 +124,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Task Breakdown",
     description: "Break down complex projects into actionable tasks",
     icon: Kanban,
-    color: "bg-orange-500",
+    color: "bg-white/10",
     fields: [
       { name: "goal", label: "Project Goal", type: "text" },
       { name: "timeline", label: "Timeline", type: "select", options: ["1 week", "2 weeks", "1 month", "3 months"] },
@@ -134,7 +135,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Code Generation",
     description: "Generate production-ready code with best practices",
     icon: Code,
-    color: "bg-purple-500",
+    color: "bg-white/10",
     fields: [
       { name: "task", label: "Task Description", type: "textarea" },
       { name: "language", label: "Language", type: "select", options: ["typescript", "python", "rust", "go"] },
@@ -150,7 +151,7 @@ const AGENT_TYPES = [
     name: "Supervisor",
     description: "Orchestrates and delegates tasks to specialized agents",
     icon: BrainCircuit,
-    color: "bg-purple-500",
+    color: "bg-white/10",
     capabilities: ["Task Routing", "Agent Coordination", "Self-Correction", "Reflection"],
     model: "gemini-2.5-flash",
   },
@@ -159,7 +160,7 @@ const AGENT_TYPES = [
     name: "Researcher",
     description: "Searches the web and internal documents for information",
     icon: Search,
-    color: "bg-blue-500",
+    color: "bg-white/10",
     capabilities: ["Web Search", "RAG", "Document Analysis", "Fact Verification"],
     model: "gemini-2.5-flash",
   },
@@ -168,7 +169,7 @@ const AGENT_TYPES = [
     name: "Writer",
     description: "Creates and edits documents, reports, and content",
     icon: FileText,
-    color: "bg-green-500",
+    color: "bg-white/10",
     capabilities: ["Content Generation", "Editing", "Formatting", "Summarization"],
     model: "gemini-2.5-flash",
   },
@@ -177,7 +178,7 @@ const AGENT_TYPES = [
     name: "Coder",
     description: "Writes, reviews, and explains code",
     icon: Code,
-    color: "bg-orange-500",
+    color: "bg-white/10",
     capabilities: ["Code Generation", "Code Review", "Debugging", "Documentation"],
     model: "gemini-2.5-flash",
   },
@@ -186,7 +187,7 @@ const AGENT_TYPES = [
     name: "Project Manager",
     description: "Creates tasks, manages schedules, and tracks progress",
     icon: Kanban,
-    color: "bg-pink-500",
+    color: "bg-white/10",
     capabilities: ["Task Creation", "Scheduling", "Progress Tracking", "Resource Allocation"],
     model: "gemini-2.5-flash",
   },
@@ -369,6 +370,7 @@ function MetricCard({ metric, index }: { metric: MetricItem; index: number }) {
 
 // Metrics Dashboard Component with Premium Animations
 function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
+  const t = useT();
   const totalExecutions = executions?.length || 0;
   const completedToday = executions?.filter(e => {
     const today = new Date();
@@ -385,47 +387,47 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
 
   const metrics: MetricItem[] = [
     { 
-      label: "Total Executions", 
+      label: t('agents.metricTotal'), 
       value: totalExecutions, 
       isNumeric: true,
       icon: BarChart3, 
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      glow: "bg-blue-500/20",
-      caption: "Recorded in workflow history",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
+      caption: t('agents.metricTotalCaption'),
     },
     { 
-      label: "Completed Today", 
+      label: t('agents.metricCompleted'), 
       value: completedToday, 
       isNumeric: true,
       icon: Target, 
-      color: "text-emerald-400",
-      bg: "bg-emerald-500/10",
-      glow: "bg-emerald-500/20",
-      caption: "Completed since local midnight",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
+      caption: t('agents.metricCompletedCaption'),
     },
     { 
-      label: "Success Rate", 
+      label: t('agents.metricSuccess'), 
       value: successRate, 
       isNumeric: true,
       suffix: "%",
       icon: TrendingUp, 
-      color: "text-violet-400",
-      bg: "bg-violet-500/10",
-      glow: "bg-violet-500/20",
-      caption: "Completed divided by total",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
+      caption: t('agents.metricSuccessCaption'),
     },
     { 
-      label: "Avg Response", 
+      label: t('agents.metricAvg'), 
       value: avgDuration > 0 ? Number((avgDuration / 1000).toFixed(1)) : 0, 
       isNumeric: avgDuration > 0,
       suffix: "s",
-      displayValue: avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : "-",
+      displayValue: avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : "—",
       icon: Timer, 
-      color: "text-amber-400",
-      bg: "bg-amber-500/10",
-      glow: "bg-amber-500/20",
-      caption: "Average completed duration",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
+      caption: t('agents.metricAvgCaption'),
     },
   ];
 
@@ -448,12 +450,14 @@ function ExecutionDetailDialog({
   open: boolean; 
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   if (!execution) return null;
 
   const agent = AGENT_TYPES.find(a => a.id === execution.agentType);
   const status = statusConfig[execution.status as keyof typeof statusConfig] || statusConfig.pending;
   const StatusIcon = status.icon;
   const AgentIcon = agent?.icon || BrainCircuit;
+  const statusKey = (execution.status in statusConfig ? execution.status : "pending") as keyof typeof statusConfig;
 
   const formatJson = (obj: unknown) => {
     try {
@@ -474,10 +478,10 @@ function ExecutionDetailDialog({
             </div>
             <div>
               <DialogTitle className="flex items-center gap-2">
-                {agent?.name || execution.agentType} Execution
+                {agent?.name || execution.agentType} {t('agents.modal.execution')}
                 <Badge variant="secondary" className={`gap-1 ${status.bg}`}>
                   <StatusIcon className={`size-3 ${status.color} ${execution.status === "running" ? "animate-spin" : ""}`} />
-                  {status.label}
+                  {t(`agents.modal.status${statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}`)}
                 </Badge>
               </DialogTitle>
               <DialogDescription>
@@ -492,26 +496,26 @@ function ExecutionDetailDialog({
             {/* Timing Information */}
             <div className="grid grid-cols-3 gap-4 p-3 bg-muted rounded-lg">
               <div>
-                <p className="text-xs text-muted-foreground">Started</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.started')}</p>
                 <p className="text-sm font-medium">
                   {execution.startedAt ? new Date(execution.startedAt).toLocaleString() : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Completed</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.completed')}</p>
                 <p className="text-sm font-medium">
                   {execution.completedAt ? new Date(execution.completedAt).toLocaleString() : "-"}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Duration</p>
+                <p className="text-xs text-muted-foreground">{t('agents.modal.duration')}</p>
                 <p className="text-sm font-medium">{execution.duration || "-"}</p>
               </div>
             </div>
 
             {/* Input */}
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Input</Label>
+              <Label className="text-sm font-medium">{t('agents.modal.input')}</Label>
               <pre className="p-3 bg-muted rounded-lg text-sm overflow-x-auto max-h-40">
                 {formatJson(execution.input)}
               </pre>
@@ -522,7 +526,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <Activity className="size-4 text-blue-500" />
-                  Workflow Steps
+                  {t('agents.modal.workflowSteps')}
                 </Label>
                 <div className="space-y-2">
                   {steps.map((step, index) => (
@@ -560,7 +564,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <CheckCircle2 className="size-4 text-green-500" />
-                  Output
+                  {t('agents.modal.output')}
                 </Label>
                 <pre className="p-3 bg-green-50 dark:bg-green-950 rounded-lg text-sm overflow-x-auto max-h-60 text-green-800 dark:text-green-200">
                   {formatJson(execution.output)}
@@ -573,7 +577,7 @@ function ExecutionDetailDialog({
               <div className="space-y-2">
                 <Label className="text-sm font-medium flex items-center gap-2">
                   <XCircle className="size-4 text-red-500" />
-                  Error
+                  {t('agents.modal.error')}
                 </Label>
                 <pre className="p-3 bg-red-50 dark:bg-red-950 rounded-lg text-sm overflow-x-auto max-h-40 text-red-800 dark:text-red-200">
                   {execution.error}
@@ -588,10 +592,10 @@ function ExecutionDetailDialog({
             navigator.clipboard.writeText(JSON.stringify(execution, null, 2));
           }}>
             <Copy className="size-4 mr-2" />
-            Copy JSON
+            {t('agents.modal.copyJson')}
           </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
+            {t('agents.modal.close')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -605,6 +609,7 @@ function WorkflowLauncher({
 }: { 
   onLaunch: (type: WorkflowType, input: Record<string, string>) => Promise<void>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<WorkflowType>("document");
   const [formData, setFormData] = useState<Record<string, string>>({});
@@ -630,24 +635,24 @@ function WorkflowLauncher({
       <DialogTrigger asChild>
         <Button className="gap-2">
           <Plus className="size-4" />
-          New Workflow
+          {t('agents.newWorkflow')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Rocket className="size-5 text-primary" />
-            Launch AI Workflow
+            {t('agents.modal.launchTitle')}
           </DialogTitle>
           <DialogDescription>
-            Start a new AI-powered workflow to accomplish complex tasks
+            {t('agents.modal.launchDesc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Workflow Type Selection */}
           <div className="space-y-2">
-            <Label>Workflow Type</Label>
+            <Label>{t('agents.modal.workflowType')}</Label>
             <div className="grid grid-cols-2 gap-2">
               {(Object.entries(workflowConfig) as [WorkflowType, typeof config][]).map(([type, cfg]) => {
                 const Icon = cfg.icon;
@@ -671,7 +676,7 @@ function WorkflowLauncher({
                       <div>
                         <p className="font-medium text-sm">{cfg.name}</p>
                         <p className="text-xs text-muted-foreground line-clamp-1">
-                          {cfg.description}
+                          {t(`agents.wf.${type}.desc`)}
                         </p>
                       </div>
                     </div>
@@ -683,15 +688,17 @@ function WorkflowLauncher({
 
           {/* Dynamic Form Fields */}
           <div className="space-y-3 border-t pt-4">
-            {config.fields.map((field) => (
+            {config.fields.map((field) => {
+              const fieldLabel = t(`agents.wf.${selectedType}.${field.name}`);
+              return (
               <div key={field.name} className="space-y-1.5">
-                <Label htmlFor={field.name}>{field.label}</Label>
+                <Label htmlFor={field.name}>{fieldLabel}</Label>
                 {field.type === "text" && (
                   <Input
                     id={field.name}
                     value={formData[field.name] || ""}
                     onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                    placeholder={fieldLabel}
                   />
                 )}
                 {field.type === "textarea" && (
@@ -699,7 +706,7 @@ function WorkflowLauncher({
                     id={field.name}
                     value={formData[field.name] || ""}
                     onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
-                    placeholder={`Enter ${field.label.toLowerCase()}...`}
+                    placeholder={fieldLabel}
                     rows={3}
                   />
                 )}
@@ -709,7 +716,7 @@ function WorkflowLauncher({
                     onValueChange={(value) => setFormData({ ...formData, [field.name]: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={`Select ${field.label.toLowerCase()}`} />
+                      <SelectValue placeholder={fieldLabel} />
                     </SelectTrigger>
                     <SelectContent>
                       {field.options?.map((option) => (
@@ -721,24 +728,25 @@ function WorkflowLauncher({
                   </Select>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleLaunch} disabled={isLaunching} className="gap-2">
             {isLaunching ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Launching...
+                {t('agents.modal.launching')}
               </>
             ) : (
               <>
                 <Sparkles className="size-4" />
-                Launch Workflow
+                {t('agents.modal.launchBtn')}
               </>
             )}
           </Button>
@@ -761,6 +769,7 @@ function ActiveWorkflowCard({
   onSaveToDocuments?: (execution: WorkflowExecution) => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const config = workflowConfig[execution.type];
   const Icon = config.icon;
   const status = statusConfig[execution.status];
@@ -855,7 +864,7 @@ ${JSON.stringify(execution.input, null, 2)}
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className={`gap-1.5 rounded-full px-2.5 py-0.5 ${status.bg}`}>
               <StatusIcon className={`size-3 ${status.color}`} />
-              {status.label}
+              {t(`agents.modal.status${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)}
             </Badge>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -866,11 +875,11 @@ ${JSON.stringify(execution.input, null, 2)}
               <DropdownMenuContent align="end" className="glass-premium border-white/10">
                 <DropdownMenuItem className="gap-2">
                   <Eye className="size-4" />
-                  View Details
+                  {t('agents.modal.viewDetails')}
                 </DropdownMenuItem>
                 <DropdownMenuItem className="gap-2">
                   <Copy className="size-4" />
-                  Copy ID
+                  {t('agents.modal.copyId')}
                 </DropdownMenuItem>
                 {execution.status === "completed" && (
                   <>
@@ -880,7 +889,7 @@ ${JSON.stringify(execution.input, null, 2)}
                       onClick={handleSaveToDocuments}
                     >
                       <FileText className="size-4" />
-                      Save to Documents
+                      {t('agents.modal.saveToDocs')}
                     </DropdownMenuItem>
                   </>
                 )}
@@ -891,7 +900,7 @@ ${JSON.stringify(execution.input, null, 2)}
                     onClick={() => onCancel(execution.id)}
                   >
                     <XCircle className="size-4" />
-                    Cancel Workflow
+                    {t('agents.modal.cancelWorkflow')}
                   </DropdownMenuItem>
                 )}
                 {(execution.status === "completed" || execution.status === "failed") && onRetry && (
@@ -900,7 +909,7 @@ ${JSON.stringify(execution.input, null, 2)}
                     onClick={() => onRetry(execution)}
                   >
                     <RefreshCw className="size-4" />
-                    Run Again
+                    {t('agents.modal.runAgain')}
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
@@ -913,7 +922,7 @@ ${JSON.stringify(execution.input, null, 2)}
           <>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{execution.currentStep || "Processing..."}</span>
+                <span className="text-muted-foreground">{execution.currentStep || t('agents.modal.processing')}</span>
                 <span className="font-medium">{execution.progress}%</span>
               </div>
               <Progress value={execution.progress} className="h-2 rounded-full" />
@@ -926,7 +935,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={() => onCancel?.(execution.id)}
               >
                 <XCircle className="size-3.5" />
-                Cancel
+                {t('common.cancel')}
               </Button>
             </div>
           </>
@@ -943,7 +952,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={handleSaveToDocuments}
               >
                 <FileText className="size-3.5" />
-                Save to Documents
+                {t('agents.modal.saveToDocs')}
               </Button>
               <Button 
                 variant="outline" 
@@ -952,7 +961,7 @@ ${JSON.stringify(execution.input, null, 2)}
                 onClick={() => onRetry?.(execution)}
               >
                 <RefreshCw className="size-3.5" />
-                Run Again
+                {t('agents.modal.runAgain')}
               </Button>
             </div>
           </div>
@@ -960,7 +969,7 @@ ${JSON.stringify(execution.input, null, 2)}
         {execution.status === "failed" && (
           <div className="space-y-3">
             <div className="p-3 bg-red-500/10 rounded-2xl text-sm text-red-400">
-              ✗ {execution.error || "An error occurred"}
+              ✗ {execution.error || t('agents.modal.errorOccurred')}
             </div>
             <Button 
               variant="outline" 
@@ -969,7 +978,7 @@ ${JSON.stringify(execution.input, null, 2)}
               onClick={() => onRetry?.(execution)}
             >
               <RefreshCw className="size-3.5" />
-              Retry
+              {t('agents.modal.retry')}
             </Button>
           </div>
         )}
@@ -980,6 +989,7 @@ ${JSON.stringify(execution.input, null, 2)}
 
 export default function AgentsPage() {
   const router = useRouter();
+  const t = useT();
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   const [activeWorkflows, setActiveWorkflows] = useState<WorkflowExecution[]>([]);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, string>>({});
@@ -1108,7 +1118,7 @@ export default function AgentsPage() {
               const avgMs = stat.count > 0 ? stat.completedTime / stat.count : 0;
               agentStatsMap[agentType] = {
                 tasksCompleted: stat.total,
-                avgResponseTime: avgMs > 0 ? `${(avgMs / 1000).toFixed(1)}s` : "-",
+                avgResponseTime: avgMs > 0 ? `${(avgMs / 1000).toFixed(1)}s` : "—",
               };
             });
             setAgentStats(agentStatsMap);
@@ -1330,20 +1340,20 @@ export default function AgentsPage() {
       <div className="relative z-10 px-4 md:px-6 lg:px-8">
         {/* Premium Hero Header */}
         <PremiumHeroHeader
-          label="AI WORKSPACE"
-          title="AI Agents"
+          label={t('agents.label')}
+          title={t('agents.title')}
           description={
             <>
-              <span className="text-emerald-400/80">{AGENT_TYPES.length}</span> agent types available
+              <span className="text-white/70">{AGENT_TYPES.length}</span> {t('agents.typesAvailable')}
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-violet-400/80">{activeWorkflows.filter(w => w.status === "running").length}</span> workflows running
+              <span className="text-white/70">{activeWorkflows.filter(w => w.status === "running").length}</span> {t('agents.workflowsRunning')}
             </>
           }
           action={
             <div className="flex items-center gap-3">
               <Badge variant="outline" className="gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.03] border-white/20">
                 <Activity className="size-3 text-emerald-400" />
-                <span className="text-white/70">System Healthy</span>
+                <span className="text-white/70">{t('agents.systemHealthy')}</span>
               </Badge>
               <WorkflowLauncher onLaunch={launchWorkflow} />
             </div>
@@ -1358,17 +1368,17 @@ export default function AgentsPage() {
         {/* Content */}
         <section>
           <Tabs defaultValue="agents" className="space-y-6">
-            <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-auto bg-white/[0.03] backdrop-blur-xl rounded-full p-1 border border-white/[0.08]">
-              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">Agents</TabsTrigger>
-              <TabsTrigger value="workflows" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">
-                <span className="hidden sm:inline">Active </span>Workflows
+            <TabsList className="w-full sm:w-auto grid grid-cols-3 sm:flex h-auto">
+              <TabsTrigger value="agents" className="text-xs sm:text-sm px-4 py-2">{t('agents.tabAgents')}</TabsTrigger>
+              <TabsTrigger value="workflows" className="text-xs sm:text-sm px-4 py-2">
+                {t('agents.tabWorkflows')}
                 {activeWorkflows.filter(w => w.status === "running").length > 0 && (
                   <Badge variant="secondary" className="ml-2 size-5 p-0 justify-center text-xs rounded-full bg-violet-500/20 text-violet-400">
                     {activeWorkflows.filter(w => w.status === "running").length}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2 rounded-full data-[state=active]:bg-white/10 data-[state=active]:text-white text-white/60">History</TabsTrigger>
+              <TabsTrigger value="executions" className="text-xs sm:text-sm px-4 py-2">{t('agents.tabHistory')}</TabsTrigger>
             </TabsList>
 
           {/* Agents Tab */}
@@ -1378,7 +1388,7 @@ export default function AgentsPage() {
                 {AGENT_TYPES.map((agent, index) => {
                   const Icon = agent.icon;
                   const status = getAgentStatus(agent.id);
-                  const stats = agentStats[agent.id] || { tasksCompleted: 0, avgResponseTime: "-" };
+                  const stats = agentStats[agent.id] || { tasksCompleted: 0, avgResponseTime: "—" };
                   const isSelected = selectedAgent === agent.id;
                   
                   return (
@@ -1398,7 +1408,7 @@ export default function AgentsPage() {
                       onClick={() => setSelectedAgent(agent.id)}
                       className={`cursor-pointer relative group rounded-3xl overflow-hidden bg-white/[0.02] backdrop-blur-md border transition-all duration-300 ${
                         isSelected 
-                          ? "ring-2 ring-violet-500/50 border-violet-500/30 bg-violet-500/[0.05]" 
+                          ? "ring-2 ring-white/30 border-white/20 bg-white/[0.05]" 
                           : "border-white/[0.06] hover:border-white/20 hover:bg-white/[0.04]"
                       }`}
                     >
@@ -1407,7 +1417,7 @@ export default function AgentsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: isSelected ? 0.5 : 0 }}
                         whileHover={{ opacity: 0.3 }}
-                        className="absolute inset-0 -z-10 blur-2xl bg-violet-500/20 transition-opacity duration-500"
+                        className="absolute inset-0 -z-10 blur-2xl bg-white/10 transition-opacity duration-500"
                       />
 
                       {/* Gradient border on hover */}
@@ -1439,21 +1449,21 @@ export default function AgentsPage() {
                                   : "bg-white/30"
                               }`}
                             />
-                            {status}
+                            {status === "active" ? t('agents.statusActive') : t('agents.statusDisabled')}
                           </Badge>
                         </div>
                         <h3 className="mt-4 text-base md:text-lg font-semibold text-white">{agent.name}</h3>
-                        <p className="text-xs md:text-sm text-white/50 mt-1">{agent.description}</p>
+                        <p className="text-xs md:text-sm text-white/50 mt-1 line-clamp-2 min-h-[2.5rem]">{t(`agents.desc.${agent.id}`)}</p>
                       </div>
                       <div className="p-4 pt-0 md:p-6 md:pt-0">
                         <div className="flex items-center justify-between text-xs md:text-sm pt-3 border-t border-white/5">
                           <div className="flex items-center gap-1.5 text-white/40">
-                            <CheckCircle2 className="size-3.5 md:size-4 text-emerald-400" />
-                            <span>{stats.tasksCompleted} tasks</span>
+                            <CheckCircle2 className="size-3.5 md:size-4 text-white/40" />
+                            <span>{stats.tasksCompleted} {t('agents.tasksLabel')}</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-white/40">
-                            <Zap className="size-3.5 md:size-4 text-amber-400" />
-                            <span>{stats.avgResponseTime} avg</span>
+                            <Zap className="size-3.5 md:size-4 text-white/40" />
+                            <span>{stats.avgResponseTime === "—" ? "—" : `${stats.avgResponseTime} ${t('agents.avgLabel')}`}</span>
                           </div>
                         </div>
                       </div>
@@ -1482,10 +1492,10 @@ export default function AgentsPage() {
                         </div>
                         <div>
                           <CardTitle className="text-lg md:text-xl font-semibold">
-                            {agent.name} Configuration
+                            {agent.name} {t('agents.configuration')}
                           </CardTitle>
                           <CardDescription className="text-sm text-muted-foreground/80">
-                            {agent.description}
+                            {t(`agents.desc.${agent.id}`)}
                           </CardDescription>
                         </div>
                       </div>

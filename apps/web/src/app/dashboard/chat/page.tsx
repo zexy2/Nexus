@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useChatStore, AGENT_DEFINITIONS, type AgentMode, type Message } from '@/lib/stores/chat-store';
 import { showToast } from '@/components/shared/toast-provider';
+import { useT } from '@/lib/i18n/provider';
 import { 
   X,
   Sparkles,
@@ -59,7 +60,7 @@ function MeshGradientBackground() {
             ease: 'easeInOut',
             delay: 2,
           }}
-          className="absolute top-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-violet-600/5 blur-3xl"
+          className="absolute top-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-white/5 blur-3xl"
         />
         
         {/* Purple blob - bottom center */}
@@ -105,6 +106,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
 
+  const t = useT();
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
@@ -141,7 +143,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
           className={cn(
             'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10',
             isUser
-              ? 'bg-gradient-to-r from-violet-500/10 to-indigo-500/10 blur-xl'
+              ? 'bg-gradient-to-r from-white/10 to-white/5 blur-xl'
               : 'bg-gradient-to-r from-white/5 to-white/10 blur-xl'
           )}
         />
@@ -160,7 +162,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
             <button
               onClick={handleCopy}
               className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-              title="Copy"
+              title={t('chat.copy')}
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
@@ -168,7 +170,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
               <button
                 onClick={onRetry}
                 className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-                title="Regenerate"
+                title={t('chat.regenerate')}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
@@ -202,7 +204,7 @@ function StreamingCard({ content }: { content: string }) {
         <motion.div
           animate={{ opacity: [0.3, 0.6, 0.3] }}
           transition={{ duration: 1.5, repeat: Infinity }}
-          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-violet-500/10 to-indigo-500/10 blur-xl -z-10"
+          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white/10 to-white/5 blur-xl -z-10"
         />
 
         <div className="text-sm leading-relaxed text-white/90 whitespace-pre-wrap break-words">
@@ -221,6 +223,7 @@ function StreamingCard({ content }: { content: string }) {
 // Thinking indicator
 function ThinkingCard({ agentMode }: { agentMode?: AgentMode }) {
   const agent = agentMode ? AGENT_DEFINITIONS[agentMode] : AGENT_DEFINITIONS.auto;
+  const t = useT();
 
   return (
     <motion.div
@@ -240,11 +243,11 @@ function ThinkingCard({ agentMode }: { agentMode?: AgentMode }) {
                 repeat: Infinity,
                 delay: i * 0.15,
               }}
-              className="w-1.5 h-1.5 rounded-full bg-violet-400"
+              className="w-1.5 h-1.5 rounded-full bg-white/60"
             />
           ))}
         </div>
-        <span className="text-sm text-white/60">{agent.label} is thinking...</span>
+        <span className="text-sm text-white/60">{agent.label} {t('chat.isThinking')}</span>
       </div>
     </motion.div>
   );
@@ -273,6 +276,7 @@ function ChatInput({ onSend }: ChatInputProps) {
   } = useChatStore();
 
   const currentAgent = AGENT_DEFINITIONS[agentMode];
+  const t = useT();
 
   // Auto-resize textarea
   const adjustHeight = useCallback(() => {
@@ -350,10 +354,10 @@ function ChatInput({ onSend }: ChatInputProps) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm">{agent.label}</div>
-                  <div className="text-xs text-white/40 truncate">{agent.description}</div>
+                  <div className="text-xs text-white/40 truncate">{t(`chat.agentDesc.${mode}`)}</div>
                 </div>
                 {mode === agentMode && (
-                  <div className="w-2 h-2 rounded-full bg-violet-500" />
+                  <div className="w-2 h-2 rounded-full bg-white/60" />
                 )}
               </motion.button>
             ))}
@@ -387,9 +391,9 @@ function ChatInput({ onSend }: ChatInputProps) {
           </button>
 
           {activeAgent && (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-violet-500/20 text-violet-300 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-              <span>{AGENT_DEFINITIONS[activeAgent.mode].label} working</span>
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/10 text-white/70 text-xs">
+              <div className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" />
+              <span>{AGENT_DEFINITIONS[activeAgent.mode].label} {t('chat.working')}</span>
             </div>
           )}
 
@@ -414,7 +418,7 @@ function ChatInput({ onSend }: ChatInputProps) {
             onKeyDown={handleKeyDown}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={`Message ${currentAgent.label}...`}
+            placeholder={t('chat.messagePlaceholder')}
             disabled={isLoading}
             rows={1}
             className="flex-1 bg-transparent text-white placeholder:text-white/30 resize-none outline-none text-sm leading-relaxed disabled:opacity-50"
@@ -463,8 +467,14 @@ function ChatInput({ onSend }: ChatInputProps) {
 // ============================================================================
 
 function EmptyState() {
-  const { suggestedPrompts, setInput } = useChatStore();
-  const prompts = suggestedPrompts.slice(0, 4);
+  const { setInput } = useChatStore();
+  const t = useT();
+  const prompts = [
+    t('chat.suggestions.s1'),
+    t('chat.suggestions.s2'),
+    t('chat.suggestions.s3'),
+    t('chat.suggestions.s4'),
+  ];
 
   return (
     <motion.div
@@ -480,10 +490,10 @@ function EmptyState() {
         className="relative mb-8"
       >
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center backdrop-blur-xl">
-          <span className="text-4xl font-bold text-white">N</span>
+          <Sparkles className="h-9 w-9 text-white" />
         </div>
         {/* Glow */}
-        <div className="absolute inset-0 rounded-2xl bg-violet-500/20 blur-2xl -z-10" />
+        <div className="absolute inset-0 rounded-2xl bg-white/10 blur-2xl -z-10" />
       </motion.div>
 
       {/* Title */}
@@ -493,7 +503,7 @@ function EmptyState() {
         transition={{ delay: 0.2 }}
         className="text-3xl font-semibold text-white mb-3"
       >
-        How can I help you today?
+        {t('chat.emptyTitle')}
       </motion.h2>
 
       <motion.p
@@ -502,7 +512,7 @@ function EmptyState() {
         transition={{ delay: 0.3 }}
         className="text-white/50 text-center mb-10 max-w-md"
       >
-        Ask me anything or select a suggestion below to get started
+        {t('chat.emptySubtitle')}
       </motion.p>
 
       {/* Suggestion cards */}
@@ -526,8 +536,8 @@ function EmptyState() {
             <span className="text-white/70 group-hover:text-white transition-colors line-clamp-2">
               {prompt}
             </span>
-            <div className="mt-2 text-xs text-violet-400 opacity-0 group-hover:opacity-100 transition-opacity">
-              Click to use →
+            <div className="mt-2 text-xs text-white/50 opacity-0 group-hover:opacity-100 transition-opacity">
+              {t('chat.clickToUse')}
             </div>
           </motion.button>
         ))}
@@ -558,6 +568,7 @@ export default function ChatPage() {
   } = useChatStore();
 
   const currentAgent = AGENT_DEFINITIONS[agentMode];
+  const t = useT();
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -565,7 +576,7 @@ export default function ChatPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         createSession();
-        showToast.success('New chat created');
+        showToast.success(t('chat.newChatCreated'));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -662,19 +673,19 @@ export default function ChatPage() {
               <Sparkles className="h-4 w-4 text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-white">AI Chat</h1>
-              <p className="text-xs text-white/40">{currentAgent.description}</p>
+              <h1 className="text-sm font-semibold text-white">{t('chat.aiChat')}</h1>
+              <p className="text-xs text-white/40">{t(`chat.agentDesc.${agentMode}`)}</p>
             </div>
           </div>
 
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => { createSession(); showToast.success('New chat created'); }}
+            onClick={() => { createSession(); showToast.success(t('chat.newChatCreated')); }}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
           >
             <MessageSquarePlus className="h-4 w-4" />
-            <span className="hidden sm:inline">New Chat</span>
+            <span className="hidden sm:inline">{t('chat.newChat')}</span>
           </motion.button>
         </motion.header>
 
