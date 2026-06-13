@@ -8,11 +8,14 @@ import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
   useDroppable,
+  type CollisionDetection,
   type DragStartEvent,
   type DragEndEvent,
   type DragOverEvent,
@@ -140,6 +143,26 @@ const columns: { id: TaskStatus; title: string; color: string; icon: typeof Circ
   { id: "done", title: "Tamamlandı", color: "emerald", icon: CheckCircle2 },
 ];
 
+const kanbanCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) return pointerCollisions;
+
+  const rectCollisions = rectIntersection(args);
+  if (rectCollisions.length > 0) return rectCollisions;
+
+  return closestCorners(args);
+};
+
+function getDragTargetStatus(overId: string | number | null | undefined, taskList: Task[]): TaskStatus | null {
+  if (overId === null || overId === undefined) return null;
+
+  const id = String(overId);
+  const overTask = taskList.find((task) => task.id === id);
+  if (overTask) return overTask.status;
+
+  return columns.find((column) => column.id === id)?.id ?? null;
+}
+
 // Priority config
 const priorityConfig: Record<TaskPriority, { label: string; color: string; icon: typeof Flag }> = {
   low: { label: "Düşük", color: "bg-neutral-100 text-neutral-600", icon: Flag },
@@ -189,12 +212,15 @@ function SortableTaskCard({
     <motion.div
       ref={setNodeRef}
       style={style}
+      {...attributes}
+      {...listeners}
+      data-task-id={task.id}
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
-        "group glass-premium border-white/10 rounded-2xl p-4 transition-all cursor-default",
+        "group glass-premium border-white/10 rounded-2xl p-4 transition-all cursor-grab active:cursor-grabbing",
         isDragging && "shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black",
         !isDragging && "hover:border-white/20 hover:bg-white/[0.03]"
       )}
@@ -202,8 +228,8 @@ function SortableTaskCard({
       {/* Header with drag handle */}
       <div className="flex items-start gap-2">
         <button
-          {...attributes}
-          {...listeners}
+          type="button"
+          tabIndex={-1}
           className="mt-1 p-1 -ml-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="w-4 h-4 text-muted-foreground" />
@@ -270,7 +296,7 @@ function SortableTaskCard({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-violet-500/20 text-violet-400 text-[10px] rounded-full font-medium">
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
                         <Sparkles className="w-3 h-3" />
                         AI
                       </span>
@@ -353,7 +379,7 @@ function TaskCardOverlay({ task }: { task: Task }) {
               {priority.label}
             </span>
             {isAI && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-violet-500/20 text-violet-400 text-[10px] rounded-full font-medium">
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
                 <Sparkles className="w-3 h-3" />
                 AI
               </span>
@@ -430,6 +456,7 @@ function KanbanColumn({
       {/* Tasks container - now with droppable ref */}
       <div
         ref={setNodeRef}
+        data-testid={`kanban-column-${column.id}`}
         className={cn(
           "flex-1 rounded-2xl p-3 min-h-[200px] transition-colors border",
           colors.bg,
@@ -479,6 +506,7 @@ export default function TasksPage() {
   const [isLoading, setIsLoading] = useState(true);
   // Track the in-progress drag so background sync doesn't clobber it.
   const activeIdRef = useRef<string | null>(null);
+  const dragTargetStatusRef = useRef<TaskStatus | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -595,6 +623,7 @@ export default function TasksPage() {
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const id = event.active.id as string;
     activeIdRef.current = id;
+    dragTargetStatusRef.current = null;
     setActiveId(id);
   }, []);
 
@@ -603,23 +632,10 @@ export default function TasksPage() {
     if (!over) return;
 
     const activeTask = tasks.find((t) => t.id === active.id);
-    const overTask = tasks.find((t) => t.id === over.id);
-
     if (!activeTask) return;
 
-    // Determine target status
-    let targetStatus: TaskStatus | null = null;
-
-    if (overTask) {
-      // Dropped on another task
-      targetStatus = overTask.status;
-    } else if (typeof over.id === "string") {
-      // Check if dropped on column (over.id might be column id)
-      const column = columns.find((c) => c.id === over.id);
-      if (column) {
-        targetStatus = column.id;
-      }
-    }
+    const targetStatus = getDragTargetStatus(over.id, tasks);
+    dragTargetStatusRef.current = targetStatus;
 
     if (targetStatus && activeTask.status !== targetStatus) {
       setTasks((prev) =>
@@ -632,41 +648,43 @@ export default function TasksPage() {
 
   const handleDragEnd = useCallback(async (event: DragEndEvent) => {
     setActiveId(null);
-    activeIdRef.current = null;
 
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
 
     const movedTask = tasks.find((task) => task.id === active.id);
-    const overTask = tasks.find((task) => task.id === over.id);
-    const overColumn = columns.find((column) => column.id === over.id);
-    const targetStatus = overTask?.status || overColumn?.id || movedTask?.status;
+    const targetStatus =
+      getDragTargetStatus(over?.id, tasks) ||
+      dragTargetStatusRef.current ||
+      movedTask?.status ||
+      null;
 
-    // Reorder within same column
-    setTasks((prev) => {
-      const activeIndex = prev.findIndex((t) => t.id === active.id);
-      const overIndex = prev.findIndex((t) => t.id === over.id);
+    try {
+      if (!movedTask || !targetStatus) return;
 
-      if (activeIndex === -1) return prev;
+      setTasks((prev) => {
+        const activeIndex = prev.findIndex((task) => task.id === active.id);
+        if (activeIndex === -1) return prev;
 
-      const newTasks = [...prev];
-      const [removed] = newTasks.splice(activeIndex, 1);
-      const moved = targetStatus ? { ...removed, status: targetStatus } : removed;
-      
-      if (overIndex !== -1) {
-        newTasks.splice(overIndex, 0, moved);
-      } else {
-        newTasks.push(moved);
-      }
+        const overIndex = over ? prev.findIndex((task) => task.id === over.id) : -1;
+        const overIsColumn = over ? columns.some((column) => column.id === over.id) : false;
+        const newTasks = [...prev];
+        const [removed] = newTasks.splice(activeIndex, 1);
+        const moved = { ...removed, status: targetStatus };
 
-      return newTasks;
-    });
+        if (overIndex !== -1 && over?.id !== active.id) {
+          const adjustedIndex = overIndex > activeIndex ? overIndex - 1 : overIndex;
+          newTasks.splice(adjustedIndex, 0, moved);
+        } else if (overIsColumn || dragTargetStatusRef.current) {
+          newTasks.push(moved);
+        } else {
+          newTasks.splice(activeIndex, 0, moved);
+        }
 
-    if (!movedTask || !targetStatus) return;
+        return newTasks;
+      });
 
-    // Local-first: persist the new status to the local store and queue the sync.
-    if (engine) {
-      try {
+      // Local-first: persist the new status to the local store and queue the sync.
+      if (engine) {
         const existing = await engine.get<SyncTask>("tasks", movedTask.id);
         if (existing) {
           await engine.mutate<SyncTask>("tasks", "update", {
@@ -674,33 +692,26 @@ export default function TasksPage() {
             status: targetStatus,
             updatedAt: Date.now(),
           });
+          showToast.success("Görev taşındı");
+          return;
         }
-        showToast.success("Görev taşındı");
-      } catch (error) {
-        console.error("Failed to persist task move:", error);
-        showToast.error("Görev taşınamadı");
-        void fetchTasks();
       }
-      return;
-    }
 
-    // Fallback: network move.
-    try {
       const response = await fetch(`/api/tasks/${movedTask.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: targetStatus }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to move task: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
       showToast.success("Görev taşındı");
     } catch (error) {
       console.error("Failed to persist task move:", error);
       showToast.error("Görev taşınamadı");
       void fetchTasks();
+    } finally {
+      activeIdRef.current = null;
+      dragTargetStatusRef.current = null;
     }
   }, [fetchTasks, tasks, engine]);
 
@@ -933,7 +944,7 @@ export default function TasksPage() {
           >
             <DndContext
               sensors={sensors}
-              collisionDetection={closestCorners}
+              collisionDetection={kanbanCollisionDetection}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
@@ -1052,7 +1063,7 @@ export default function TasksPage() {
                 htmlFor="assignToAgent"
                 className="text-sm flex items-center gap-2 cursor-pointer"
               >
-                <Sparkles className="w-4 h-4 text-violet-500" />
+                <Sparkles className="w-4 h-4 text-white/70" />
                 AI Ajanına Ata
               </Label>
             </div>

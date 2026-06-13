@@ -101,7 +101,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Document Generation",
     description: "Generate comprehensive documents using AI agents",
     icon: FileText,
-    color: "bg-emerald-500",
+    color: "bg-white/10",
     fields: [
       { name: "topic", label: "Topic", type: "text" },
       { name: "format", label: "Format", type: "select", options: ["report", "article", "documentation", "proposal"] },
@@ -112,7 +112,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Deep Research",
     description: "Conduct thorough research on any topic",
     icon: Search,
-    color: "bg-blue-500",
+    color: "bg-white/10",
     fields: [
       { name: "query", label: "Research Query", type: "text" },
       { name: "depth", label: "Research Depth", type: "select", options: ["quick", "standard", "deep", "comprehensive"] },
@@ -123,7 +123,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Task Breakdown",
     description: "Break down complex projects into actionable tasks",
     icon: Kanban,
-    color: "bg-orange-500",
+    color: "bg-white/10",
     fields: [
       { name: "goal", label: "Project Goal", type: "text" },
       { name: "timeline", label: "Timeline", type: "select", options: ["1 week", "2 weeks", "1 month", "3 months"] },
@@ -134,7 +134,7 @@ const workflowConfig: Record<WorkflowType, {
     name: "Code Generation",
     description: "Generate production-ready code with best practices",
     icon: Code,
-    color: "bg-purple-500",
+    color: "bg-white/10",
     fields: [
       { name: "task", label: "Task Description", type: "textarea" },
       { name: "language", label: "Language", type: "select", options: ["typescript", "python", "rust", "go"] },
@@ -150,7 +150,7 @@ const AGENT_TYPES = [
     name: "Supervisor",
     description: "Orchestrates and delegates tasks to specialized agents",
     icon: BrainCircuit,
-    color: "bg-purple-500",
+    color: "bg-white/10",
     capabilities: ["Task Routing", "Agent Coordination", "Self-Correction", "Reflection"],
     model: "gemini-2.5-flash",
   },
@@ -159,7 +159,7 @@ const AGENT_TYPES = [
     name: "Researcher",
     description: "Searches the web and internal documents for information",
     icon: Search,
-    color: "bg-blue-500",
+    color: "bg-white/10",
     capabilities: ["Web Search", "RAG", "Document Analysis", "Fact Verification"],
     model: "gemini-2.5-flash",
   },
@@ -168,7 +168,7 @@ const AGENT_TYPES = [
     name: "Writer",
     description: "Creates and edits documents, reports, and content",
     icon: FileText,
-    color: "bg-green-500",
+    color: "bg-white/10",
     capabilities: ["Content Generation", "Editing", "Formatting", "Summarization"],
     model: "gemini-2.5-flash",
   },
@@ -177,7 +177,7 @@ const AGENT_TYPES = [
     name: "Coder",
     description: "Writes, reviews, and explains code",
     icon: Code,
-    color: "bg-orange-500",
+    color: "bg-white/10",
     capabilities: ["Code Generation", "Code Review", "Debugging", "Documentation"],
     model: "gemini-2.5-flash",
   },
@@ -186,7 +186,7 @@ const AGENT_TYPES = [
     name: "Project Manager",
     description: "Creates tasks, manages schedules, and tracks progress",
     icon: Kanban,
-    color: "bg-pink-500",
+    color: "bg-white/10",
     capabilities: ["Task Creation", "Scheduling", "Progress Tracking", "Resource Allocation"],
     model: "gemini-2.5-flash",
   },
@@ -389,9 +389,9 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       value: totalExecutions, 
       isNumeric: true,
       icon: BarChart3, 
-      color: "text-blue-400",
-      bg: "bg-blue-500/10",
-      glow: "bg-blue-500/20",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
       caption: "Recorded in workflow history",
     },
     { 
@@ -399,9 +399,9 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       value: completedToday, 
       isNumeric: true,
       icon: Target, 
-      color: "text-emerald-400",
-      bg: "bg-emerald-500/10",
-      glow: "bg-emerald-500/20",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
       caption: "Completed since local midnight",
     },
     { 
@@ -410,9 +410,9 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       isNumeric: true,
       suffix: "%",
       icon: TrendingUp, 
-      color: "text-violet-400",
-      bg: "bg-violet-500/10",
-      glow: "bg-violet-500/20",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
       caption: "Completed divided by total",
     },
     { 
@@ -420,11 +420,11 @@ function MetricsDashboard({ executions = [] }: { executions?: Execution[] }) {
       value: avgDuration > 0 ? Number((avgDuration / 1000).toFixed(1)) : 0, 
       isNumeric: avgDuration > 0,
       suffix: "s",
-      displayValue: avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : "-",
+      displayValue: avgDuration > 0 ? `${(avgDuration / 1000).toFixed(1)}s` : "—",
       icon: Timer, 
-      color: "text-amber-400",
-      bg: "bg-amber-500/10",
-      glow: "bg-amber-500/20",
+      color: "text-white/70",
+      bg: "bg-white/5",
+      glow: "bg-white/10",
       caption: "Average completed duration",
     },
   ];
@@ -1108,7 +1108,7 @@ export default function AgentsPage() {
               const avgMs = stat.count > 0 ? stat.completedTime / stat.count : 0;
               agentStatsMap[agentType] = {
                 tasksCompleted: stat.total,
-                avgResponseTime: avgMs > 0 ? `${(avgMs / 1000).toFixed(1)}s` : "-",
+                avgResponseTime: avgMs > 0 ? `${(avgMs / 1000).toFixed(1)}s` : "—",
               };
             });
             setAgentStats(agentStatsMap);
@@ -1334,9 +1334,9 @@ export default function AgentsPage() {
           title="AI Agents"
           description={
             <>
-              <span className="text-emerald-400/80">{AGENT_TYPES.length}</span> agent types available
+              <span className="text-white/70">{AGENT_TYPES.length}</span> agent types available
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-violet-400/80">{activeWorkflows.filter(w => w.status === "running").length}</span> workflows running
+              <span className="text-white/70">{activeWorkflows.filter(w => w.status === "running").length}</span> workflows running
             </>
           }
           action={
@@ -1378,7 +1378,7 @@ export default function AgentsPage() {
                 {AGENT_TYPES.map((agent, index) => {
                   const Icon = agent.icon;
                   const status = getAgentStatus(agent.id);
-                  const stats = agentStats[agent.id] || { tasksCompleted: 0, avgResponseTime: "-" };
+                  const stats = agentStats[agent.id] || { tasksCompleted: 0, avgResponseTime: "—" };
                   const isSelected = selectedAgent === agent.id;
                   
                   return (
@@ -1398,7 +1398,7 @@ export default function AgentsPage() {
                       onClick={() => setSelectedAgent(agent.id)}
                       className={`cursor-pointer relative group rounded-3xl overflow-hidden bg-white/[0.02] backdrop-blur-md border transition-all duration-300 ${
                         isSelected 
-                          ? "ring-2 ring-violet-500/50 border-violet-500/30 bg-violet-500/[0.05]" 
+                          ? "ring-2 ring-white/30 border-white/20 bg-white/[0.05]" 
                           : "border-white/[0.06] hover:border-white/20 hover:bg-white/[0.04]"
                       }`}
                     >
@@ -1407,7 +1407,7 @@ export default function AgentsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: isSelected ? 0.5 : 0 }}
                         whileHover={{ opacity: 0.3 }}
-                        className="absolute inset-0 -z-10 blur-2xl bg-violet-500/20 transition-opacity duration-500"
+                        className="absolute inset-0 -z-10 blur-2xl bg-white/10 transition-opacity duration-500"
                       />
 
                       {/* Gradient border on hover */}
@@ -1448,12 +1448,12 @@ export default function AgentsPage() {
                       <div className="p-4 pt-0 md:p-6 md:pt-0">
                         <div className="flex items-center justify-between text-xs md:text-sm pt-3 border-t border-white/5">
                           <div className="flex items-center gap-1.5 text-white/40">
-                            <CheckCircle2 className="size-3.5 md:size-4 text-emerald-400" />
+                            <CheckCircle2 className="size-3.5 md:size-4 text-white/40" />
                             <span>{stats.tasksCompleted} tasks</span>
                           </div>
                           <div className="flex items-center gap-1.5 text-white/40">
-                            <Zap className="size-3.5 md:size-4 text-amber-400" />
-                            <span>{stats.avgResponseTime} avg</span>
+                            <Zap className="size-3.5 md:size-4 text-white/40" />
+                            <span>{stats.avgResponseTime === "—" ? "—" : `${stats.avgResponseTime} avg`}</span>
                           </div>
                         </div>
                       </div>

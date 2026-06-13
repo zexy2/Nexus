@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SkeletonDashboard } from '@/components/shared';
+import { formatRelativeDate } from '@/lib/format';
+import { cleanDocTitle } from '@/lib/text';
 import { useUIStore } from '@/lib/store';
 import {
   BentoGrid,
@@ -60,18 +62,11 @@ interface Execution {
   createdAt: number;
 }
 
-// Format relative time
+// Format relative time — delegates to the shared, locale-aware formatter so the
+// dashboard reads the same as the rest of the app (no more English "6d ago"
+// mixed into a Turkish UI).
 function formatRelativeTime(timestamp: string | number) {
-  const value = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime();
-  const diff = Date.now() - value;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+  return formatRelativeDate(timestamp, 'tr');
 }
 
 // Get greeting based on time
@@ -172,7 +167,7 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
           {doc.iconEmoji || '📄'}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate group-hover:text-white transition-colors">{doc.title}</p>
+          <p className="font-medium truncate group-hover:text-white transition-colors">{cleanDocTitle(doc.title)}</p>
           <p className="text-xs text-muted-foreground">{formatRelativeTime(doc.updatedAt)}</p>
         </div>
         <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />

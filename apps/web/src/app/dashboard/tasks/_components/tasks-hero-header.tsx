@@ -92,7 +92,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 1, duration: 1 }}
-              className="absolute -inset-x-10 -inset-y-4 bg-gradient-to-r from-blue-500/10 via-transparent to-emerald-500/10 blur-3xl -z-10"
+              className="absolute -inset-x-10 -inset-y-4 bg-gradient-to-r from-white/10 via-transparent to-white/5 blur-3xl -z-10"
             />
           </div>
 
@@ -105,9 +105,9 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
           >
             <span className="text-white/70 font-medium">{stats.total}</span> görev 
             <span className="mx-2 text-white/20">•</span>
-            <span className="text-amber-400/80">{stats.inProgress}</span> devam ediyor
+            <span className="text-white/70">{stats.inProgress}</span> devam ediyor
             <span className="mx-2 text-white/20">•</span>
-            <span className="text-violet-400/80">{stats.aiTasks}</span> AI atandı
+            <span className="text-white/70">{stats.aiTasks}</span> AI atandı
           </motion.p>
         </div>
 

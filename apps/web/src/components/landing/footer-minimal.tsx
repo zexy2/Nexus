@@ -19,7 +19,7 @@ export function FooterMinimal() {
   };
 
   return (
-    <footer className="relative bg-black text-white overflow-hidden">
+    <footer className="relative bg-black text-white overflow-hidden" suppressHydrationWarning>
       {/* CTA Section */}
       <section className="relative py-32 md:py-40 border-b border-white/10">
         <div className="max-w-7xl mx-auto px-6 text-center">
@@ -43,6 +43,7 @@ export function FooterMinimal() {
               <MagneticButton strength={0.2}>
                 <Link
                   href="/login"
+                  suppressHydrationWarning
                   className="group inline-flex items-center gap-3 px-8 py-4 bg-white text-black rounded-full font-medium text-lg hover:bg-white/90 transition-colors"
                 >
                   Try Demo
@@ -54,6 +55,7 @@ export function FooterMinimal() {
                 <Link
                   href="https://github.com/zexy2/Nexus"
                   target="_blank"
+                  suppressHydrationWarning
                   className="inline-flex items-center gap-3 px-8 py-4 border border-white/20 text-white rounded-full font-medium text-lg hover:bg-white/10 transition-colors"
                 >
                   View GitHub
@@ -163,10 +165,10 @@ export function FooterMinimal() {
 
             {/* Legal */}
             <div className="flex items-center gap-6 text-sm">
-              <Link href="/privacy" className="text-white/40 hover:text-white transition-colors">
+              <Link href="/privacy" suppressHydrationWarning className="text-white/40 hover:text-white transition-colors">
                 Privacy
               </Link>
-              <Link href="/terms" className="text-white/40 hover:text-white transition-colors">
+              <Link href="/terms" suppressHydrationWarning className="text-white/40 hover:text-white transition-colors">
                 Terms
               </Link>
             </div>
@@ -182,6 +184,7 @@ function FooterLink({ href, children }: { href: string; children: React.ReactNod
     <li>
       <Link
         href={href}
+        suppressHydrationWarning
         className="text-white/60 hover:text-white transition-colors text-sm"
       >
         {children}
@@ -196,6 +199,7 @@ function SocialLink({ href, icon }: { href: string; icon: React.ReactNode }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      suppressHydrationWarning
       className="size-10 rounded-full border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:border-white/30 transition-colors"
     >
       {icon}

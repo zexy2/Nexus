@@ -61,6 +61,8 @@ import {
 import { showToast } from "@/components/shared/toast-provider";
 import { useUIStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { formatRelativeDate } from "@/lib/format";
+import { cleanDocTitle } from "@/lib/text";
 import Link from "next/link";
 
 // Document type
@@ -120,19 +122,8 @@ function DocumentCard({
   onToggleFavorite: (id: string) => void;
 }) {
   const [isHovered, setIsHovered] = useState(false);
-
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / (1000 * 60));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (minutes < 60) return `${minutes} dakika önce`;
-    if (hours < 24) return `${hours} saat önce`;
-    if (days < 7) return `${days} gün önce`;
-    return date.toLocaleDateString("tr-TR");
-  };
+  const formatDate = (date: Date) => formatRelativeDate(date, "tr");
+  const displayTitle = cleanDocTitle(doc.title);
 
   if (viewMode === "list") {
     return (
@@ -158,13 +149,13 @@ function DocumentCard({
               href={`/dashboard/docs/${doc.id}`}
               className="font-medium hover:underline truncate"
             >
-              {doc.title}
+              {displayTitle}
             </Link>
             {doc.isFavorite && (
-              <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 flex-shrink-0" />
+              <Star className="w-3.5 h-3.5 text-white fill-white flex-shrink-0" />
             )}
             {doc.isAI && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs rounded-full flex-shrink-0">
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-xs rounded-full flex-shrink-0">
                 <Sparkles className="w-3 h-3" />
                 AI
               </span>
@@ -299,7 +290,7 @@ function DocumentCard({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isHovered ? 1 : 0 }}
-        className="absolute inset-0 -z-10 blur-2xl bg-blue-500/10 transition-opacity duration-500"
+        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-500"
       />
 
       {/* Gradient border on hover */}
@@ -313,7 +304,7 @@ function DocumentCard({
           className="absolute top-4 right-4 z-10"
           animate={{ scale: isHovered ? 1.1 : 1 }}
         >
-          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+          <Star className="w-4 h-4 text-white fill-white" />
         </motion.div>
       )}
 
@@ -326,7 +317,7 @@ function DocumentCard({
 
         {/* Title */}
         <h3 className="font-semibold mb-2 line-clamp-2 group-hover:text-white/80 transition-colors">
-          {doc.title}
+          {displayTitle}
         </h3>
 
         {/* Preview text */}
@@ -347,7 +338,7 @@ function DocumentCard({
       <div className="px-5 pb-5 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {doc.isAI && (
-            <span className="flex items-center gap-1 px-2 py-1 bg-violet-500/20 text-violet-400 text-xs rounded-full">
+            <span className="flex items-center gap-1 px-2 py-1 bg-white/10 text-white/70 text-xs rounded-full">
               <Sparkles className="w-3 h-3" />
               AI Oluşturdu
             </span>
@@ -702,9 +693,9 @@ export default function DocsPage() {
             <>
               <span className="text-white/70 font-medium">{stats.total}</span> döküman
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-amber-400/80">{stats.favorites}</span> favori
+              <span className="text-white/70">{stats.favorites}</span> favori
               <span className="mx-2 text-white/20">•</span>
-              <span className="text-violet-400/80">{stats.aiGenerated}</span> AI oluşturdu
+              <span className="text-white/70">{stats.aiGenerated}</span> AI oluşturdu
             </>
           }
           action={
