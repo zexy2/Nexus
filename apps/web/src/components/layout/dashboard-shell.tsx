@@ -38,7 +38,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { CommandPalette } from '@/components/shared/command-palette';
 import { CommandInput } from '@/components/shared/command-input';
-import { SmoothScrollProvider } from '@/components/animations';
 
 // Navigation items
 const navItems = [
@@ -425,7 +424,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
   const user = session?.user;
 
   return (
-    <SmoothScrollProvider>
+    <>
       {/* Noise texture overlay */}
       <div className="noise-overlay" />
 
@@ -459,7 +458,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       {user && !pathname.startsWith('/dashboard/chat') && (
         <AICommandButton userId={user.id} />
       )}
-    </SmoothScrollProvider>
+    </>
   );
 }
 
