@@ -25,70 +25,7 @@ import {
 // ============================================================================
 
 function MeshGradientBackground() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {/* Base dark background */}
-      <div className="absolute inset-0 bg-black" />
-      
-      {/* Animated mesh gradient blobs */}
-      <div className="absolute inset-0">
-        {/* Indigo blob - top left */}
-        <motion.div
-          animate={{
-            x: [0, 50, 0],
-            y: [0, 30, 0],
-            scale: [1, 1.1, 1],
-          }}
-          transition={{
-            duration: 20,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-          className="absolute -top-1/4 -left-1/4 w-1/2 h-1/2 rounded-full bg-indigo-600/5 blur-3xl"
-        />
-        
-        {/* Violet blob - center right */}
-        <motion.div
-          animate={{
-            x: [0, -40, 0],
-            y: [0, 50, 0],
-            scale: [1, 1.15, 1],
-          }}
-          transition={{
-            duration: 25,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 2,
-          }}
-          className="absolute top-1/4 -right-1/4 w-1/2 h-1/2 rounded-full bg-white/5 blur-3xl"
-        />
-        
-        {/* Purple blob - bottom center */}
-        <motion.div
-          animate={{
-            x: [0, 30, -30, 0],
-            y: [0, -40, 0],
-            scale: [1, 1.08, 1],
-          }}
-          transition={{
-            duration: 30,
-            repeat: Infinity,
-            ease: 'easeInOut',
-            delay: 4,
-          }}
-          className="absolute -bottom-1/4 left-1/4 w-1/2 h-1/2 rounded-full bg-purple-600/5 blur-3xl"
-        />
-      </div>
-
-      {/* Subtle noise overlay */}
-      <div 
-        className="absolute inset-0 opacity-[0.015]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-        }}
-      />
-    </div>
-  );
+  return <div className="absolute inset-0 bg-background pointer-events-none" />;
 }
 
 // ============================================================================
