@@ -203,7 +203,7 @@ function SortableTaskCard({
   const { locale } = useLocale();
 
   const formatDate = (date: Date) => {
-    const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+    const days = Math.floor((new Date().getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
     if (days === 0) return t('tasks.today');
     if (days === 1) return t('tasks.yesterday');
     return formatRelativeDate(date, locale);

@@ -53,6 +53,10 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored && (LOCALES as string[]).includes(stored)) {
+      // Intentional: hydrate the persisted locale only after mount so the first
+      // client render matches the server (default locale), avoiding a hydration
+      // mismatch. This one synchronous setState is the documented pattern.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocaleState(stored as AppLocale);
     }
   }, []);
