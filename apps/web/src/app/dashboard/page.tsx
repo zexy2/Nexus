@@ -170,8 +170,8 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
         whileHover={{ x: 4 }}
         className="group flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300"
       >
-        <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center text-lg">
-          {doc.iconEmoji || '📄'}
+        <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
+          <FileText className="h-4 w-4 text-white/70" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate group-hover:text-white transition-colors">{cleanDocTitle(doc.title)}</p>
@@ -448,14 +448,12 @@ export default function DashboardPage() {
 
       {/* Bento Grid Section */}
       <section className="px-6 md:px-12 lg:px-24 mb-16">
-        <BentoGrid columns={3} gap="md">
+        <BentoGrid columns={2} gap="md">
           {/* Agent Activity - Takes 2 rows */}
           <BentoCard
             title={t('dashboard.bentoAgentActivity')}
             subtitle={t('dashboard.bentoAiWorkspace')}
-            colSpan={1}
-            rowSpan={2}
-            className="min-h-[500px]"
+            className="min-h-[440px]"
             interactive={false}
           >
             <div className="space-y-3 mt-4">
@@ -473,8 +471,7 @@ export default function DashboardPage() {
           <BentoCard
             title={t('dashboard.bentoRecentDocs')}
             subtitle={t('dashboard.bentoWorkspace')}
-            colSpan={2}
-            className="min-h-[280px]"
+            className="min-h-[440px]"
             interactive={false}
           >
             {docs.length === 0 ? (
@@ -498,8 +495,7 @@ export default function DashboardPage() {
           <BentoCard
             title={t('dashboard.bentoPriorityTasks')}
             subtitle={t('dashboard.bentoToday')}
-            colSpan={2}
-            className="min-h-[280px]"
+            className="min-h-[440px]"
             interactive={false}
           >
             {tasks.length === 0 ? (
@@ -522,7 +518,7 @@ export default function DashboardPage() {
           {/* Quick Actions */}
           <BentoCard
             title={t('dashboard.bentoQuickActions')}
-            colSpan={1}
+            className="min-h-[440px]"
             gradient="bg-gradient-to-br from-white/10 to-transparent"
             interactive={false}
           >

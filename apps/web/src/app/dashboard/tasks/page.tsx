@@ -461,7 +461,7 @@ function KanbanColumn({
         ref={setNodeRef}
         data-testid={`kanban-column-${column.id}`}
         className={cn(
-          "flex-1 rounded-2xl p-3 min-h-[200px] transition-colors border",
+          "rounded-2xl p-3 h-[calc(100vh-24rem)] min-h-[20rem] overflow-y-auto transition-colors border",
           colors.bg,
           colors.border,
           isOver && "ring-2 ring-primary/50 bg-primary/5"
