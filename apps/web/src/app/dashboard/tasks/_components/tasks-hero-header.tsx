@@ -121,7 +121,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
         >
           <Button
             onClick={onCreateTask}
-            className="gap-2 rounded-full px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
+            className="gap-2 rounded-lg px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
           >
             <Plus className="w-4 h-4" />
             {t('tasks.newTask')}

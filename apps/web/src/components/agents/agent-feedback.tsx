@@ -225,7 +225,7 @@ export function AgentExecutionFeedback({
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div
           className={cn(
-            "h-full transition-all duration-500",
+            "h-full transition-all duration-200",
             isComplete ? "bg-green-500" : "bg-blue-500"
           )}
           style={{ width: `${(completedCount / steps.length) * 100}%` }}

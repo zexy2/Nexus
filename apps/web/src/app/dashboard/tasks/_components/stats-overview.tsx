@@ -75,12 +75,7 @@ function AnimatedStatCard({
       ref={cardRef}
       initial={{ opacity: 0, y: 30, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ 
-        delay: 0.2 + index * 0.08,
-        type: 'spring',
-        stiffness: 150,
-        damping: 20,
-      }}
+      transition={{ delay: 0.2 + index * 0.08, duration: 0.3, ease: 'easeOut' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
@@ -102,7 +97,7 @@ function AnimatedStatCard({
 
         {/* Value & Label */}
         <div>
-          <div className="text-3xl font-bold tracking-tight text-white">
+          <div className="text-3xl font-bold tracking-tight text-white tabular-nums">
             <CountUp
               end={stat.value}
               duration={2}

@@ -287,18 +287,18 @@ function DocumentCard({
       whileTap={{ scale: 0.98 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      className="group relative bg-white/[0.02] backdrop-blur-md border border-white/[0.06] rounded-3xl overflow-hidden transition-all duration-300 hover:border-white/20 hover:bg-white/[0.04]"
+      className="group relative bg-white/[0.02] backdrop-blur-md border border-white/[0.06] rounded-2xl overflow-hidden transition-all duration-300 hover:border-white/20 hover:bg-white/[0.04]"
     >
       {/* Hover glow effect */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isHovered ? 1 : 0 }}
-        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-500"
+        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-200"
       />
 
       {/* Gradient border on hover */}
       <div
-        className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
+        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
       />
 
       {/* Favorite badge */}
@@ -705,7 +705,7 @@ export default function DocsPage() {
           action={
             <Button
               onClick={() => setIsCreateOpen(true)}
-              className="gap-2 rounded-full px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
+              className="gap-2 rounded-lg px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
             >
               <Plus className="w-4 h-4" />
               {t('docs.newDoc')}

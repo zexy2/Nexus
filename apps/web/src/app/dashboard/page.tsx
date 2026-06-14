@@ -104,7 +104,7 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
       className={cn(
-        'group relative p-5 rounded-2xl transition-all duration-500',
+        'group relative p-5 rounded-2xl transition-all duration-200',
         'bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20',
         isActive && 'ring-1 ring-white/20'
       )}
@@ -370,7 +370,7 @@ export default function DashboardPage() {
               <Button
                 size="lg"
                 onClick={() => openModal('createDocument')}
-                className="rounded-full px-8 gap-2"
+                className="rounded-lg px-8 gap-2"
               >
                 <Plus className="h-4 w-4" />
                 {t('dashboard.newDocument')}
@@ -382,7 +382,7 @@ export default function DashboardPage() {
                 variant="outline"
                 size="lg"
                 onClick={() => openModal('aiAssistant')}
-                className="rounded-full px-8 gap-2 glass-premium border-white/20"
+                className="rounded-lg px-8 gap-2 glass-premium border-white/20"
               >
                 <Sparkles className="h-4 w-4" />
                 {t('dashboard.askAi')}
@@ -422,7 +422,7 @@ export default function DashboardPage() {
                       </div>
 
                       <div className="flex items-baseline gap-1">
-                        <span className="text-4xl md:text-5xl font-bold tracking-tighter">
+                        <span className="text-4xl md:text-5xl font-bold tracking-tighter tabular-nums">
                           <AnimatedNumber value={stat.value} />
                         </span>
                         {stat.suffix && (
