@@ -101,49 +101,15 @@ export function EmptyState({
     >
       {/* Animated Icon Container */}
       <motion.div
-        initial={{ scale: 0, rotate: -10 }}
-        animate={{ scale: 1, rotate: 0 }}
-        transition={{ 
-          type: 'spring',
-          stiffness: 200,
-          damping: 15,
-          delay: 0.1 
-        }}
-        className="relative mb-6"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut', delay: 0.05 }}
+        className="mb-6"
       >
-        {/* Background glow */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent rounded-full blur-2xl scale-150" />
-        
-        {/* Icon container */}
-        <div className="relative p-6 rounded-2xl bg-gradient-to-br from-muted/80 to-muted/40 border border-border/50">
-          <motion.div
-            animate={{ 
-              y: [0, -4, 0],
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
-            className="text-muted-foreground/60"
-          >
-            {icon || config.icon}
-          </motion.div>
+        {/* Clean, static icon tile — no glow, float or decorative dots. */}
+        <div className="p-5 rounded-2xl bg-card border border-border text-muted-foreground">
+          {icon || config.icon}
         </div>
-
-        {/* Decorative dots */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="absolute -top-2 -right-2 h-3 w-3 rounded-full bg-primary/20"
-        />
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="absolute -bottom-1 -left-3 h-2 w-2 rounded-full bg-primary/15"
-        />
       </motion.div>
 
       {/* Text content */}
