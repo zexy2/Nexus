@@ -370,7 +370,7 @@ export default function DashboardPage() {
               <Button
                 size="lg"
                 onClick={() => openModal('createDocument')}
-                className="rounded-full px-8 gap-2"
+                className="rounded-lg px-8 gap-2"
               >
                 <Plus className="h-4 w-4" />
                 {t('dashboard.newDocument')}
@@ -382,7 +382,7 @@ export default function DashboardPage() {
                 variant="outline"
                 size="lg"
                 onClick={() => openModal('aiAssistant')}
-                className="rounded-full px-8 gap-2 glass-premium border-white/20"
+                className="rounded-lg px-8 gap-2 glass-premium border-white/20"
               >
                 <Sparkles className="h-4 w-4" />
                 {t('dashboard.askAi')}

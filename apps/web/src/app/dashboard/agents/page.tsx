@@ -847,7 +847,7 @@ ${JSON.stringify(execution.input, null, 2)}
   };
 
   return (
-    <Card className={`glass-premium border-white/10 rounded-3xl overflow-hidden transition-all ${execution.status === "running" ? "ring-2 ring-white/20" : ""}`}>
+    <Card className={`glass-premium border-white/10 rounded-2xl overflow-hidden transition-all ${execution.status === "running" ? "ring-2 ring-white/20" : ""}`}>
       <CardHeader className="pb-3 p-4 md:p-5">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
@@ -1406,7 +1406,7 @@ export default function AgentsPage() {
                         damping: 20,
                       }}
                       onClick={() => setSelectedAgent(agent.id)}
-                      className={`cursor-pointer relative group rounded-3xl overflow-hidden bg-white/[0.02] backdrop-blur-md border transition-all duration-300 ${
+                      className={`cursor-pointer relative group rounded-2xl overflow-hidden bg-white/[0.02] backdrop-blur-md border transition-all duration-300 ${
                         isSelected 
                           ? "ring-2 ring-white/30 border-white/20 bg-white/[0.05]" 
                           : "border-white/[0.06] hover:border-white/20 hover:bg-white/[0.04]"
@@ -1422,7 +1422,7 @@ export default function AgentsPage() {
 
                       {/* Gradient border on hover */}
                       <div
-                        className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
+                        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
                       />
 
                       <div className="p-4 md:p-6 pb-3 md:pb-3">
@@ -1483,7 +1483,7 @@ export default function AgentsPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
               >
-                <Card className="glass-premium border-white/10 rounded-3xl overflow-hidden">
+                <Card className="glass-premium border-white/10 rounded-2xl overflow-hidden">
                   <CardHeader className="p-5 md:p-8">
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                       <div className="flex items-center gap-4">
@@ -1623,7 +1623,7 @@ export default function AgentsPage() {
             )}
             
             {activeWorkflows.length === 0 ? (
-              <Card className="border-dashed glass-premium border-white/10 rounded-3xl">
+              <Card className="border-dashed glass-premium border-white/10 rounded-2xl">
                 <CardContent className="flex flex-col items-center justify-center py-12 md:py-16">
                   <div className="size-16 rounded-2xl bg-white/5 flex items-center justify-center mb-6">
                     <Rocket className="size-8 text-muted-foreground/50" />
@@ -1655,7 +1655,7 @@ export default function AgentsPage() {
 
           {/* Executions Tab */}
           <TabsContent value="executions" className="mt-4">
-            <Card className="glass-premium border-white/10 rounded-3xl overflow-hidden">
+            <Card className="glass-premium border-white/10 rounded-2xl overflow-hidden">
               <CardHeader className="p-5 md:p-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
