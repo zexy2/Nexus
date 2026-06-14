@@ -95,14 +95,6 @@ function fromSyncDoc(d: SyncDoc): Document {
   };
 }
 
-// Emoji picker options
-const emojiOptions = [
-  "📄", "📋", "📝", "📊", "📈", "📉", "📁", "📂",
-  "💡", "🎯", "🚀", "⭐", "🔥", "💎", "🎨", "🔧",
-  "📌", "🏷️", "🔖", "📎", "✏️", "🖊️", "📚", "📖",
-  "💼", "🗂️", "🗃️", "📦", "🎁", "🏆", "🎪", "🎭",
-];
-
 // Sort options
 type SortOption = "updated" | "created" | "title" | "favorite";
 
@@ -141,8 +133,8 @@ function DocumentCard({
         className="group relative flex items-center gap-4 p-4 border-b border-white/5 transition-colors"
       >
         {/* Emoji Icon */}
-        <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-xl">
-          {doc.iconEmoji}
+        <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+          <FileText className="w-5 h-5 text-white/70" />
         </div>
 
         {/* Content */}
@@ -314,8 +306,8 @@ function DocumentCard({
       {/* Card content */}
       <Link href={`/dashboard/docs/${doc.id}`} className="block p-5">
         {/* Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl mb-4">
-          {doc.iconEmoji}
+        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+          <FileText className="w-6 h-6 text-white/70" />
         </div>
 
         {/* Title */}
@@ -955,45 +947,19 @@ export default function DocsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Emoji picker */}
-            <div>
-              <label className="text-sm font-medium mb-2 block">
-                {t('docs.iconLabel')}
-              </label>
-              <div className="flex flex-wrap gap-2 p-3 bg-white/5 rounded-2xl max-h-32 overflow-y-auto">
-                {emojiOptions.map((emoji) => (
-                  <button
-                    key={emoji}
-                    onClick={() => setNewDocEmoji(emoji)}
-                    className={cn(
-                      "w-8 h-8 rounded-xl flex items-center justify-center text-lg transition-all",
-                      newDocEmoji === emoji
-                        ? "bg-white text-black scale-110"
-                        : "hover:bg-white/10"
-                    )}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Title input */}
             <div>
               <label className="text-sm font-medium mb-2 block">
                 {t('docs.titleLabel')}
               </label>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{newDocEmoji}</span>
-                <Input
-                  placeholder={t('docs.titlePlaceholder')}
-                  value={newDocTitle}
-                  onChange={(e) => setNewDocTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateDocument()}
-                  className="flex-1 bg-white/5 border-white/10 rounded-full"
-                  autoFocus
-                />
-              </div>
+              <Input
+                placeholder={t('docs.titlePlaceholder')}
+                value={newDocTitle}
+                onChange={(e) => setNewDocTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateDocument()}
+                className="bg-white/5 border-white/10 rounded-full"
+                autoFocus
+              />
             </div>
           </div>
 
