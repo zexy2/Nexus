@@ -322,7 +322,7 @@ function MetricCard({ metric, index }: { metric: MetricItem; index: number }) {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isHovered ? 1 : 0 }}
-        className={`absolute inset-0 -z-10 blur-2xl transition-opacity duration-500 ${metric.glow}`}
+        className={`absolute inset-0 -z-10 blur-2xl transition-opacity duration-200 ${metric.glow}`}
       />
 
       <div className="relative flex items-center gap-4">
@@ -339,7 +339,7 @@ function MetricCard({ metric, index }: { metric: MetricItem; index: number }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl md:text-3xl font-bold tracking-tight text-white">
+            <span className="text-2xl md:text-3xl font-bold tracking-tight text-white tabular-nums">
               {metric.isNumeric ? (
                 <>
                   <CountUp
@@ -1417,12 +1417,12 @@ export default function AgentsPage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: isSelected ? 0.5 : 0 }}
                         whileHover={{ opacity: 0.3 }}
-                        className="absolute inset-0 -z-10 blur-2xl bg-white/10 transition-opacity duration-500"
+                        className="absolute inset-0 -z-10 blur-2xl bg-white/10 transition-opacity duration-200"
                       />
 
                       {/* Gradient border on hover */}
                       <div
-                        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
+                        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
                       />
 
                       <div className="p-4 md:p-6 pb-3 md:pb-3">

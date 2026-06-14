@@ -119,12 +119,7 @@ export function PremiumStatCard({
       ref={cardRef}
       initial={{ opacity: 0, y: 30, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{
-        delay,
-        type: 'spring',
-        stiffness: 150,
-        damping: 20,
-      }}
+      transition={{ delay, duration: 0.3, ease: 'easeOut' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       className={cn(
@@ -147,7 +142,7 @@ export function PremiumStatCard({
         {/* Value & Label */}
         <div className="flex-1">
           <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold tracking-tight text-white">
+            <span className="text-3xl font-bold tracking-tight text-white tabular-nums">
               {prefix}
               <CountUp
                 end={value}

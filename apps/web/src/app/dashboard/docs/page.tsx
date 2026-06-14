@@ -293,12 +293,12 @@ function DocumentCard({
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isHovered ? 1 : 0 }}
-        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-500"
+        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-200"
       />
 
       {/* Gradient border on hover */}
       <div
-        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
+        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
       />
 
       {/* Favorite badge */}
