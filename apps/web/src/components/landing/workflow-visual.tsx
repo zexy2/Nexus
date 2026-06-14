@@ -182,13 +182,15 @@ export function WorkflowVisual() {
   return (
     <div className="relative w-full max-w-[30rem]">
       {/* depth glow */}
-      <div className="pointer-events-none absolute -inset-24 -z-10 bg-[radial-gradient(closest-side,rgba(255,255,255,0.08),transparent)]" />
+      <div className="pointer-events-none absolute -inset-28 -z-10 bg-[radial-gradient(closest-side,rgba(255,255,255,0.1),transparent)]" />
 
       <motion.div
-        className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.95)]"
+        className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#171717] to-[#0e0e0e] shadow-[0_50px_140px_-40px_rgba(0,0,0,1)] ring-1 ring-white/[0.04]"
         animate={{ y: [0, -6, 0] }}
         transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
       >
+        {/* top edge highlight */}
+        <div aria-hidden className="absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
         {/* window chrome */}
         <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
           <div className="flex gap-1.5">
@@ -227,9 +229,10 @@ export function WorkflowVisual() {
           <AnimatePresence mode="wait">
             <motion.div
               key={step}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.2 } }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10, transition: { duration: 0.2 } }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             >
               <Scene />
             </motion.div>

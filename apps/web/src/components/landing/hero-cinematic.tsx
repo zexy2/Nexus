@@ -43,6 +43,12 @@ export function HeroCinematic() {
       ref={heroRef}
       className="relative flex min-h-[100svh] items-center overflow-hidden bg-[#0a0a0a]"
     >
+      {/* ambient depth — masked grid + soft spotlight behind the visual */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 opacity-[0.045] [background-image:linear-gradient(rgba(255,255,255,0.7)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.7)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:radial-gradient(ellipse_62%_60%_at_50%_42%,black,transparent)] [-webkit-mask-image:radial-gradient(ellipse_62%_60%_at_50%_42%,black,transparent)]" />
+        <div className="absolute right-[4%] top-1/2 hidden size-[44rem] -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,255,255,0.055),transparent)] lg:block" />
+      </div>
+
       <div
         ref={contentRef}
         className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-12 px-6 py-28 will-change-transform lg:grid-cols-[minmax(0,38rem)_minmax(0,1fr)] lg:gap-16"
