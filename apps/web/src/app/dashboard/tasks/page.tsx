@@ -461,7 +461,7 @@ function KanbanColumn({
         ref={setNodeRef}
         data-testid={`kanban-column-${column.id}`}
         className={cn(
-          "rounded-2xl p-3 h-[calc(100vh-13rem)] min-h-[26rem] overflow-y-auto transition-colors border",
+          "rounded-2xl p-3 h-[calc(100vh-11rem)] min-h-[22rem] overflow-y-auto transition-colors border",
           colors.bg,
           colors.border,
           isOver && "ring-2 ring-primary/50 bg-primary/5"
@@ -939,7 +939,7 @@ export default function TasksPage() {
         </section>
 
         {/* Kanban Board */}
-        <section>
+        <section className="sticky top-[5.5rem] z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
