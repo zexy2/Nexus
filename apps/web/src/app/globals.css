@@ -221,7 +221,7 @@
 /* Display - Giant hero headlines */
 .text-display {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(3rem, 8vw, 8rem);
+  font-size: clamp(2.5rem, 6vw, 5rem);
   font-weight: 600;
   letter-spacing: -0.05em;
   line-height: 0.9;
@@ -230,7 +230,7 @@
 /* Display Large - Extra dramatic */
 .text-display-lg {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(4rem, 12vw, 12rem);
+  font-size: clamp(3rem, 8vw, 7rem);
   font-weight: 700;
   letter-spacing: -0.06em;
   line-height: 0.85;
@@ -239,7 +239,7 @@
 /* Hero - Large section headlines */
 .text-hero {
   font-family: var(--font-display), system-ui, sans-serif;
-  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-size: clamp(2.25rem, 5vw, 4rem);
   font-weight: 600;
   letter-spacing: -0.04em;
   line-height: 0.95;
