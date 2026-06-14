@@ -69,7 +69,7 @@ export function PremiumHeroHeader({
           <motion.span
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-xs font-semibold tracking-[0.2em] text-white/40 mb-3 block"
+            className="font-mono text-xs uppercase tracking-[0.2em] text-white/40 mb-3 block"
           >
             {label}
           </motion.span>
