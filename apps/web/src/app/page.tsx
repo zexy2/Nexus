@@ -10,14 +10,12 @@ import {
   FooterMinimal,
   Preloader,
 } from "@/components/landing";
-import { SmoothScrollProvider } from "@/components/animations";
 
 export default function LandingPage() {
   return (
     <>
       <Preloader />
-      <SmoothScrollProvider>
-        <div className="min-h-screen bg-[#0a0a0a]">
+      <div className="min-h-screen bg-[#0a0a0a]">
           <Navigation />
 
           <main>
@@ -52,8 +50,7 @@ export default function LandingPage() {
           </main>
 
           <FooterMinimal />
-        </div>
-      </SmoothScrollProvider>
+      </div>
     </>
   );
 }

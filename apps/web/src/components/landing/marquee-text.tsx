@@ -117,7 +117,7 @@ interface MarqueeBannerProps {
 
 export function MarqueeBanner({ lines, className = "" }: MarqueeBannerProps) {
   return (
-    <section className={`relative py-20 md:py-32 bg-white overflow-hidden ${className}`}>
+    <section className={`relative py-20 md:py-32 bg-[#0a0a0a] overflow-hidden ${className}`}>
       {/* Gradient overlays for fade effect */}
       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-black to-transparent z-10" />
       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-black to-transparent z-10" />
