@@ -304,9 +304,10 @@
 
 /* Label */
 .text-label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }

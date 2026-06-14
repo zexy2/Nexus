@@ -53,7 +53,7 @@ export function TasksHeroHeader({ stats, onCreateTask }: TasksHeroHeaderProps) {
             initial={{ opacity: 0, y: 20, filter: 'blur(10px)' }}
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.6 }}
-            className="text-xs md:text-sm font-medium tracking-[0.2em] text-white/40 mb-4 block uppercase"
+            className="font-mono text-xs md:text-sm tracking-[0.2em] text-white/40 mb-4 block uppercase"
           >
             {t('tasks.label')}
           </motion.span>
