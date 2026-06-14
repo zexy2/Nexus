@@ -7,9 +7,7 @@ import Link from "next/link";
 import { ArrowRight, Github } from "lucide-react";
 import { TextSplitReveal } from "@/components/animations/text-split-reveal";
 import { MagneticButton } from "@/components/animations/magnetic-button";
-import DynamicCanvasWrapper from "@/components/landing/three";
-import { HeroScene } from "@/components/landing/three/hero-scene";
-import { HeroFallback } from "@/components/landing/three/hero-fallback";
+import { WorkflowVisual } from "@/components/landing/workflow-visual";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -86,17 +84,12 @@ export function HeroCinematic() {
   return (
     <section
       ref={heroRef}
-      className="relative flex min-h-[100svh] items-center overflow-hidden bg-black"
+      className="relative flex min-h-[100svh] items-center overflow-hidden bg-[#0a0a0a]"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      <div className="absolute inset-0">
-        <DynamicCanvasWrapper
-          className="h-full w-full"
-          fallback={<HeroFallback />}
-        >
-          <HeroScene />
-        </DynamicCanvasWrapper>
+      <div className="absolute inset-y-0 right-0 hidden w-[52%] items-center pr-10 lg:flex xl:pr-20">
+        <WorkflowVisual />
       </div>
 
       <div
@@ -117,7 +110,7 @@ export function HeroCinematic() {
       >
         <div className="max-w-[46rem]">
           <div className="mb-8 inline-flex items-center gap-3 border-y border-white/10 py-2">
-            <span className="size-2 bg-white shadow-[0_0_20px_rgba(157,255,122,0.8)]" />
+            <span className="size-2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.45)]" />
             <span className="font-mono text-xs uppercase text-white/55 sm:text-sm">
               Public demo / AI workflow workspace
             </span>
