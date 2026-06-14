@@ -5,7 +5,6 @@ import CountUp from "react-countup";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
-import { TextSplitReveal } from "@/components/animations/text-split-reveal";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -85,13 +84,9 @@ export function StatsSection() {
           <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
             Demo proof
           </span>
-          <TextSplitReveal
-            text="The landing page proves the exact loop the recruiter can run."
-            className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white"
-            animation="scramble"
-            triggerOnScroll={true}
-            as="h2"
-          />
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white text-balance">
+            The landing page proves the exact loop the recruiter can run.
+          </h2>
         </ScrollReveal>
 
         <div className="grid gap-px bg-white/10 md:grid-cols-4">
