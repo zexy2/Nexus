@@ -222,6 +222,11 @@ export const tasks = pgTable(
     dueDate: timestamp("due_date", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     position: integer("position").notNull().default(0), // Kanban sıralama
+    isArchived: integer("is_archived").notNull().default(0),
+    alignmentStatus: varchar("alignment_status", { length: 30 })
+      .notNull()
+      .default("orphaned"),
+    alignmentUpdatedAt: timestamp("alignment_updated_at", { withTimezone: true }),
     createdBy: text("created_by").references(() => users.id),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -235,6 +240,164 @@ export const tasks = pgTable(
     index("tasks_workspace_idx").on(table.workspaceId),
     index("tasks_status_idx").on(table.status),
     index("tasks_assignee_idx").on(table.assigneeId),
+    index("tasks_doc_idx").on(table.docId),
+    index("tasks_archived_idx").on(table.isArchived),
+  ]
+);
+
+// ==========================================
+// LIVING PLANS (Immutable plan versions)
+// ==========================================
+
+export const planVersions = pgTable(
+  "plan_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    docId: uuid("doc_id")
+      .notNull()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    content: jsonb("content").$type<Record<string, unknown> | unknown[]>(),
+    contentText: text("content_text").notNull(),
+    status: varchar("status", { length: 30 }).notNull().default("proposed"),
+    baseVersionId: uuid("base_version_id"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("plan_versions_doc_version_idx").on(table.docId, table.versionNumber),
+    index("plan_versions_workspace_idx").on(table.workspaceId),
+    index("plan_versions_doc_idx").on(table.docId),
+    index("plan_versions_status_idx").on(table.status),
+  ]
+);
+
+export const requirements = pgTable(
+  "requirements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    docId: uuid("doc_id")
+      .notNull()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    planVersionId: uuid("plan_version_id")
+      .notNull()
+      .references(() => planVersions.id, { onDelete: "cascade" }),
+    stableKey: varchar("stable_key", { length: 40 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    description: text("description").notNull(),
+    acceptanceCriteria: jsonb("acceptance_criteria").$type<string[]>().notNull().default([]),
+    status: varchar("status", { length: 30 }).notNull().default("active"),
+    changeType: varchar("change_type", { length: 30 }).notNull().default("added"),
+    confidence: integer("confidence").notNull().default(100),
+    previousRequirementId: uuid("previous_requirement_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("requirements_version_key_idx").on(table.planVersionId, table.stableKey),
+    index("requirements_workspace_idx").on(table.workspaceId),
+    index("requirements_doc_idx").on(table.docId),
+    index("requirements_plan_version_idx").on(table.planVersionId),
+    index("requirements_stable_key_idx").on(table.stableKey),
+  ]
+);
+
+export const requirementTaskLinks = pgTable(
+  "requirement_task_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requirementId: uuid("requirement_id")
+      .notNull()
+      .references(() => requirements.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("requirement_task_links_unique_idx").on(table.requirementId, table.taskId),
+    index("requirement_task_links_workspace_idx").on(table.workspaceId),
+    index("requirement_task_links_task_idx").on(table.taskId),
+  ]
+);
+
+export const changeSets = pgTable(
+  "change_sets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    docId: uuid("doc_id")
+      .notNull()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    baseVersionId: uuid("base_version_id").references(() => planVersions.id, {
+      onDelete: "set null",
+    }),
+    proposedVersionId: uuid("proposed_version_id")
+      .notNull()
+      .references(() => planVersions.id, { onDelete: "cascade" }),
+    temporalWorkflowId: varchar("temporal_workflow_id", { length: 255 }),
+    status: varchar("status", { length: 30 }).notNull().default("pending"),
+    summary: text("summary").notNull(),
+    stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedBy: text("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("change_sets_workspace_idx").on(table.workspaceId),
+    index("change_sets_doc_idx").on(table.docId),
+    index("change_sets_status_idx").on(table.status),
+    index("change_sets_workflow_idx").on(table.temporalWorkflowId),
+  ]
+);
+
+export const changeProposals = pgTable(
+  "change_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    changeSetId: uuid("change_set_id")
+      .notNull()
+      .references(() => changeSets.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requirementId: uuid("requirement_id").references(() => requirements.id, {
+      onDelete: "set null",
+    }),
+    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    action: varchar("action", { length: 40 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    description: text("description"),
+    priority: varchar("priority", { length: 20 }),
+    rationale: text("rationale").notNull(),
+    confidence: integer("confidence").notNull().default(100),
+    status: varchar("status", { length: 30 }).notNull().default("pending"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("change_proposals_change_set_idx").on(table.changeSetId),
+    index("change_proposals_workspace_idx").on(table.workspaceId),
+    index("change_proposals_task_idx").on(table.taskId),
+    index("change_proposals_status_idx").on(table.status),
   ]
 );
 
@@ -397,6 +560,78 @@ export const tasksRelations = relations(tasks, ({ one }) => ({
   creator: one(users, {
     fields: [tasks.createdBy],
     references: [users.id],
+  }),
+}));
+
+export const planVersionsRelations = relations(planVersions, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [planVersions.workspaceId],
+    references: [workspaces.id],
+  }),
+  doc: one(docs, {
+    fields: [planVersions.docId],
+    references: [docs.id],
+  }),
+  requirements: many(requirements),
+  changeSets: many(changeSets),
+}));
+
+export const requirementsRelations = relations(requirements, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [requirements.workspaceId],
+    references: [workspaces.id],
+  }),
+  doc: one(docs, {
+    fields: [requirements.docId],
+    references: [docs.id],
+  }),
+  planVersion: one(planVersions, {
+    fields: [requirements.planVersionId],
+    references: [planVersions.id],
+  }),
+  taskLinks: many(requirementTaskLinks),
+  proposals: many(changeProposals),
+}));
+
+export const requirementTaskLinksRelations = relations(requirementTaskLinks, ({ one }) => ({
+  requirement: one(requirements, {
+    fields: [requirementTaskLinks.requirementId],
+    references: [requirements.id],
+  }),
+  task: one(tasks, {
+    fields: [requirementTaskLinks.taskId],
+    references: [tasks.id],
+  }),
+}));
+
+export const changeSetsRelations = relations(changeSets, ({ one, many }) => ({
+  workspace: one(workspaces, {
+    fields: [changeSets.workspaceId],
+    references: [workspaces.id],
+  }),
+  doc: one(docs, {
+    fields: [changeSets.docId],
+    references: [docs.id],
+  }),
+  proposedVersion: one(planVersions, {
+    fields: [changeSets.proposedVersionId],
+    references: [planVersions.id],
+  }),
+  proposals: many(changeProposals),
+}));
+
+export const changeProposalsRelations = relations(changeProposals, ({ one }) => ({
+  changeSet: one(changeSets, {
+    fields: [changeProposals.changeSetId],
+    references: [changeSets.id],
+  }),
+  requirement: one(requirements, {
+    fields: [changeProposals.requirementId],
+    references: [requirements.id],
+  }),
+  task: one(tasks, {
+    fields: [changeProposals.taskId],
+    references: [tasks.id],
   }),
 }));
 

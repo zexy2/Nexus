@@ -437,9 +437,9 @@ function KanbanColumn({
   const colors = colorClasses[column.color as keyof typeof colorClasses];
 
   return (
-    <div className="flex flex-col min-w-0">
+    <div className="flex flex-col min-w-0 md:h-full">
       {/* Column header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className={cn("p-2 rounded-xl", colors.bg, colors.border, "border")}>
             <Icon className={cn("w-4 h-4", colors.icon)} />
@@ -461,7 +461,7 @@ function KanbanColumn({
         ref={setNodeRef}
         data-testid={`kanban-column-${column.id}`}
         className={cn(
-          "rounded-2xl p-3 h-[calc(100vh-11rem)] min-h-[22rem] overflow-y-auto transition-colors border",
+          "rounded-2xl p-3 h-[26rem] md:h-auto md:flex-1 md:min-h-0 overflow-y-auto transition-colors border",
           colors.bg,
           colors.border,
           isOver && "ring-2 ring-primary/50 bg-primary/5"
@@ -939,12 +939,12 @@ export default function TasksPage() {
         </section>
 
         {/* Kanban Board */}
-        <section className="sticky top-[5.5rem] z-10">
+        <section className="md:sticky md:top-[5rem] md:z-10 md:h-[calc(100vh-6.5rem)]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="overflow-x-auto pb-6"
+            className="overflow-x-auto pb-6 md:h-full md:overflow-hidden md:pb-0"
           >
             <DndContext
               sensors={sensors}
@@ -953,7 +953,7 @@ export default function TasksPage() {
               onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
             >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 md:h-full">
                 {columns.map((column) => (
                   <KanbanColumn
                     key={column.id}
