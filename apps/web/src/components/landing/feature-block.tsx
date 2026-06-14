@@ -1,158 +1,128 @@
 "use client";
 
+import {
+  Activity,
+  Database,
+  Gauge,
+  GitBranch,
+  LockKeyhole,
+  Server,
+  Users,
+} from "lucide-react";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
-import { ParallaxImage } from "@/components/animations/parallax-image";
-import { stockImages } from "@/lib/images";
 
-interface Feature {
-  title: string;
-  description: string;
-  image: string;
-  badge?: string;
-}
-
-const features: Feature[] = [
+const capabilities = [
   {
-    badge: "AI Agents",
-    title: "AI agents for the demo workflow",
+    icon: GitBranch,
+    label: "Temporal workflows",
+    title: "Workflow state is a first-class product surface.",
     description:
-      "Run a document workflow with visible research and writer steps, then run a task breakdown workflow that creates real Kanban tasks.",
-    image: stockImages.features[0].src,
+      "Document generation and task breakdown run as tracked executions with running, completed, and failed states.",
+    proof: ["execution id", "step preview", "terminal status"],
   },
   {
-    badge: "Workspace",
-    title: "One focused workspace",
+    icon: Database,
+    label: "Persistent workspace",
+    title: "AI output becomes workspace data.",
     description:
-      "The public demo is scoped to a seeded workspace so visitors can try the full flow without creating accounts or supplying their own API keys.",
-    image: stockImages.features[1].src,
+      "Generated documents and extracted tasks are saved to the database so the demo continues beyond a single response.",
+    proof: ["docs table", "tasks table", "workspace scope"],
   },
   {
-    badge: "Kanban",
-    title: "Tasks land where users manage work",
+    icon: Gauge,
+    label: "Demo guardrails",
+    title: "Public access stays budget controlled.",
     description:
-      "Task breakdown results are saved to the database and appear in the Kanban board with status and priority metadata.",
-    image: stockImages.features[2].src,
+      "The app uses a server-managed Gemini key, daily limits, audit logs, and clear unavailable states instead of asking visitors for API keys.",
+    proof: ["daily quota", "kill switch", "429 limits"],
   },
   {
-    badge: "Operations",
-    title: "Workflow status is visible",
+    icon: Users,
+    label: "Collaboration layer",
+    title: "The workspace is built for shared editing.",
     description:
-      "Agent execution history records running, completed, and failed workflows with step previews and clear errors.",
-    image: stockImages.features[3].src,
+      "Yjs/Hocuspocus collaboration support is part of the stack, while the public demo stays focused on one seeded workspace.",
+    proof: ["Yjs", "Hocuspocus", "single demo team"],
+  },
+  {
+    icon: Server,
+    label: "Docker VPS path",
+    title: "The deployment story is intentionally practical.",
+    description:
+      "The stack is designed around web, worker, collaboration, Postgres/pgvector, and Temporal services for a small VPS demo.",
+    proof: ["compose up", "db:migrate", "smoke:prod"],
+  },
+  {
+    icon: LockKeyhole,
+    label: "Honest scope",
+    title: "Portfolio demo, not fake enterprise theater.",
+    description:
+      "The landing explains exactly what is live today and avoids fake testimonials, inflated customer claims, or hidden BYOK assumptions.",
+    proof: ["public demo", "no BYOK", "real flow"],
   },
 ];
 
-interface FeatureBlockProps {
-  feature: Feature;
-  index: number;
-  reversed?: boolean;
-}
-
-function FeatureBlock({ feature, index, reversed = false }: FeatureBlockProps) {
-  return (
-    <div
-      className={`grid lg:grid-cols-2 gap-12 lg:gap-20 items-center ${
-        reversed ? "lg:grid-flow-col-dense" : ""
-      }`}
-    >
-      {/* Content */}
-      <ScrollReveal
-        animation={reversed ? "fade-left" : "fade-right"}
-        delay={0.1}
-        className={reversed ? "lg:col-start-2" : ""}
-      >
-        <div className="max-w-lg">
-          {feature.badge && (
-            <span className="inline-block px-3 py-1 text-xs font-medium tracking-wider uppercase bg-black text-white rounded-full mb-6">
-              {feature.badge}
-            </span>
-          )}
-          <h3 className="text-3xl md:text-4xl lg:text-5xl font-semibold text-black tracking-tight leading-[1.1] mb-6">
-            {feature.title}
-          </h3>
-          <p className="text-lg text-neutral-600 leading-relaxed">
-            {feature.description}
-          </p>
-
-          {/* Feature points */}
-          <div className="mt-8 space-y-4">
-            <FeaturePoint text="Server-managed Gemini key" />
-            <FeaturePoint text="Daily demo quotas" />
-            <FeaturePoint text="Workflow audit trail" />
-          </div>
-        </div>
-      </ScrollReveal>
-
-      {/* Image */}
-      <ScrollReveal
-        animation={reversed ? "fade-right" : "fade-left"}
-        delay={0.2}
-        className={reversed ? "lg:col-start-1 lg:row-start-1" : ""}
-      >
-        <div className="relative aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl shadow-black/10">
-          <ParallaxImage
-            src={feature.image}
-            alt={feature.title}
-            className="absolute inset-0"
-            speed={0.15}
-            scale={1.1}
-          />
-          {/* Subtle overlay */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-black/10 via-transparent to-white/10" />
-        </div>
-      </ScrollReveal>
-    </div>
-  );
-}
-
-function FeaturePoint({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="size-5 rounded-full bg-black flex items-center justify-center">
-        <svg
-          className="size-3 text-white"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={3}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-      <span className="text-neutral-700">{text}</span>
-    </div>
-  );
-}
-
 export function FeatureBlocks() {
   return (
-    <section className="relative py-32 md:py-40 bg-white overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-gradient-radial from-neutral-100 to-transparent rounded-full blur-3xl opacity-60" />
+    <section className="relative overflow-hidden bg-card py-28 text-white md:py-40">
+      <div className="absolute inset-x-0 top-0 h-px bg-white/10" />
+      <div className="absolute inset-x-0 bottom-0 h-px bg-white/10" />
 
-      <div className="relative max-w-7xl mx-auto px-6">
-        {/* Section header */}
-        <ScrollReveal animation="fade-up" className="text-center mb-24">
-          <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
-            Features
+      <div className="relative mx-auto max-w-7xl px-6">
+        <ScrollReveal animation="fade-up" className="mb-20 max-w-4xl">
+          <span className="mb-4 block font-mono text-sm uppercase text-white/35">
+            Technical credibility
           </span>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-black tracking-tight max-w-3xl mx-auto">
-            Everything you need,
-            <br />
-            <span className="text-neutral-400">nothing you don&apos;t.</span>
+          <h2 className="text-5xl font-semibold leading-none md:text-7xl">
+            Built like a small production system, framed as a public demo.
           </h2>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-white/55">
+            Nexus is interesting because the AI result is not the endpoint. The
+            system keeps the document, the tasks, and the execution record.
+          </p>
         </ScrollReveal>
 
-        {/* Feature blocks */}
-        <div className="space-y-32 md:space-y-40">
-          {features.map((feature, index) => (
-            <FeatureBlock
-              key={feature.title}
-              feature={feature}
-              index={index}
-              reversed={index % 2 === 1}
-            />
-          ))}
+        <div className="grid border-y border-white/10 lg:grid-cols-2">
+          {capabilities.map((item, index) => {
+            const Icon = item.icon;
+
+            return (
+              <ScrollReveal
+                key={item.label}
+                animation="fade-up"
+                delay={(index % 2) * 0.08}
+                className="border-b border-white/10 py-10 lg:border-r lg:odd:pr-12 lg:even:border-r-0 lg:even:pl-12"
+              >
+                <div className="mb-6 flex items-center justify-between gap-6">
+                  <div className="flex items-center gap-3">
+                    <Icon className="size-5 text-white" />
+                    <span className="font-mono text-xs uppercase text-white/40">
+                      {item.label}
+                    </span>
+                  </div>
+                  <Activity className="size-4 text-white/40" />
+                </div>
+
+                <h3 className="max-w-xl text-3xl font-semibold leading-tight">
+                  {item.title}
+                </h3>
+                <p className="mt-4 max-w-xl leading-7 text-white/60">
+                  {item.description}
+                </p>
+
+                <div className="mt-8 flex flex-wrap gap-2">
+                  {item.proof.map((proof) => (
+                    <span
+                      key={proof}
+                      className="border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-xs uppercase text-white/45"
+                    >
+                      {proof}
+                    </span>
+                  ))}
+                </div>
+              </ScrollReveal>
+            );
+          })}
         </div>
       </div>
     </section>

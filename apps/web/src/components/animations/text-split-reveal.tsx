@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -12,13 +12,15 @@ interface TextSplitRevealProps {
   text: string;
   className?: string;
   type?: "chars" | "words" | "lines";
-  animation?: "fade" | "slide" | "blur" | "rotate";
+  animation?: "fade" | "slide" | "blur" | "rotate" | "mask" | "scramble";
   stagger?: number;
   duration?: number;
   delay?: number;
   triggerOnScroll?: boolean;
   as?: "h1" | "h2" | "h3" | "h4" | "p" | "span" | "div";
 }
+
+const SCRAMBLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
 
 export function TextSplitReveal({
   text,
@@ -34,13 +36,147 @@ export function TextSplitReveal({
   const containerRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
 
+  const runScrambleAnimation = useCallback((container: HTMLElement, animDelay: number) => {
+    const chars = text.split("");
+    const totalDuration = 1.5; // seconds
+    const perCharDuration = 0.06;
+    const staggerAmount = totalDuration / Math.max(chars.length, 1);
+
+    // Build spans for each character
+    container.innerHTML = chars
+      .map((char) =>
+        char === " "
+          ? "<span class='inline-block'>&nbsp;</span>"
+          : `<span class="inline-block" data-final="${char}">${SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]}</span>`
+      )
+      .join("");
+
+    const spans = Array.from(container.querySelectorAll("span")) as HTMLSpanElement[];
+
+    spans.forEach((span, index) => {
+      const finalChar = chars[index];
+      if (finalChar === " ") return;
+
+      const charDelay = animDelay + index * staggerAmount + (Math.random() * 0.05);
+      const scrambleCycles = Math.floor(perCharDuration * 1000 / 50) + 3;
+      let cycle = 0;
+
+      const intervalId = window.setTimeout(() => {
+        const interval = setInterval(() => {
+          cycle++;
+          if (cycle >= scrambleCycles) {
+            clearInterval(interval);
+            span.textContent = finalChar;
+            span.style.opacity = "1";
+          } else {
+            span.textContent = SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+          }
+        }, 50);
+      }, charDelay * 1000);
+
+      // Set initial scrambled state
+      span.style.opacity = "0.4";
+
+      // Fade in quickly
+      gsap.to(span, {
+        opacity: 1,
+        duration: 0.3,
+        delay: charDelay,
+      });
+    });
+  }, [text]);
+
+  const runMaskAnimation = useCallback((container: HTMLElement, animDelay: number, animDuration: number) => {
+    // Split text into lines (use words if single line, or split by \n)
+    const lines = text.includes("\n") ? text.split("\n") : text.split(" ").reduce<string[]>((acc, word) => {
+      // For single-line text, treat each word as a "line" for the mask effect
+      acc.push(word);
+      return acc;
+    }, []);
+
+    // If it's a short text, treat as one line
+    const linesToAnimate = lines.length <= 1 ? [text] : lines;
+
+    container.innerHTML = linesToAnimate
+      .map((line) => `<span class="mask-reveal-line"><span class="inline-block" style="transform: translateY(100%)">${line}${linesToAnimate.length > 1 ? '' : ''}</span></span>`)
+      .join(linesToAnimate.length > 1 ? '' : ' ');
+
+    const innerSpans = Array.from(container.querySelectorAll(".mask-reveal-line > span")) as HTMLElement[];
+
+    gsap.to(innerSpans, {
+      y: "0%",
+      duration: animDuration || 0.9,
+      delay: animDelay,
+      stagger: 0.08,
+      ease: "power4.out",
+    });
+  }, [text]);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // Split text into elements
+    // Handle mask and scramble separately
+    if (animation === "mask") {
+      const animateIn = () => {
+        if (hasAnimated.current && triggerOnScroll) return;
+        hasAnimated.current = true;
+        runMaskAnimation(container, delay, duration);
+      };
+
+      // Build initial DOM immediately (hidden state)
+      const lines = text.includes("\n") ? text.split("\n") : [text];
+      const linesToAnimate = lines.length <= 1 ? [text] : lines;
+      container.innerHTML = linesToAnimate
+        .map((line) => `<span class="mask-reveal-line"><span class="inline-block" style="transform: translateY(100%)">${line}</span></span>`)
+        .join(linesToAnimate.length > 1 ? '' : ' ');
+
+      if (triggerOnScroll) {
+        const trigger = ScrollTrigger.create({
+          trigger: container,
+          start: "top 85%",
+          onEnter: animateIn,
+        });
+        return () => { trigger.kill(); };
+      } else {
+        const timeout = setTimeout(animateIn, delay * 1000);
+        return () => clearTimeout(timeout);
+      }
+    }
+
+    if (animation === "scramble") {
+      // Set initial state - show scrambled chars
+      container.innerHTML = text
+        .split("")
+        .map((char) =>
+          char === " "
+            ? "<span class='inline-block'>&nbsp;</span>"
+            : `<span class="inline-block" style="opacity: 0">${SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)]}</span>`
+        )
+        .join("");
+
+      const animateIn = () => {
+        if (hasAnimated.current && triggerOnScroll) return;
+        hasAnimated.current = true;
+        runScrambleAnimation(container, delay);
+      };
+
+      if (triggerOnScroll) {
+        const trigger = ScrollTrigger.create({
+          trigger: container,
+          start: "top 85%",
+          onEnter: animateIn,
+        });
+        return () => { trigger.kill(); };
+      } else {
+        const timeout = setTimeout(animateIn, delay * 1000);
+        return () => clearTimeout(timeout);
+      }
+    }
+
+    // --- Original animation types: fade, slide, blur, rotate ---
     let elements: HTMLSpanElement[] = [];
-    
+
     if (type === "chars") {
       container.innerHTML = text
         .split("")
@@ -110,7 +246,7 @@ export function TextSplitReveal({
       const timeout = setTimeout(animateIn, delay * 1000);
       return () => clearTimeout(timeout);
     }
-  }, [text, type, animation, stagger, duration, delay, triggerOnScroll]);
+  }, [text, type, animation, stagger, duration, delay, triggerOnScroll, runMaskAnimation, runScrambleAnimation]);
 
   return (
     <Component ref={containerRef as React.RefObject<HTMLDivElement>} className={className}>

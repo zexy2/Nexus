@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
+  // Transpile R3F / Three.js packages for proper ESM handling
+  transpilePackages: [
+    'three',
+    '@react-three/fiber',
+    '@react-three/drei',
+    '@react-three/postprocessing',
+  ],
+
   turbopack: {
     root: path.resolve(process.cwd(), "../.."),
   },
