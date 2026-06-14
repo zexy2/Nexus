@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, type MouseEvent } from "react";
+import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Link from "next/link";
@@ -17,36 +17,6 @@ export function HeroCinematic() {
   const heroRef = useRef<HTMLElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-
-  const xTo = useRef<ReturnType<typeof gsap.quickTo> | null>(null);
-  const yTo = useRef<ReturnType<typeof gsap.quickTo> | null>(null);
-
-  useEffect(() => {
-    if (!contentRef.current) return;
-    xTo.current = gsap.quickTo(contentRef.current, "x", {
-      duration: 0.6,
-      ease: "power3.out",
-    });
-    yTo.current = gsap.quickTo(contentRef.current, "y", {
-      duration: 0.6,
-      ease: "power3.out",
-    });
-  }, []);
-
-  const handleMouseMove = useCallback((e: MouseEvent<HTMLElement>) => {
-    if (!xTo.current || !yTo.current) return;
-    const rect = heroRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = (e.clientX - rect.left) / rect.width - 0.5;
-    const cy = (e.clientY - rect.top) / rect.height - 0.5;
-    xTo.current(cx * 20);
-    yTo.current(cy * 20);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    xTo.current?.(0);
-    yTo.current?.(0);
-  }, []);
 
   useEffect(() => {
     const hero = heroRef.current;
@@ -85,8 +55,6 @@ export function HeroCinematic() {
     <section
       ref={heroRef}
       className="relative flex min-h-[100svh] items-center overflow-hidden bg-[#0a0a0a]"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
     >
       <div className="absolute inset-y-0 right-0 hidden w-[52%] items-center pr-10 lg:flex xl:pr-20">
         <WorkflowVisual />
