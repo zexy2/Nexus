@@ -80,28 +80,28 @@ const aiAgents = [
     name: "Araştırma Ajanı",
     description: "Web'de araştırma yapar ve bilgi toplar",
     icon: "🔍",
-    color: "bg-blue-100",
+    color: "bg-white/10",
   },
   {
     id: "writer",
     name: "Yazı Ajanı",
     description: "İçerik oluşturur ve düzenler",
     icon: "✍️",
-    color: "bg-violet-100",
+    color: "bg-white/10",
   },
   {
     id: "coder",
     name: "Kod Ajanı",
     description: "Kod yazar ve hataları düzeltir",
     icon: "💻",
-    color: "bg-emerald-100",
+    color: "bg-emerald-500/15",
   },
   {
     id: "planner",
     name: "Planlama Ajanı",
     description: "Görevleri organize eder ve planlar",
     icon: "📋",
-    color: "bg-amber-100",
+    color: "bg-white/10",
   },
 ];
 
@@ -198,24 +198,24 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
   const colorClasses = {
     violet: {
-      bg: "bg-violet-100",
-      text: "text-violet-600",
-      ring: "ring-violet-500",
+      bg: "bg-white/10",
+      text: "text-foreground",
+      ring: "ring-white/40",
     },
     blue: {
-      bg: "bg-blue-100",
-      text: "text-blue-600",
-      ring: "ring-blue-500",
+      bg: "bg-white/10",
+      text: "text-foreground",
+      ring: "ring-white/40",
     },
     emerald: {
-      bg: "bg-emerald-100",
-      text: "text-emerald-600",
+      bg: "bg-emerald-500/15",
+      text: "text-emerald-400",
       ring: "ring-emerald-500",
     },
     amber: {
-      bg: "bg-amber-100",
-      text: "text-amber-600",
-      ring: "ring-amber-500",
+      bg: "bg-white/10",
+      text: "text-foreground",
+      ring: "ring-white/40",
     },
     rose: {
       bg: "bg-rose-100",
@@ -234,7 +234,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={handleSkip}
       />
 
@@ -243,20 +243,20 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden"
+        className="relative bg-popover rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden"
       >
         {/* Close button */}
         <button
           onClick={handleSkip}
-          className="absolute top-4 right-4 z-10 p-2 rounded-full hover:bg-neutral-100 transition-colors"
+          className="absolute top-4 right-4 z-10 p-2 rounded-full hover:bg-white/[0.06] transition-colors"
         >
-          <X className="w-5 h-5 text-neutral-400" />
+          <X className="w-5 h-5 text-muted-foreground" />
         </button>
 
         {/* Progress bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-neutral-100">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-white/[0.06]">
           <motion.div
-            className="h-full bg-neutral-900"
+            className="h-full bg-foreground"
             initial={{ width: 0 }}
             animate={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
             transition={{ duration: 0.3 }}
@@ -273,10 +273,10 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                 className={cn(
                   "w-2 h-2 rounded-full transition-all",
                   index === currentStep
-                    ? "w-8 bg-neutral-900"
+                    ? "w-8 bg-foreground"
                     : index < currentStep
-                    ? "bg-neutral-400"
-                    : "bg-neutral-200"
+                    ? "bg-white/30"
+                    : "bg-white/10"
                 )}
               />
             ))}
@@ -306,10 +306,10 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                 >
                   <Icon className={cn("w-8 h-8", colors.text)} />
                 </motion.div>
-                <h2 className="text-2xl font-bold text-neutral-900 mb-2">
+                <h2 className="text-2xl font-bold text-foreground mb-2">
                   {step.title}
                 </h2>
-                <p className="text-neutral-500">{step.description}</p>
+                <p className="text-muted-foreground">{step.description}</p>
               </div>
 
               {/* Step-specific content */}
@@ -321,13 +321,13 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 + index * 0.1 }}
-                      className="p-4 bg-neutral-50 rounded-xl border border-neutral-100"
+                      className="p-4 bg-white/[0.04] rounded-xl border border-border"
                     >
-                      <feature.icon className="w-6 h-6 text-neutral-600 mb-2" />
-                      <h4 className="font-medium text-neutral-900 mb-1">
+                      <feature.icon className="w-6 h-6 text-muted-foreground mb-2" />
+                      <h4 className="font-medium text-foreground mb-1">
                         {feature.title}
                       </h4>
-                      <p className="text-sm text-neutral-500">
+                      <p className="text-sm text-muted-foreground">
                         {feature.description}
                       </p>
                     </motion.div>
@@ -338,7 +338,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
               {step.id === "workspace" && (
                 <div className="max-w-sm mx-auto space-y-4">
                   <div>
-                    <Label className="text-sm font-medium text-neutral-700">
+                    <Label className="text-sm font-medium text-foreground">
                       Çalışma Alanı Adı
                     </Label>
                     <Input
@@ -349,14 +349,14 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       autoFocus
                     />
                   </div>
-                  <div className="p-4 bg-blue-50 rounded-xl">
+                  <div className="p-4 bg-white/[0.04] rounded-xl">
                     <div className="flex items-start gap-3">
-                      <Zap className="w-5 h-5 text-blue-600 mt-0.5" />
+                      <Zap className="w-5 h-5 text-foreground mt-0.5" />
                       <div>
-                        <p className="text-sm text-blue-900 font-medium">
+                        <p className="text-sm text-foreground font-medium">
                           İpucu
                         </p>
-                        <p className="text-sm text-blue-700 mt-1">
+                        <p className="text-sm text-muted-foreground mt-1">
                           Çalışma alanı adını proje veya takımınıza göre belirleyin.
                           Daha sonra değiştirebilirsiniz.
                         </p>
@@ -377,8 +377,8 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       className={cn(
                         "p-4 rounded-xl border-2 text-left transition-all",
                         selectedAgents.includes(agent.id)
-                          ? "border-neutral-900 bg-neutral-50"
-                          : "border-neutral-200 hover:border-neutral-300"
+                          ? "border-white/40 bg-popover/[0.06]"
+                          : "border-border hover:border-white/20"
                       )}
                     >
                       <div className="flex items-start gap-3">
@@ -392,14 +392,14 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-neutral-900">
+                            <h4 className="font-medium text-foreground">
                               {agent.name}
                             </h4>
                             {selectedAgents.includes(agent.id) && (
-                              <Check className="w-4 h-4 text-neutral-900" />
+                              <Check className="w-4 h-4 text-foreground" />
                             )}
                           </div>
-                          <p className="text-sm text-neutral-500 mt-0.5">
+                          <p className="text-sm text-muted-foreground mt-0.5">
                             {agent.description}
                           </p>
                         </div>
@@ -411,14 +411,14 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
               {step.id === "preferences" && (
                 <div className="max-w-sm mx-auto space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-violet-100 flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-violet-600" />
+                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-foreground" />
                       </div>
                       <div>
-                        <p className="font-medium text-neutral-900">AI Önerileri</p>
-                        <p className="text-sm text-neutral-500">
+                        <p className="font-medium text-foreground">AI Önerileri</p>
+                        <p className="text-sm text-muted-foreground">
                           Akıllı yazma önerileri al
                         </p>
                       </div>
@@ -429,14 +429,14 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-emerald-600" />
+                      <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-emerald-400" />
                       </div>
                       <div>
-                        <p className="font-medium text-neutral-900">Otomatik Kayıt</p>
-                        <p className="text-sm text-neutral-500">
+                        <p className="font-medium text-foreground">Otomatik Kayıt</p>
+                        <p className="text-sm text-muted-foreground">
                           Değişiklikleri otomatik kaydet
                         </p>
                       </div>
@@ -447,14 +447,14 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                        <Bell className="w-5 h-5 text-amber-600" />
+                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                        <Bell className="w-5 h-5 text-foreground" />
                       </div>
                       <div>
-                        <p className="font-medium text-neutral-900">Bildirimler</p>
-                        <p className="text-sm text-neutral-500">
+                        <p className="font-medium text-foreground">Bildirimler</p>
+                        <p className="text-sm text-muted-foreground">
                           Görev hatırlatıcıları al
                         </p>
                       </div>
@@ -477,17 +477,17 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                   >
                     <Check className="w-12 h-12 text-white" />
                   </motion.div>
-                  <p className="text-neutral-600 mb-6">
+                  <p className="text-muted-foreground mb-6">
                     Tüm ayarlarınız kaydedildi. Şimdi Nexus&apos;un gücünü keşfetmeye
                     başlayabilirsiniz!
                   </p>
-                  <div className="flex items-center justify-center gap-4 text-sm text-neutral-500">
+                  <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Check className="w-4 h-4 text-emerald-500" />
+                      <Check className="w-4 h-4 text-emerald-400" />
                       {workspaceName || "Çalışma Alanı"} oluşturuldu
                     </span>
                     <span className="flex items-center gap-1">
-                      <Check className="w-4 h-4 text-emerald-500" />
+                      <Check className="w-4 h-4 text-emerald-400" />
                       {selectedAgents.length} ajan seçildi
                     </span>
                   </div>
@@ -511,7 +511,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
           <Button
             onClick={handleNext}
-            className="bg-neutral-900 hover:bg-neutral-800 text-white gap-2"
+            className="bg-foreground hover:bg-foreground/90 text-white gap-2"
           >
             {currentStep === steps.length - 1 ? (
               <>
@@ -621,7 +621,7 @@ export function QuickTourTooltip({
       {/* Highlight overlay */}
       <div className="fixed inset-0 z-50 pointer-events-none">
         <div
-          className="absolute bg-neutral-900/50"
+          className="absolute bg-black/60"
           style={{
             top: 0,
             left: 0,
@@ -630,7 +630,7 @@ export function QuickTourTooltip({
           }}
         />
         <div
-          className="absolute bg-neutral-900/50"
+          className="absolute bg-black/60"
           style={{
             top: targetRect.bottom + 4,
             left: 0,
@@ -639,7 +639,7 @@ export function QuickTourTooltip({
           }}
         />
         <div
-          className="absolute bg-neutral-900/50"
+          className="absolute bg-black/60"
           style={{
             top: targetRect.top - 4,
             left: 0,
@@ -648,7 +648,7 @@ export function QuickTourTooltip({
           }}
         />
         <div
-          className="absolute bg-neutral-900/50"
+          className="absolute bg-black/60"
           style={{
             top: targetRect.top - 4,
             left: targetRect.right + 4,
@@ -662,14 +662,14 @@ export function QuickTourTooltip({
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="fixed z-50 w-72 bg-white rounded-xl shadow-2xl p-4"
+        className="fixed z-50 w-72 bg-popover rounded-xl shadow-2xl p-4"
         style={positionStyles[step.position]}
       >
-        <h4 className="font-semibold text-neutral-900 mb-1">{step.title}</h4>
-        <p className="text-sm text-neutral-500 mb-4">{step.description}</p>
+        <h4 className="font-semibold text-foreground mb-1">{step.title}</h4>
+        <p className="text-sm text-muted-foreground mb-4">{step.description}</p>
         
         <div className="flex items-center justify-between">
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-muted-foreground">
             {currentStep + 1} / {totalSteps}
           </span>
           <div className="flex items-center gap-2">
@@ -679,7 +679,7 @@ export function QuickTourTooltip({
             <Button
               size="sm"
               onClick={onNext}
-              className="bg-neutral-900 hover:bg-neutral-800 text-white"
+              className="bg-foreground hover:bg-foreground/90 text-white"
             >
               {currentStep === totalSteps - 1 ? "Bitti" : "İleri"}
             </Button>
