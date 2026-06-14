@@ -261,7 +261,7 @@ export function BentoGallery() {
 
   return (
     <section className="relative overflow-hidden bg-black py-28 text-white md:py-40">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(157,255,122,0.12),transparent_28%),radial-gradient(circle_at_82%_30%,rgba(34,211,238,0.1),transparent_26%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_82%_30%,rgba(255,255,255,0.1),transparent_26%)]" />
 
       <div ref={galleryRef} className="relative mx-auto max-w-7xl px-6">
         <div className="mb-16 grid gap-8 border-b border-white/10 pb-12 lg:grid-cols-[0.72fr_1fr] lg:items-end">

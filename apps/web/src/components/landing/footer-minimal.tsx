@@ -18,7 +18,7 @@ export function FooterMinimal() {
   return (
     <footer className="relative overflow-hidden bg-[#0a0a0a] text-white">
       <section className="relative border-b border-white/10 py-28 md:py-40">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(157,255,122,0.1),transparent_34%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.1),transparent_34%)]" />
         <div className="relative mx-auto max-w-7xl px-6 text-center">
           <ScrollReveal animation="fade-up">
             <span className="mb-5 block font-mono text-sm uppercase text-white/35">

@@ -196,7 +196,7 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
                         height: 'clamp(300px, 40vw, 600px)',
                         borderRadius: '50%',
                         background:
-                            'radial-gradient(circle, rgba(157,255,122,0.24) 0%, rgba(34,211,238,0.08) 42%, transparent 70%)',
+                            'radial-gradient(circle, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.08) 42%, transparent 70%)',
                         opacity: 0.2,
                         filter: 'blur(40px)',
                     }}

@@ -106,7 +106,7 @@ export function Navigation() {
               style={{
                 boxShadow: logoGlow
                   ? isScrolled
-                    ? "0 0 16px 4px rgba(157,255,122,0.35)"
+                    ? "0 0 16px 4px rgba(255,255,255,0.35)"
                     : "0 0 20px 6px rgba(255,255,255,0.35)"
                   : "none",
                 transition:

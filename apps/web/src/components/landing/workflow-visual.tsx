@@ -1,92 +1,256 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
-  Lightbulb,
+  Sparkles,
   FileText,
   CheckSquare,
   KanbanSquare,
   History,
+  CornerDownLeft,
 } from "lucide-react";
 
 /**
- * Hero visual: the actual product flow rendered as a living pipeline —
- * Idea → Document → Tasks → Kanban → History — with a glowing "data" comet
- * travelling the line, nodes lighting up in sequence, soft depth glow and a
- * gentle float. Premium feel, but meaning-led and uncluttered. Pure
- * CSS/framer-motion (no WebGL).
+ * Hero centrepiece: a self-playing "product film". Inside a sleek window,
+ * Nexus turns one idea into a full workflow on a loop —
+ * prompt → document → tasks → kanban → execution history. Cinematic and
+ * eye-catching, but meaning-led (it literally shows what the product does)
+ * and monochrome. Pure CSS / framer-motion, no WebGL.
  */
 
-const stages = [
-  { icon: Lightbulb, label: "Idea", detail: "“Build a customer order app”" },
-  { icon: FileText, label: "Document", detail: "Spec generated · saved to docs" },
-  { icon: CheckSquare, label: "Tasks", detail: "8 tasks extracted" },
-  { icon: KanbanSquare, label: "Kanban", detail: "To do · In progress · Done" },
-  { icon: History, label: "History", detail: "Every step tracked" },
+const STEP_MS = 2900;
+const STEPS = ["prompt", "document", "tasks", "kanban", "history"] as const;
+
+const sceneMeta = [
+  { icon: Sparkles, label: "PROMPT" },
+  { icon: FileText, label: "DOCUMENT · saved to docs" },
+  { icon: CheckSquare, label: "TASKS · 8 extracted" },
+  { icon: KanbanSquare, label: "KANBAN" },
+  { icon: History, label: "WORKFLOW HISTORY" },
 ];
 
-const LOOP = 4.6; // seconds for one full comet pass (down + back)
+const container: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.09, delayChildren: 0.12 } },
+};
+const item: Variants = {
+  hidden: { opacity: 0, y: 10, filter: "blur(6px)" },
+  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+};
 
-export function WorkflowVisual() {
+function Bar({ w, dim = false }: { w: string; dim?: boolean }) {
   return (
     <motion.div
-      className="relative w-full max-w-[26rem]"
-      animate={{ y: [0, -6, 0] }}
-      transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-    >
-      {/* depth — soft radial glow behind the pipeline */}
-      <div className="pointer-events-none absolute -inset-20 -z-10 bg-[radial-gradient(closest-side,rgba(255,255,255,0.07),transparent)]" />
+      variants={item}
+      className={`h-2 rounded-full ${dim ? "bg-white/10" : "bg-white/25"}`}
+      style={{ width: w }}
+    />
+  );
+}
 
-      {/* connector line */}
-      <div className="absolute left-8 top-10 bottom-10 w-px -translate-x-1/2 bg-gradient-to-b from-white/5 via-white/20 to-white/5" />
-
-      {/* travelling data comet (glow halo + bright core) */}
-      <motion.div
-        aria-hidden
-        className="absolute left-8 -translate-x-1/2"
-        initial={{ top: "2.5rem" }}
-        animate={{ top: ["2.5rem", "calc(100% - 4rem)", "2.5rem"] }}
-        transition={{ duration: LOOP, repeat: Infinity, ease: "easeInOut" }}
-      >
-        <div className="absolute left-1/2 top-1/2 size-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/20 blur-2xl" />
-        <div className="absolute left-1/2 top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_14px_4px_rgba(255,255,255,0.7)]" />
-      </motion.div>
-
-      {/* nodes */}
-      <div className="relative space-y-4">
-        {stages.map((s, i) => (
-          <motion.div
-            key={s.label}
-            initial={{ opacity: 0, x: 36, filter: "blur(8px)" }}
-            animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-            transition={{ delay: 0.35 + i * 0.13, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex items-center gap-4"
-          >
-            {/* icon tile (floats subtly, lights up as the comet passes) */}
-            <motion.div
-              className="relative z-10 flex size-16 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] backdrop-blur-sm"
-              animate={{ y: [0, -3, 0] }}
-              transition={{ duration: 4 + i * 0.4, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
-            >
-              <s.icon className="size-5 text-white/85" />
-              <motion.span
-                aria-hidden
-                className="absolute inset-0 rounded-2xl ring-1 ring-white/70 shadow-[0_0_28px_rgba(255,255,255,0.3)]"
-                animate={{ opacity: [0, 0, 0.9, 0, 0] }}
-                transition={{ duration: LOOP, repeat: Infinity, ease: "easeInOut", delay: i * 0.42 }}
-              />
-            </motion.div>
-
-            {/* card — gradient hairline + elevation */}
-            <div className="min-w-0 flex-1 rounded-2xl bg-gradient-to-b from-white/[0.14] to-white/[0.04] p-px shadow-[0_24px_70px_-28px_rgba(0,0,0,0.9)]">
-              <div className="rounded-[15px] bg-[#111111] px-4 py-3.5">
-                <p className="text-sm font-semibold text-white">{s.label}</p>
-                <p className="mt-0.5 truncate text-xs text-white/45">{s.detail}</p>
-              </div>
-            </div>
-          </motion.div>
-        ))}
+function PromptScene() {
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-5">
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="flex items-center gap-2 font-mono text-[13px] text-white/85">
+          <span className="text-white/30">{">"}</span>
+          <span>Build a customer order tracking app</span>
+          <motion.span
+            className="inline-block h-4 w-[2px] bg-white"
+            animate={{ opacity: [1, 0, 1] }}
+            transition={{ duration: 1, repeat: Infinity }}
+          />
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-2 text-xs text-white/40">
+        <span>generate workflow</span>
+        <kbd className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono">
+          <CornerDownLeft className="size-3" /> enter
+        </kbd>
       </div>
     </motion.div>
+  );
+}
+
+function DocumentScene() {
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
+      <motion.div variants={item} className="text-base font-semibold text-white">
+        Customer Order App — Specification
+      </motion.div>
+      <div className="space-y-2.5">
+        <Bar w="92%" />
+        <Bar w="78%" dim />
+        <Bar w="85%" dim />
+        <Bar w="64%" dim />
+      </div>
+      <motion.div variants={item} className="grid grid-cols-2 gap-2 pt-1">
+        {["User accounts", "Order placement", "Status timeline", "Admin review"].map((t) => (
+          <div key={t} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70">
+            {t}
+          </div>
+        ))}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function TasksScene() {
+  const tasks: [string, string][] = [
+    ["User registration flow", "High"],
+    ["Order placement API", "High"],
+    ["Admin review dashboard", "Medium"],
+    ["Delivery status timeline", "Medium"],
+  ];
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-2.5">
+      {tasks.map(([t, p]) => (
+        <motion.div
+          key={t}
+          variants={item}
+          className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
+        >
+          <span className="size-4 shrink-0 rounded-[5px] border border-white/25" />
+          <span className="flex-1 truncate text-sm text-white/85">{t}</span>
+          <span className="shrink-0 rounded-md bg-white/10 px-2 py-0.5 font-mono text-[10px] uppercase text-white/55">
+            {p}
+          </span>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+function KanbanScene() {
+  const cols: [string, string[]][] = [
+    ["To do", ["Order history", "Profile"]],
+    ["In progress", ["Order placement"]],
+    ["Done", ["Registration"]],
+  ];
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-3 gap-3">
+      {cols.map(([title, cards]) => (
+        <motion.div key={title} variants={item} className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-white/40">{title}</div>
+          <div className="space-y-2">
+            {cards.map((c) => (
+              <div key={c} className="rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-2 text-[11px] leading-tight text-white/75">
+                {c}
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+function HistoryScene() {
+  const rows: [string, string][] = [
+    ["researcher · gather requirements", "1.2s"],
+    ["writer · generate specification", "15.1s"],
+    ["project_manager · extract tasks", "6.7s"],
+    ["workflow · completed", "done"],
+  ];
+  return (
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-2">
+      {rows.map(([t, d], i) => (
+        <motion.div key={t} variants={item} className="flex items-center gap-3 font-mono text-xs">
+          <span className={`size-1.5 shrink-0 rounded-full ${i === rows.length - 1 ? "bg-white" : "bg-white/40"}`} />
+          <span className="flex-1 truncate text-white/65">{t}</span>
+          <span className="shrink-0 text-white/35">{d}</span>
+        </motion.div>
+      ))}
+    </motion.div>
+  );
+}
+
+const scenes = [PromptScene, DocumentScene, TasksScene, KanbanScene, HistoryScene];
+
+export function WorkflowVisual() {
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setStep((s) => (s + 1) % STEPS.length), STEP_MS);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const Scene = scenes[step];
+  const Meta = sceneMeta[step].icon;
+
+  return (
+    <div className="relative w-full max-w-[30rem]">
+      {/* depth glow */}
+      <div className="pointer-events-none absolute -inset-28 -z-10 bg-[radial-gradient(closest-side,rgba(255,255,255,0.1),transparent)]" />
+
+      <motion.div
+        className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-gradient-to-b from-[#171717] to-[#0e0e0e] shadow-[0_50px_140px_-40px_rgba(0,0,0,1)] ring-1 ring-white/[0.04]"
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+      >
+        {/* top edge highlight */}
+        <div aria-hidden className="absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+        {/* window chrome */}
+        <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
+          <div className="flex gap-1.5">
+            <span className="size-2.5 rounded-full bg-white/15" />
+            <span className="size-2.5 rounded-full bg-white/15" />
+            <span className="size-2.5 rounded-full bg-white/15" />
+          </div>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-white/40">nexus / workflow</span>
+          <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] uppercase text-white/40">
+            <motion.span
+              className="size-1.5 rounded-full bg-white"
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+            />
+            live
+          </span>
+        </div>
+
+        {/* scene step progress */}
+        <div className="h-px w-full bg-white/5">
+          <motion.div
+            key={step}
+            className="h-full bg-white/40"
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: STEP_MS / 1000, ease: "linear" }}
+          />
+        </div>
+
+        {/* stage */}
+        <div className="relative min-h-[19rem] px-5 py-5">
+          <div className="mb-4 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-white/45">
+            <Meta className="size-3.5" />
+            {sceneMeta[step].label}
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10, transition: { duration: 0.2 } }}
+              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <Scene />
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* step dots */}
+        <div className="flex items-center justify-center gap-2 border-t border-white/10 py-3">
+          {STEPS.map((s, i) => (
+            <span
+              key={s}
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                i === step ? "w-6 bg-white" : "w-1.5 bg-white/20"
+              }`}
+            />
+          ))}
+        </div>
+      </motion.div>
+    </div>
   );
 }

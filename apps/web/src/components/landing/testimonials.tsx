@@ -24,7 +24,7 @@ const scopeNotes = [
 export function Testimonials() {
   return (
     <section className="relative overflow-hidden bg-black py-28 text-white md:py-40">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(157,255,122,0.12),transparent_26%),radial-gradient(circle_at_86%_72%,rgba(245,158,11,0.1),transparent_28%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(255,255,255,0.12),transparent_26%),radial-gradient(circle_at_86%_72%,rgba(245,158,11,0.1),transparent_28%)]" />
 
       <div className="relative mx-auto grid max-w-7xl gap-14 px-6 lg:grid-cols-[0.95fr_1.05fr] lg:items-start">
         <ScrollReveal animation="fade-up">
