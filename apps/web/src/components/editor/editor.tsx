@@ -30,13 +30,13 @@ function EditorComponent({ initialContent, onChange, editable = true }: EditorPr
   }, [editor, onChange]);
 
   return (
-    <div className="min-h-[500px] rounded-lg border bg-background">
+    <div className="min-h-[600px] rounded-xl border border-white/[0.06] bg-card shadow-sm shadow-black/20">
       <BlockNoteView
         editor={editor}
         editable={editable}
         onChange={handleChange}
         theme="dark"
-        className="py-4"
+        className="py-8"
       />
     </div>
   );
@@ -51,7 +51,7 @@ export const EditorWrapper = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[500px] rounded-lg border bg-background animate-pulse" />
+      <div className="min-h-[600px] rounded-xl border border-white/[0.06] bg-card animate-pulse" />
     ),
   }
 );

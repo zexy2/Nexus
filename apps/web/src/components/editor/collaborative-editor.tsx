@@ -137,7 +137,7 @@ function CollaborativeEditorInner({
   return (
     <div className="relative">
       {/* Collaboration Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+      <div className="flex items-center justify-between px-4 py-2.5 rounded-t-xl border-x border-t border-b border-white/[0.06] bg-card">
         <div className="flex items-center gap-2">
           <Badge variant={isConnected ? "default" : "secondary"} className="gap-1">
             {isConnected ? (
@@ -237,7 +237,7 @@ function CollaborativeEditorInner({
       </div>
 
       {/* Editor with cursor styles */}
-      <div className="min-h-[500px] rounded-b-lg border-x border-b bg-background">
+      <div className="min-h-[600px] rounded-b-xl border-x border-b border-white/[0.06] bg-card">
         <style>{`
           .bn-container .collaboration-cursor__caret {
             position: relative;
@@ -284,7 +284,7 @@ function CollaborativeEditorInner({
           editable={editable}
           onChange={handleChange}
           theme="dark"
-          className="py-4"
+          className="py-8"
         />
       </div>
 
