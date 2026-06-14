@@ -15,28 +15,16 @@ if (typeof window !== "undefined") {
 
 export function HeroCinematic() {
   const heroRef = useRef<HTMLElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const hero = heroRef.current;
-    const overlay = overlayRef.current;
     const content = contentRef.current;
-    if (!hero || !overlay || !content) return;
-
-    const overlayTween = gsap.to(overlay, {
-      opacity: 0.9,
-      scrollTrigger: {
-        trigger: hero,
-        start: "top top",
-        end: "bottom top",
-        scrub: true,
-      },
-    });
+    if (!hero || !content) return;
 
     const contentTween = gsap.to(content, {
-      scale: 0.96,
-      opacity: 0.75,
+      scale: 0.97,
+      opacity: 0.7,
       scrollTrigger: {
         trigger: hero,
         start: "top top",
@@ -46,7 +34,6 @@ export function HeroCinematic() {
     });
 
     return () => {
-      overlayTween.kill();
       contentTween.kill();
     };
   }, []);
@@ -56,27 +43,12 @@ export function HeroCinematic() {
       ref={heroRef}
       className="relative flex min-h-[100svh] items-center overflow-hidden bg-[#0a0a0a]"
     >
-      <div className="absolute inset-y-0 right-0 hidden w-[52%] items-center pr-10 lg:flex xl:pr-20">
-        <WorkflowVisual />
-      </div>
-
-      <div
-        ref={overlayRef}
-        className="absolute inset-0 z-[1] bg-[linear-gradient(90deg,rgba(0,0,0,0.98)_0%,rgba(0,0,0,0.9)_38%,rgba(0,0,0,0.34)_64%,rgba(0,0,0,0.08)_100%)] max-md:bg-[linear-gradient(90deg,rgba(0,0,0,0.92)_0%,rgba(0,0,0,0.72)_68%,rgba(0,0,0,0.28)_100%)]"
-      />
-
-      <div
-        className="pointer-events-none absolute inset-0 z-[2] opacity-[0.025]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-        }}
-      />
-
       <div
         ref={contentRef}
-        className="hero-content relative z-10 mx-auto w-full max-w-7xl px-6 py-32 will-change-transform"
+        className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-12 px-6 py-28 will-change-transform lg:grid-cols-[minmax(0,38rem)_minmax(0,1fr)] lg:gap-16"
       >
-        <div className="max-w-[46rem]">
+        {/* Left — copy */}
+        <div>
           <div className="mb-8 inline-flex items-center gap-3 border-y border-white/10 py-2">
             <span className="size-2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.45)]" />
             <span className="font-mono text-xs uppercase text-white/55 sm:text-sm">
@@ -86,7 +58,7 @@ export function HeroCinematic() {
 
           <TextSplitReveal
             text="Nexus"
-            className="mt-3 text-7xl font-semibold leading-none text-white sm:text-8xl md:text-9xl"
+            className="mt-3 text-7xl font-semibold leading-none text-white sm:text-8xl"
             type="words"
             animation="mask"
             stagger={0.08}
@@ -94,11 +66,11 @@ export function HeroCinematic() {
             as="h1"
           />
 
-          <div className="mt-5 max-w-[44rem] animate-fade-in-delayed text-4xl font-medium leading-[1.05] text-white/70 sm:text-5xl md:text-6xl">
+          <div className="mt-5 animate-fade-in-delayed text-4xl font-medium leading-[1.05] text-white/70 sm:text-5xl">
             turns project ideas into executable workflows.
           </div>
 
-          <p className="mt-7 max-w-2xl text-lg leading-8 text-white/60 sm:text-xl">
+          <p className="mt-7 max-w-xl text-lg leading-8 text-white/60">
             Generate a document, extract tasks, manage the Kanban board, and
             inspect every AI workflow step behind it.
           </p>
@@ -125,6 +97,11 @@ export function HeroCinematic() {
               </Link>
             </MagneticButton>
           </div>
+        </div>
+
+        {/* Right — self-playing workflow film */}
+        <div className="hidden justify-end lg:flex">
+          <WorkflowVisual />
         </div>
       </div>
 
