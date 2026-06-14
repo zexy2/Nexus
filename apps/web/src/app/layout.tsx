@@ -36,21 +36,23 @@ const playfairDisplay = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus - AI-Powered Workspace",
+  title: "Nexus - AI Workflow Workspace Demo",
   description:
-    "Build faster with intelligent agents. Local-first, real-time collaboration, enterprise-ready.",
-  keywords: ["AI", "workspace", "collaboration", "agents", "local-first", "productivity"],
+    "A public portfolio demo that turns a project idea into an AI document, task breakdown, Kanban board, and workflow history.",
+  keywords: ["AI", "workspace", "workflow", "Kanban", "Temporal", "portfolio demo"],
   authors: [{ name: "Nexus Team" }],
   openGraph: {
-    title: "Nexus - AI-Powered Workspace",
-    description: "Build faster with intelligent agents. Local-first, real-time collaboration, enterprise-ready.",
+    title: "Nexus - AI Workflow Workspace Demo",
+    description:
+      "Generate a document, extract tasks, manage Kanban, and inspect every AI workflow step behind it.",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Nexus - AI-Powered Workspace",
-    description: "Build faster with intelligent agents. Local-first, real-time collaboration, enterprise-ready.",
+    title: "Nexus - AI Workflow Workspace Demo",
+    description:
+      "Generate a document, extract tasks, manage Kanban, and inspect every AI workflow step behind it.",
   },
 };
 

@@ -1,5 +1,5 @@
 // Animation components barrel export
-export { SmoothScrollProvider, useLenis } from "./smooth-scroll-provider";
+export { SmoothScrollProvider, useLenis, useSmoothScroll } from "./smooth-scroll-provider";
 export { ScrollReveal, StaggerReveal } from "./scroll-reveal";
 export { ParallaxImage, ParallaxContainer, ParallaxElement } from "./parallax-image";
 export { TextSplitReveal, WordReveal } from "./text-split-reveal";

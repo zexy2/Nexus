@@ -8,54 +8,52 @@ import {
   SimpleMarquee,
   Testimonials,
   FooterMinimal,
+  Preloader,
 } from "@/components/landing";
 import { SmoothScrollProvider } from "@/components/animations";
 
 export default function LandingPage() {
   return (
-    <SmoothScrollProvider>
-      <div className="min-h-screen bg-black">
-        {/* Navigation - Floating, minimal */}
-        <Navigation />
+    <>
+      <Preloader />
+      <SmoothScrollProvider>
+        <div className="min-h-screen bg-[#0a0a0a]">
+          <Navigation />
 
-        <main>
-          {/* Hero - Full-screen cinematic */}
-          <HeroCinematic />
+          <main>
+            <HeroCinematic />
 
-          {/* Stats - White section with counters */}
-          <StatsSection />
+            <section id="proof">
+              <StatsSection />
+            </section>
 
-          {/* Simple Marquee - Divider */}
-          <SimpleMarquee />
+            <SimpleMarquee />
 
-          {/* Bento Gallery - Black section */}
-          <section id="gallery">
-            <BentoGallery />
-          </section>
+            <section id="workflow">
+              <BentoGallery />
+            </section>
 
-          {/* Feature Blocks - White section, alternating layout */}
-          <section id="features">
-            <FeatureBlocks />
-          </section>
+            <section id="stack">
+              <FeatureBlocks />
+            </section>
 
-          {/* Large Marquee - Text banner */}
-          <MarqueeBanner
-            lines={[
-              "AI-POWERED",
-              "LOCAL-FIRST",
-              "ENTERPRISE-READY",
-            ]}
-          />
+            <MarqueeBanner
+              lines={[
+                "IDEA TO DOCUMENT",
+                "DOCUMENT TO TASKS",
+                "TASKS TO KANBAN",
+                "WORKFLOW HISTORY",
+              ]}
+            />
 
-          {/* Demo scope - Light gray section */}
-          <section id="testimonials">
-            <Testimonials />
-          </section>
-        </main>
+            <section id="demo">
+              <Testimonials />
+            </section>
+          </main>
 
-        {/* Footer with CTA */}
-        <FooterMinimal />
-      </div>
-    </SmoothScrollProvider>
+          <FooterMinimal />
+        </div>
+      </SmoothScrollProvider>
+    </>
   );
 }

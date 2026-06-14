@@ -7,3 +7,4 @@ export { MarqueeText, MarqueeBanner, SimpleMarquee } from "./marquee-text";
 export { Testimonials } from "./testimonials";
 export { FooterMinimal } from "./footer-minimal";
 export { Navigation } from "./navigation";
+export { Preloader } from "./preloader";

@@ -5,6 +5,7 @@ import CountUp from "react-countup";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
+import { TextSplitReveal } from "@/components/animations/text-split-reveal";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -21,22 +22,22 @@ interface Stat {
 const stats: Stat[] = [
   {
     value: 4,
-    label: "Core Steps",
-    description: "Document, tasks, Kanban, history",
+    label: "Proof points",
+    description: "Document, tasks, board, history",
   },
   {
     value: 1,
-    label: "Demo Workspace",
-    description: "Single-team portfolio scope",
+    label: "Demo account",
+    description: "No user API key required",
   },
   {
     value: 2,
-    label: "AI Workflows",
+    label: "AI workflows",
     description: "Document generation and task breakdown",
   },
   {
     value: 1,
-    label: "Managed Key",
+    label: "Managed key",
     description: "Server-side Gemini with quotas",
   },
 ];
@@ -69,40 +70,40 @@ export function StatsSection() {
   return (
     <section
       ref={sectionRef}
-      className="relative py-32 md:py-40 bg-white overflow-hidden"
+      className="relative overflow-hidden bg-card py-28 md:py-36"
     >
-      {/* Subtle grid pattern */}
       <div
-        className="absolute inset-0 opacity-[0.02]"
+        className="absolute inset-0 opacity-[0.04]"
         style={{
           backgroundImage: `linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)`,
-          backgroundSize: "60px 60px",
+          backgroundSize: "72px 72px",
         }}
       />
 
       <div className="relative max-w-7xl mx-auto px-6">
-        {/* Section header */}
-        <ScrollReveal animation="fade-up" className="text-center mb-20">
+        <ScrollReveal animation="fade-up" className="mb-16 max-w-3xl">
           <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
-            Demo Proof
+            Demo proof
           </span>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-black tracking-tight">
-            Built to prove the workflow
-          </h2>
+          <TextSplitReveal
+            text="The landing page proves the exact loop the recruiter can run."
+            className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white"
+            animation="scramble"
+            triggerOnScroll={true}
+            as="h2"
+          />
         </ScrollReveal>
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12">
+        <div className="grid gap-px bg-white/10 md:grid-cols-4">
           {stats.map((stat, index) => (
             <ScrollReveal
               key={stat.label}
               animation="fade-up"
               delay={index * 0.1}
-              className="text-center group"
+              className="group bg-card p-6 md:p-8"
             >
               <div className="relative">
-                {/* Large number */}
-                <div className="text-5xl md:text-6xl lg:text-7xl font-bold text-black tracking-tight mb-2">
+                <div className="mb-6 text-5xl font-semibold text-white md:text-6xl lg:text-7xl">
                   <span className="text-neutral-300">{stat.prefix}</span>
                   <CountUp
                     end={stat.value}
@@ -111,19 +112,16 @@ export function StatsSection() {
                     enableScrollSpy
                     scrollSpyOnce
                   />
-                  <span className="text-neutral-400">{stat.suffix}</span>
+                  <span className="text-white/40">{stat.suffix}</span>
                 </div>
 
-                {/* Label */}
-                <h3 className="text-lg font-medium text-black mb-1">
+                <h3 className="text-lg font-semibold text-white mb-1">
                   {stat.label}
                 </h3>
 
-                {/* Description */}
                 <p className="text-sm text-neutral-500">{stat.description}</p>
 
-                {/* Hover line */}
-                <div className="absolute -bottom-4 left-1/2 -translate-x-1/2 w-0 h-px bg-black group-hover:w-16 transition-all duration-500" />
+                <div className="mt-8 h-px w-0 bg-white transition-all duration-500 group-hover:w-20" />
               </div>
             </ScrollReveal>
           ))}

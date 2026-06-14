@@ -3,20 +3,29 @@
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
 
+interface MarqueeItem {
+  text: string;
+  outlined?: boolean;
+}
+
 interface MarqueeTextProps {
   text: string;
+  items?: MarqueeItem[];
   speed?: number;
   direction?: "left" | "right";
   className?: string;
   separator?: string;
+  alternateOutline?: boolean;
 }
 
 export function MarqueeText({
   text,
+  items,
   speed = 50,
   direction = "left",
   className = "",
   separator = "  •  ",
+  alternateOutline = false,
 }: MarqueeTextProps) {
   const marqueeRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -46,10 +55,37 @@ export function MarqueeText({
     return () => {
       tl.kill();
     };
-  }, [direction, speed, text]);
+  }, [direction, speed, text, items]);
+
+  // Build content with outlined variant support
+  const renderContent = () => {
+    if (items && items.length > 0) {
+      return items.map((item, idx) => (
+        <span key={idx}>
+          <span className={item.outlined || (alternateOutline && idx % 2 !== 0) ? 'text-stroke' : ''}>
+            {item.text}
+          </span>
+          {idx < items.length - 1 && <span>{separator}</span>}
+        </span>
+      ));
+    }
+
+    // If alternateOutline is enabled, split text by separator and alternate
+    if (alternateOutline) {
+      const words = text.split(separator);
+      return words.map((word, idx) => (
+        <span key={idx}>
+          <span className={idx % 2 !== 0 ? 'text-stroke' : ''}>{word}</span>
+          {idx < words.length - 1 && <span>{separator}</span>}
+        </span>
+      ));
+    }
+
+    return <>{text}</>;
+  };
 
   // Create repeated text for seamless loop
-  const repeatedText = `${text}${separator}${text}${separator}`;
+  const repeatedText = text ? `${text}${separator}${text}${separator}` : '';
 
   return (
     <div
@@ -57,8 +93,17 @@ export function MarqueeText({
       className={`overflow-hidden whitespace-nowrap ${className}`}
     >
       <div ref={contentRef} className="inline-block">
-        <span>{repeatedText}</span>
-        <span>{repeatedText}</span>
+        {items || alternateOutline ? (
+          <>
+            <span>{renderContent()}{separator}{renderContent()}{separator}</span>
+            <span>{renderContent()}{separator}{renderContent()}{separator}</span>
+          </>
+        ) : (
+          <>
+            <span>{repeatedText}</span>
+            <span>{repeatedText}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -72,7 +117,7 @@ interface MarqueeBannerProps {
 
 export function MarqueeBanner({ lines, className = "" }: MarqueeBannerProps) {
   return (
-    <section className={`relative py-20 md:py-32 bg-black overflow-hidden ${className}`}>
+    <section className={`relative py-20 md:py-32 bg-white overflow-hidden ${className}`}>
       {/* Gradient overlays for fade effect */}
       <div className="absolute left-0 top-0 bottom-0 w-32 bg-gradient-to-r from-black to-transparent z-10" />
       <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-black to-transparent z-10" />
@@ -95,17 +140,33 @@ export function MarqueeBanner({ lines, className = "" }: MarqueeBannerProps) {
 
 // Simple single marquee for headers/CTAs
 export function SimpleMarquee() {
-  return (
-    <section className="relative py-8 bg-white border-y border-neutral-200 overflow-hidden">
-      <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10" />
-      <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10" />
+  const words = [
+    { text: "Prompt to document", accent: true },
+    { text: "Document to tasks", accent: false },
+    { text: "Tasks to Kanban", accent: false },
+    { text: "Workflow history", accent: true },
+    { text: "No visitor API key", accent: false },
+  ];
 
-      <MarqueeText
-        text="AI-Powered  •  Local-First  •  Real-Time Collaboration  •  Enterprise Ready  •  Secure by Default"
-        speed={40}
-        className="text-sm font-medium tracking-widest uppercase text-neutral-400"
-        separator="     "
-      />
+  const marqueeContent = words
+    .map((w) =>
+      w.accent
+        ? `<span class="text-white/40">${w.text}</span>`
+        : w.text
+    )
+    .join("  \u2022  ");
+
+  return (
+    <section className="relative overflow-hidden border-y border-white/10 bg-card py-8">
+      <div className="absolute bottom-0 left-0 top-0 z-10 w-20 bg-gradient-to-r from-card to-transparent" />
+      <div className="absolute bottom-0 right-0 top-0 z-10 w-20 bg-gradient-to-l from-card to-transparent" />
+
+      <div className="overflow-hidden whitespace-nowrap text-sm font-medium tracking-widest uppercase text-white/35">
+        <div
+          className="inline-block animate-marquee"
+          dangerouslySetInnerHTML={{ __html: `${marqueeContent}  \u2022  ${marqueeContent}  \u2022  ${marqueeContent}  \u2022  ${marqueeContent}  \u2022  ` }}
+        />
+      </div>
     </section>
   );
 }
