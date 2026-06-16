@@ -27,8 +27,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-nexus}
       POSTGRES_PWD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_SEEDS: postgres
-    ports:
-      - "${TEMPORAL_PORT:-7233}:7233"
+    # Temporal is only used by web/worker on the private Compose network.
+    # Do not publish 7233 on a public VPS.
 
   web:
     build:
@@ -56,6 +56,7 @@ services:
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       DEMO_EMAIL: ${DEMO_EMAIL:-demo@nexus.local}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      DEMO_ACCESS_CODE: ${DEMO_ACCESS_CODE:-}
       NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
       NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
       NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-demo@nexus.local}
@@ -118,7 +119,7 @@ services:
       # to start without it.
       COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}
     ports:
-      - "${COLLABORATION_PORT:-1234}:1234"
+      - "${COLLABORATION_BIND:-127.0.0.1}:${COLLABORATION_PORT:-1234}:1234"
 
   temporal-ui:
     image: temporalio/ui:latest
@@ -131,7 +132,7 @@ services:
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_CORS_ORIGINS: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
-      - "${TEMPORAL_UI_PORT:-8080}:8080"
+      - "${TEMPORAL_UI_BIND:-127.0.0.1}:${TEMPORAL_UI_PORT:-8080}:8080"
 
   jaeger:
     image: jaegertracing/all-in-one:1.54
@@ -140,9 +141,9 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "${JAEGER_UI_PORT:-16686}:16686"
-      - "${OTEL_GRPC_PORT:-4317}:4317"
-      - "${OTEL_HTTP_PORT:-4318}:4318"
+      - "${JAEGER_BIND:-127.0.0.1}:${JAEGER_UI_PORT:-16686}:16686"
+      - "${JAEGER_BIND:-127.0.0.1}:${OTEL_GRPC_PORT:-4317}:4317"
+      - "${JAEGER_BIND:-127.0.0.1}:${OTEL_HTTP_PORT:-4318}:4318"
 
 volumes:
   postgres_data:

@@ -7,11 +7,11 @@ import { MagneticButton } from "@/components/animations/magnetic-button";
 
 const demoChecks = [
   "Open the seeded demo account",
-  "Generate an AI document from a project prompt",
-  "Save the result as a workspace document",
-  "Extract tasks from that document",
-  "See the tasks on the Kanban board",
-  "Inspect workflow history and step output",
+  "Generate and accept a versioned project plan",
+  "Inspect stable requirements and linked delivery tasks",
+  "Edit an important requirement in the plan",
+  "Review the impact and select proposed task changes",
+  "Confirm the Kanban alignment and workflow audit trail",
 ];
 
 const scopeNotes = [
@@ -32,11 +32,12 @@ export function Testimonials() {
             Demo scope
           </span>
           <h2 className="text-5xl font-semibold leading-none md:text-7xl">
-            A live portfolio demo with clear boundaries.
+            A focused change-control demo with clear boundaries.
           </h2>
           <p className="mt-6 max-w-xl text-lg leading-8 text-white/55">
             Nexus is not pretending to be a mature SaaS. It is a focused public
-            demo that proves one complete AI workspace loop end to end.
+            demo that proves one hard workflow: keep delivery work aligned when
+            the project plan changes.
           </p>
 
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">

@@ -1,8 +1,13 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
-import { tasks } from "@nexus/database/schema";
-import { desc, inArray } from "drizzle-orm";
+import {
+  planVersions,
+  requirements,
+  requirementTaskLinks,
+  tasks,
+} from "@nexus/database/schema";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/production-guardrails";
 import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import {
@@ -35,14 +40,42 @@ export async function GET(req: Request) {
     }
 
     const taskList = await db.query.tasks.findMany({
-      where: inArray(tasks.workspaceId, workspaceIds),
+      where: and(inArray(tasks.workspaceId, workspaceIds), eq(tasks.isArchived, 0)),
       orderBy: [desc(tasks.createdAt)],
     });
+
+    const taskIds = taskList.map((task) => task.id);
+    const requirementLinks = taskIds.length > 0
+      ? await db
+          .select({
+            taskId: requirementTaskLinks.taskId,
+            requirementId: requirements.id,
+            stableKey: requirements.stableKey,
+            title: requirements.title,
+            status: requirements.status,
+          })
+          .from(requirementTaskLinks)
+          .innerJoin(requirements, eq(requirements.id, requirementTaskLinks.requirementId))
+          .innerJoin(planVersions, eq(planVersions.id, requirements.planVersionId))
+          .where(
+            and(
+              inArray(requirementTaskLinks.taskId, taskIds),
+              eq(planVersions.status, "accepted")
+            )
+          )
+      : [];
+    const requirementsByTask = new Map<string, typeof requirementLinks>();
+    for (const link of requirementLinks) {
+      const current = requirementsByTask.get(link.taskId) || [];
+      current.push(link);
+      requirementsByTask.set(link.taskId, current);
+    }
 
     return Response.json(
       taskList.map((t) => ({
         id: t.id,
         workspaceId: t.workspaceId,
+        docId: t.docId,
         title: t.title,
         description: t.description,
         status: t.status,
@@ -50,6 +83,9 @@ export async function GET(req: Request) {
         assigneeId: t.assigneeId,
         assigneeAgentType: t.assigneeAgentType,
         dueDate: t.dueDate?.getTime(),
+        alignmentStatus: t.alignmentStatus,
+        alignmentUpdatedAt: t.alignmentUpdatedAt?.toISOString() || null,
+        requirements: requirementsByTask.get(t.id) || [],
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       }))

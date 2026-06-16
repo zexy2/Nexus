@@ -128,6 +128,24 @@ export async function requireAuth(): Promise<
 
 // Default rate limit configs
 export const RATE_LIMITS = {
+  // Chat/writer streaming - 20 requests per minute, with AI budget enforced separately
+  chat: {
+    windowMs: 60 * 1000,
+    maxRequests: 20,
+    keyPrefix: "chat",
+  },
+  // Offline command processing - lower because each command can fan out to agents
+  commands: {
+    windowMs: 60 * 1000,
+    maxRequests: 10,
+    keyPrefix: "commands",
+  },
+  // Public demo login - deliberately low to protect demo accounts from abuse
+  demoLogin: {
+    windowMs: 60 * 1000,
+    maxRequests: 5,
+    keyPrefix: "demo-login",
+  },
   // Research API - 10 requests per minute (paid external API)
   research: {
     windowMs: 60 * 1000,

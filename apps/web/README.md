@@ -1,6 +1,6 @@
 # 🌐 Nexus Web Application
 
-> **Next.js 16 App Router ile Local-First, AI-Powered İşbirliği Platformu**
+> **Next.js 16 App Router ile Living Plan, Kanban ve AI workflow demo uygulaması**
 
 [![Next.js](https://img.shields.io/badge/Next.js-16.1-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
@@ -13,10 +13,10 @@
 
 Bu, Nexus projesinin ana web uygulamasıdır. Modern React patterns ve Next.js App Router kullanarak:
 
-- **🏠 Local-First Architecture** - Veriler önce yerel IndexedDB'de, sonra sunucuyla senkronize
-- **🤖 AI Chat Interface** - LangGraph multi-agent sistemiyle doğal dil etkileşimi
-- **📄 Rich Document Editor** - CRDT tabanlı gerçek zamanlı işbirliği
-- **✅ Kanban Task Board** - Sürükle-bırak görev yönetimi
+- **📄 Living Plan** - Plan sürümleri, `REQ-001` gereksinimleri ve kapsama takibi
+- **🔁 Change Review** - Plan değiştiğinde etkilenen işleri önerir; kullanıcı onayı olmadan Kanban değişmez
+- **🤖 Server-managed AI** - Demo kullanıcıdan API key istemez; kota ve unavailable durumları server tarafında yönetilir
+- **✅ Kanban Task Board** - Gereksinim bağlantıları ve hizalama durumlarıyla görev yönetimi
 - **🔒 Authentication** - Better-Auth ile güvenli kimlik doğrulama
 
 ---
@@ -31,10 +31,12 @@ src/
 │   │   ├── chat/          # AI chat with streaming
 │   │   ├── docs/          # Document CRUD
 │   │   ├── tasks/         # Task management
-│   │   ├── sync/          # Local-first sync endpoints
+│   │   ├── sync/          # API-backed sync/offline queue endpoints
+│   │   ├── plans/         # Living Plan analysis endpoints
+│   │   ├── change-sets/   # Human review queue endpoints
 │   │   └── workflows/     # Temporal workflow triggers
 │   ├── dashboard/         # Protected dashboard pages
-│   │   ├── agents/        # Agent management UI
+│   │   ├── agents/        # Workflow Center / run history
 │   │   ├── chat/          # AI chat interface
 │   │   ├── docs/          # Document editor
 │   │   ├── tasks/         # Kanban board
@@ -53,7 +55,7 @@ src/
 │   └── useCollaboration.ts
 │
 ├── lib/                   # Core Libraries
-│   ├── zero.tsx          # Local-first sync engine
+│   ├── zero.tsx          # API-backed sync/offline queue compatibility layer
 │   ├── auth.ts           # Authentication
 │   ├── crag.ts           # Corrective RAG
 │   ├── observability.ts  # Agent tracing
@@ -70,10 +72,10 @@ src/
 | ------------- | ----------------------- | ------------------------------- |
 | **Framework** | Next.js 16              | App Router, RSC, Server Actions |
 | **Styling**   | Tailwind v4 + Shadcn/ui | Modern component library        |
-| **State**     | React hooks + Zero Sync | Local-first reactive data       |
+| **State**     | React hooks + API-backed sync | Optimistic UI and queued mutations |
 | **Editor**    | BlockNote / TipTap      | Rich text with CRDT             |
 | **Auth**      | Better-Auth             | Session-based authentication    |
-| **AI**        | Vercel AI SDK           | Streaming chat responses        |
+| **AI**        | Gemini + workflow guardrails | Server-managed provider, quota, unavailable states |
 
 ---
 
@@ -92,21 +94,16 @@ src/
 cd /path/to/nexus
 pnpm install
 
-# 2. Docker servislerini başlat
-docker-compose up -d
-
-# 3. Environment variables
+# 2. Environment variables
 cp apps/web/.env.example apps/web/.env.local
-# Gerekli API key'leri ayarla:
+# Gerekli değerleri ayarla:
 # - DATABASE_URL
-# - GEMINI_API_KEY veya OPENAI_API_KEY
-# - TAVILY_API_KEY (web search için)
+# - GEMINI_API_KEY (AI workflow/chat)
+# - OPENAI_API_KEY (opsiyonel embeddings/RAG)
+# - TAVILY_API_KEY (opsiyonel web search)
 
-# 4. Veritabanı migration
-pnpm --filter @nexus/database db:push
-
-# 5. Development server
-pnpm dev
+# 3. Tek komut lokal demo
+pnpm dev:local
 ```
 
 ### Erişim
@@ -132,7 +129,7 @@ pnpm dev
 
 ### Key Components
 
-- **`lib/zero.tsx`** - Local-first sync engine (custom implementation)
+- **`lib/zero.tsx`** - API-backed sync/offline queue compatibility layer
 - **`lib/observability.ts`** - Agent execution tracing
 - **`components/collaborative-editor.tsx`** - Yjs CRDT editor
 - **`app/api/chat/route.ts`** - LangGraph multi-agent orchestration
@@ -162,7 +159,7 @@ __tests__/
 ├── tasks.test.ts         # Task management
 ├── chat.test.ts          # AI chat tests
 ├── agents.test.ts        # Multi-agent tests
-├── sync.test.ts          # Local-first sync tests
+├── sync.test.ts          # API-backed sync/offline queue tests
 └── workflows.test.ts     # Temporal workflow tests
 ```
 
@@ -170,14 +167,14 @@ __tests__/
 
 ## 🎯 Özellikler
 
-### Local-First Sync
+### API-Backed Sync / Offline Queue
 
 ```tsx
-// Zero hook kullanımı
+// Compatibility hook kullanımı
 import { useDocs, useUpdateDoc } from "@/lib/zero";
 
 function DocumentList() {
-  const docs = useDocs("workspace-id");  // Anlık, offline-ready
+  const docs = useDocs("workspace-id");  // Optimistic local cache + server sync
   const updateDoc = useUpdateDoc();
   
   // Optimistic update - sunucu beklemeden UI güncellenir
@@ -241,8 +238,8 @@ BETTER_AUTH_SECRET=random-secret-key
 | Metrik                     | Hedef   | Açıklama              |
 | -------------------------- | ------- | --------------------- |
 | **First Contentful Paint** | < 1s    | SSR + RSC             |
-| **Data Latency**           | 0ms     | Local-first reads     |
-| **Offline Support**        | ✅       | IndexedDB persistence |
+| **Data Latency**           | Low     | Optimistic local cache + server sync |
+| **Offline Queue**          | Partial | IndexedDB command queue |
 | **Bundle Size**            | < 200KB | Code splitting        |
 
 ---
@@ -271,8 +268,8 @@ echo $DATABASE_URL
 
 ### "AI response empty"
 
-- API key'lerin doğru ayarlandığından emin ol
-- `GEMINI_API_KEY` veya `OPENAI_API_KEY` gerekli
+- Server tarafında `AI_ENABLED=true` ve `GEMINI_API_KEY` ayarlı olduğundan emin ol
+- `OPENAI_API_KEY` yalnızca embeddings/RAG için gerekli
 - Rate limit kontrolü yap
 
 ---

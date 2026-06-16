@@ -58,7 +58,7 @@ export function HeroCinematic() {
           <div className="mb-8 inline-flex items-center gap-3 border-y border-white/10 py-2">
             <span className="size-2 bg-white shadow-[0_0_18px_rgba(255,255,255,0.45)]" />
             <span className="font-mono text-xs uppercase text-white/55 sm:text-sm">
-              Public demo / AI workflow workspace
+              Public demo / controlled change propagation
             </span>
           </div>
 
@@ -73,12 +73,12 @@ export function HeroCinematic() {
           />
 
           <div className="mt-5 animate-fade-in-delayed text-4xl font-medium leading-[1.05] text-white/70 sm:text-5xl">
-            turns project ideas into executable workflows.
+            keeps changing plans and delivery work aligned.
           </div>
 
           <p className="mt-7 max-w-xl text-lg leading-8 text-white/60">
-            Generate a document, extract tasks, manage the Kanban board, and
-            inspect every AI workflow step behind it.
+            Edit the plan once. Nexus traces the impact, proposes task changes,
+            and updates the board only after your approval.
           </p>
 
           <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">

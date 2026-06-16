@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { aiUnavailableResponse, enforceAiBudget } from "@/lib/production-guardrails";
+import { docs } from "@nexus/database/schema";
 
 /**
  * Vector Search API - pgvector semantic search
@@ -204,6 +205,17 @@ export async function PUT(request: NextRequest) {
     const access = await requireWorkspaceAccess(userId, workspaceId);
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const doc = await db.query.docs.findFirst({
+      where: and(eq(docs.id, docId), eq(docs.workspaceId, access.workspaceId)),
+      columns: { id: true },
+    });
+    if (!doc) {
+      return NextResponse.json(
+        { error: "Document not found in this workspace" },
+        { status: 404 }
+      );
     }
 
     const aiBudget = await enforceAiBudget({

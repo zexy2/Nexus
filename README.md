@@ -1,6 +1,6 @@
 # Nexus
 
-A production-oriented AI workspace for documents, tasks, server-managed AI assistance, and durable background workflows.  
+A production-oriented public demo workspace for Living Plans, change impact review, Kanban work alignment, server-managed AI assistance, and durable background workflows.
 Built with Next.js 16, PostgreSQL, LangGraph, and Temporal.
 
 ## Quick Start
@@ -43,8 +43,8 @@ pnpm build        # production build
 pnpm test         # run tests
 pnpm lint         # eslint
 pnpm type-check   # TypeScript checks
-pnpm db:push      # push schema to database
-pnpm db:migrate   # run migrations for production
+pnpm db:migrate   # run migrations; required for production deploys
+pnpm db:push      # local development only: push schema to a disposable DB
 pnpm demo:seed-user # create/update the public demo user through the auth API
 pnpm backup:postgres # write a VPS Postgres backup
 pnpm smoke:prod   # run Docker VPS smoke checks
@@ -53,14 +53,14 @@ pnpm db:studio    # open drizzle studio
 
 ## Gotchas
 
-- **First run?** Make sure Docker is running before `pnpm dev`
-- **Database errors?** Run `pnpm db:push` to sync the schema
+- **First run?** Make sure Docker is running before `pnpm dev:local`
+- **Database errors?** Prefer `pnpm db:migrate`; use `pnpm db:push` only on a local disposable database
 - **Temporal not connecting?** Check `docker-compose ps` — temporal takes ~30s to start
 - **pgvector missing?** The init script enables it, but check `scripts/init-db.sql` if issues persist
 - **AI features not working?** You need `GEMINI_API_KEY` and `AI_ENABLED=true`
-- **Public demo?** Set `DEMO_MODE=true`, `PUBLIC_SIGNUP_ENABLED=false`, and low `AI_*_LIMIT` values
+- **Public demo?** Set `DEMO_MODE=true`, `PUBLIC_SIGNUP_ENABLED=false`, optional `DEMO_ACCESS_CODE`, and low `AI_*_LIMIT` values
 - **Production deploy?** Use `docker-compose.prod.yml` and `docs/DEPLOYMENT.md`
-- **Zero sync?** v1 is API-backed sync/offline queue; production Zero cache is deferred until schema compatibility is restored
+- **Sync model?** v1 uses API-backed sync/offline queue behavior; a production Zero cache is deferred
 
 ## Stack
 

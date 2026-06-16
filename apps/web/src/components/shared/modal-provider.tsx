@@ -22,22 +22,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { FileText, ListTodo, Sparkles, Loader2 } from 'lucide-react';
 import { showToast } from '@/components/shared/toast-provider';
+import { useT } from '@/lib/i18n/provider';
 
 // Create Document Modal
 function CreateDocumentModal() {
+  const t = useT();
   const { modals, closeModal } = useUIStore();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [title, setTitle] = useState('');
-  const [useAI, setUseAI] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
 
   const handleCreate = useCallback(async () => {
-    if (!title.trim() && !useAI) {
-      showToast.warning('Please enter a document title');
+    if (!title.trim()) {
+      showToast.warning(t('docs.toastEnterName'));
       return;
     }
 
@@ -47,37 +46,31 @@ function CreateDocumentModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: title.trim() || 'Untitled Document',
+          title: title.trim(),
           content: '',
-          useAI,
-          aiPrompt: useAI ? aiPrompt : undefined,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create document');
+        throw new Error('Failed to create plan');
       }
 
       const doc = await response.json();
-      showToast.success('Document created!');
+      showToast.success(t('docs.toastCreated'));
       closeModal('createDocument');
       setTitle('');
-      setAiPrompt('');
-      setUseAI(false);
       router.push(`/dashboard/docs/${doc.id}`);
     } catch (error) {
-      console.error('Failed to create document:', error);
-      showToast.error('Failed to create document');
+      console.error('Failed to create plan:', error);
+      showToast.error(t('docs.toastCreateFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [title, useAI, aiPrompt, closeModal, router]);
+  }, [title, closeModal, router, t]);
 
   const handleClose = () => {
     closeModal('createDocument');
     setTitle('');
-    setAiPrompt('');
-    setUseAI(false);
   };
 
   return (
@@ -86,65 +79,37 @@ function CreateDocumentModal() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Create New Document
+            {t('docs.dialogTitle')}
           </DialogTitle>
-          <DialogDescription>
-            Start with a blank document or let AI help you get started.
-          </DialogDescription>
+          <DialogDescription>{t('docs.dialogDesc')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="doc-title">Document Title</Label>
+            <Label htmlFor="doc-title">{t('docs.titleLabel')}</Label>
             <Input
               id="doc-title"
-              placeholder="Enter document title..."
+              placeholder={t('docs.titlePlaceholder')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               autoFocus
             />
           </div>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-violet-500/20">
-                <Sparkles className="h-4 w-4 text-violet-400" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">AI Writing Assistant</p>
-                <p className="text-xs text-muted-foreground">Let AI help you draft content</p>
-              </div>
-            </div>
-            <Switch checked={useAI} onCheckedChange={setUseAI} />
-          </div>
-
-          {useAI && (
-            <div className="space-y-2">
-              <Label htmlFor="ai-prompt">What would you like to write about?</Label>
-              <Textarea
-                id="ai-prompt"
-                placeholder="E.g., A blog post about productivity tips..."
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                rows={3}
-              />
-            </div>
-          )}
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleCreate} disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                {t('common.loading')}
               </>
             ) : (
-              'Create Document'
+              t('docs.newDoc')
             )}
           </Button>
         </DialogFooter>
@@ -155,17 +120,17 @@ function CreateDocumentModal() {
 
 // Create Task Modal
 function CreateTaskModal() {
+  const t = useT();
   const { modals, closeModal } = useUIStore();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [assignToAI, setAssignToAI] = useState(false);
 
   const handleCreate = useCallback(async () => {
     if (!title.trim()) {
-      showToast.warning('Please enter a task title');
+      showToast.warning(t('tasks.toastEnterTitle'));
       return;
     }
 
@@ -179,7 +144,6 @@ function CreateTaskModal() {
           description,
           priority,
           status: 'todo',
-          assigneeAgentType: assignToAI ? 'assistant' : null,
         }),
       });
 
@@ -187,27 +151,25 @@ function CreateTaskModal() {
         throw new Error('Failed to create task');
       }
 
-      showToast.success('Task created!');
+      showToast.success(t('tasks.toastCreated'));
       closeModal('createTask');
       setTitle('');
       setDescription('');
       setPriority('medium');
-      setAssignToAI(false);
       router.push('/dashboard/tasks');
     } catch (error) {
       console.error('Failed to create task:', error);
-      showToast.error('Failed to create task');
+      showToast.error(t('tasks.toastCreateFailed'));
     } finally {
       setIsLoading(false);
     }
-  }, [title, description, priority, assignToAI, closeModal, router]);
+  }, [title, description, priority, closeModal, router, t]);
 
   const handleClose = () => {
     closeModal('createTask');
     setTitle('');
     setDescription('');
     setPriority('medium');
-    setAssignToAI(false);
   };
 
   return (
@@ -216,19 +178,17 @@ function CreateTaskModal() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ListTodo className="h-5 w-5" />
-            Create New Task
+            {t('tasks.dialogCreateTitle')}
           </DialogTitle>
-          <DialogDescription>
-            Add a new task to your workspace.
-          </DialogDescription>
+          <DialogDescription>{t('tasks.dialogCreateDesc')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="task-title">Task Title</Label>
+            <Label htmlFor="task-title">{t('tasks.fieldTitle')}</Label>
             <Input
               id="task-title"
-              placeholder="Enter task title..."
+              placeholder={t('tasks.fieldTitlePlaceholder')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -237,10 +197,10 @@ function CreateTaskModal() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="task-desc">Description (optional)</Label>
+            <Label htmlFor="task-desc">{t('tasks.fieldDesc')}</Label>
             <Textarea
               id="task-desc"
-              placeholder="Add more details..."
+              placeholder={t('tasks.fieldDescPlaceholder')}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
@@ -248,46 +208,33 @@ function CreateTaskModal() {
           </div>
 
           <div className="space-y-2">
-            <Label>Priority</Label>
+            <Label>{t('tasks.fieldPriority')}</Label>
             <Select value={priority} onValueChange={(v) => setPriority(v as typeof priority)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
+                <SelectItem value="low">{t('tasks.prioLow')}</SelectItem>
+                <SelectItem value="medium">{t('tasks.prioMedium')}</SelectItem>
+                <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
+                <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-violet-500/20">
-                <Sparkles className="h-4 w-4 text-violet-400" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">Assign to AI Agent</p>
-                <p className="text-xs text-muted-foreground">Let AI handle this task</p>
-              </div>
-            </div>
-            <Switch checked={assignToAI} onCheckedChange={setAssignToAI} />
           </div>
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleCreate} disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                {t('common.loading')}
               </>
             ) : (
-              'Create Task'
+              t('tasks.newTask')
             )}
           </Button>
         </DialogFooter>
@@ -298,6 +245,7 @@ function CreateTaskModal() {
 
 // AI Assistant Modal
 function AIAssistantModal() {
+  const t = useT();
   const { modals, closeModal } = useUIStore();
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -317,16 +265,14 @@ function AIAssistantModal() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-violet-400" />
-            AI Assistant
+            {t('chat.askNexus')}
           </DialogTitle>
-          <DialogDescription>
-            Ask anything - I can help with research, writing, coding, and more.
-          </DialogDescription>
+          <DialogDescription>{t('chat.headerSubtitle')}</DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
           <Textarea
-            placeholder="What would you like help with?"
+            placeholder={t('chat.messagePlaceholder')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             rows={4}
@@ -337,18 +283,15 @@ function AIAssistantModal() {
               }
             }}
           />
-          <p className="text-xs text-muted-foreground mt-2">
-            Press ⌘+Enter to start chatting
-          </p>
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => closeModal('aiAssistant')}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={handleSubmit} disabled={!query.trim()}>
             <Sparkles className="mr-2 h-4 w-4" />
-            Start Chat
+            {t('palette.startChat')}
           </Button>
         </DialogFooter>
       </DialogContent>

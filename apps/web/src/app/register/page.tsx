@@ -17,18 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { signUp, signIn } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n/provider";
 import { Loader2, Github, Sparkles, Check } from "lucide-react";
-
-const features = [
-  "Local-first architecture - works offline",
-  "AI-powered multi-agent automation",
-  "Real-time collaboration",
-  "Smart document editor",
-  "Unlimited workspaces",
-];
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const signupEnabled = process.env.NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED !== "false";
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [isLoading, setIsLoading] = useState(false);
@@ -42,7 +36,7 @@ export default function RegisterPage() {
     e.preventDefault();
 
     if (!acceptTerms) {
-      setError("Please accept the terms and conditions");
+      setError(`${t("auth.acceptTermsPrefix")} ${t("auth.terms")} ${t("auth.and")} ${t("auth.privacy")}`);
       return;
     }
 
@@ -51,7 +45,7 @@ export default function RegisterPage() {
 
     try {
       if (!signupEnabled) {
-        setError("Public signup is disabled for this demo. Please use the demo account.");
+        setError(t("auth.registerSubtitleDisabled"));
         return;
       }
 
@@ -62,12 +56,12 @@ export default function RegisterPage() {
       });
 
       if (result.error) {
-        setError(result.error.message || "Sign up failed");
+        setError(result.error.message || t("auth.registerSubtitleDisabled"));
       } else {
         router.push("/dashboard");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("auth.unexpectedError"));
     } finally {
       setIsLoading(false);
     }
@@ -112,14 +106,20 @@ export default function RegisterPage() {
           </div>
 
           <h2 className="text-3xl font-bold mb-4">
-            Your AI-Powered Workspace
+            {t("auth.registerFeatureTitle")}
           </h2>
           <p className="text-muted-foreground mb-8">
-            Use Nexus to generate AI documents, extract tasks, and inspect workflow history in one workspace.
+            {t("auth.registerFeatureDesc")}
           </p>
 
           <div className="space-y-4">
-            {features.map((feature, i) => (
+            {[
+              t("auth.featureLivingPlan"),
+              t("auth.featureChangeReview"),
+              t("auth.featureKanban"),
+              t("auth.featureRuns"),
+              t("auth.featureQuota"),
+            ].map((feature, i) => (
               <div key={i} className="flex items-center gap-3">
                 <div className="size-6 rounded-full bg-primary/10 flex items-center justify-center">
                   <Check className="size-4 text-primary" />
@@ -131,13 +131,13 @@ export default function RegisterPage() {
 
           <div className="mt-12 p-4 rounded-lg border bg-card/50">
             <p className="text-sm italic text-muted-foreground">
-              &ldquo;The public demo is intentionally quota-limited: AI runs through a server-managed key with clear availability states.&rdquo;
+              &ldquo;{t("auth.demoNote")}&rdquo;
             </p>
             <div className="flex items-center gap-2 mt-3">
               <div className="size-8 rounded-full bg-primary/20" />
               <div>
-                <p className="text-sm font-medium">Nexus Demo</p>
-                <p className="text-xs text-muted-foreground">Portfolio-safe AI workspace</p>
+                <p className="text-sm font-medium">{t("auth.demoName")}</p>
+                <p className="text-xs text-muted-foreground">{t("auth.demoTagline")}</p>
               </div>
             </div>
           </div>
@@ -157,15 +157,15 @@ export default function RegisterPage() {
 
           <Card>
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Create an account</CardTitle>
+              <CardTitle className="text-2xl">{t("auth.registerTitle")}</CardTitle>
               <CardDescription>
-                {signupEnabled ? "Get started with your free account today" : "Public signup is disabled for this portfolio demo"}
+                {signupEnabled ? t("auth.registerSubtitleEnabled") : t("auth.registerSubtitleDisabled")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {!signupEnabled && (
-                <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  Use the demo account from the sign-in page to try Nexus without creating a new account.
+                  <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  {t("auth.registerDisabledNotice")}
                 </div>
               )}
 
@@ -206,32 +206,34 @@ export default function RegisterPage() {
                 </Button>
               </div>
 
+              {signupEnabled && (
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <Separator />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-card px-2 text-muted-foreground">
-                    Or continue with
+                    {t("auth.or")}
                   </span>
                 </div>
               </div>
+              )}
 
               {/* Email Signup Form */}
               <form onSubmit={handleEmailSignup} className={signupEnabled ? "space-y-4" : "hidden"}>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full name</Label>
+                  <Label htmlFor="name">{t("auth.fullName")}</Label>
                   <Input
                     id="name"
                     type="text"
-                    placeholder="John Doe"
+                    placeholder={t("auth.fullNamePlaceholder")}
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("auth.email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -242,7 +244,7 @@ export default function RegisterPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t("auth.password")}</Label>
                   <Input
                     id="password"
                     type="password"
@@ -253,7 +255,7 @@ export default function RegisterPage() {
                     minLength={8}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Must be at least 8 characters
+                    {t("auth.minPassword")}
                   </p>
                 </div>
 
@@ -267,13 +269,13 @@ export default function RegisterPage() {
                     htmlFor="terms"
                     className="text-xs text-muted-foreground leading-tight"
                   >
-                    I agree to the{" "}
+                    {t("auth.acceptTermsPrefix")}{" "}
                     <Link href="/terms" className="text-primary hover:underline">
-                      Terms of Service
+                      {t("auth.terms")}
                     </Link>{" "}
-                    and{" "}
+                    {t("auth.and")}{" "}
                     <Link href="/privacy" className="text-primary hover:underline">
-                      Privacy Policy
+                      {t("auth.privacy")}
                     </Link>
                   </label>
                 </div>
@@ -286,15 +288,15 @@ export default function RegisterPage() {
 
                 <Button type="submit" className="w-full" disabled={isLoading}>
                   {isLoading && <Loader2 className="size-4 mr-2 animate-spin" />}
-                  Create account
+                  {t("auth.createAccount")}
                 </Button>
               </form>
             </CardContent>
             <CardFooter className="justify-center">
               <p className="text-sm text-muted-foreground">
-                {demoMode ? "Ready to try the demo? " : "Already have an account? "}
+                {demoMode ? `${t("auth.readyDemo")} ` : `${t("auth.alreadyAccount")} `}
                 <Link href="/login" className="text-primary hover:underline">
-                  Sign in
+                  {t("common.signIn")}
                 </Link>
               </p>
             </CardFooter>

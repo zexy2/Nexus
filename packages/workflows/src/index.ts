@@ -22,4 +22,9 @@ export {
   searchVectors,
   generateEmbedding,
   indexDocument,
+  analyzePlanImpact,
+  persistPlanImpact,
+  applyPlanChangeSet,
+  rejectPlanChangeSet,
+  expirePlanChangeSet,
 } from "./activities";

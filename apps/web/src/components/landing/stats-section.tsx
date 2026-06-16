@@ -21,23 +21,23 @@ interface Stat {
 const stats: Stat[] = [
   {
     value: 4,
-    label: "Proof points",
-    description: "Document, tasks, board, history",
+    label: "Control points",
+    description: "Version, impact, approval, alignment",
   },
   {
     value: 1,
-    label: "Demo account",
-    description: "No user API key required",
+    label: "Approval gate",
+    description: "AI proposes; a person decides",
   },
   {
-    value: 2,
-    label: "AI workflows",
-    description: "Document generation and task breakdown",
+    value: 3,
+    label: "Traceable links",
+    description: "Plan, requirement, delivery task",
   },
   {
     value: 1,
-    label: "Managed key",
-    description: "Server-side Gemini with quotas",
+    label: "Durable review",
+    description: "Pending decisions survive restarts",
   },
 ];
 
@@ -82,10 +82,10 @@ export function StatsSection() {
       <div className="relative max-w-7xl mx-auto px-6">
         <ScrollReveal animation="fade-up" className="mb-16 max-w-3xl">
           <span className="text-sm font-medium tracking-widest uppercase text-neutral-400 mb-4 block">
-            Demo proof
+            Change control
           </span>
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-semibold text-white text-balance">
-            The landing page proves the exact loop the recruiter can run.
+            Change the plan once. Keep delivery work aligned.
           </h2>
         </ScrollReveal>
 

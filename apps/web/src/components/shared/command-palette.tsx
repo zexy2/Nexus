@@ -9,7 +9,8 @@ import {
   FileText,
   ListTodo,
   MessageSquare,
-  Bot,
+  Activity,
+  GitPullRequestArrow,
   Settings,
   Plus,
   Search,
@@ -29,9 +30,10 @@ interface CommandDef {
 const commands: CommandDef[] = [
   // Navigation
   { id: "home", labelKey: "nav.home", icon: Home, action: "/dashboard", group: "navigation" },
-  { id: "tasks", labelKey: "nav.tasks", icon: ListTodo, action: "/dashboard/tasks", group: "navigation" },
-  { id: "docs", labelKey: "nav.docs", icon: FileText, action: "/dashboard/docs", group: "navigation" },
-  { id: "agents", labelKey: "nav.agents", icon: Bot, action: "/dashboard/agents", group: "navigation" },
+  { id: "plans", labelKey: "nav.plans", icon: FileText, action: "/dashboard/docs", group: "navigation" },
+  { id: "work", labelKey: "nav.work", icon: ListTodo, action: "/dashboard/tasks", group: "navigation" },
+  { id: "changes", labelKey: "nav.changes", icon: GitPullRequestArrow, action: "/dashboard/changes", group: "navigation" },
+  { id: "runs", labelKey: "nav.runs", icon: Activity, action: "/dashboard/agents", group: "navigation" },
   { id: "chat", labelKey: "nav.chat", icon: MessageSquare, action: "/dashboard/chat", group: "navigation" },
   { id: "settings", labelKey: "nav.settings", icon: Settings, action: "/dashboard/settings", group: "navigation" },
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ArrowLeft, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,413 +15,187 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import {
-  ArrowLeft,
-  Plus,
-  Loader2,
-  BrainCircuit,
-  CheckCircle2,
-  Trash2,
-  Sparkles,
-} from "lucide-react";
-import Link from "next/link";
+import { Textarea } from "@/components/ui/textarea";
+import { showToast } from "@/components/shared/toast-provider";
+import { useT } from "@/lib/i18n/provider";
 
 type TaskPriority = "low" | "medium" | "high" | "urgent";
-
-const priorityConfig = {
-  low: { label: "Low", color: "bg-gray-500", badgeClass: "bg-slate-100 text-slate-700" },
-  medium: { label: "Medium", color: "bg-yellow-500", badgeClass: "bg-blue-100 text-blue-700" },
-  high: { label: "High", color: "bg-orange-500", badgeClass: "bg-orange-100 text-orange-700" },
-  urgent: { label: "Urgent", color: "bg-red-500", badgeClass: "bg-red-100 text-red-700" },
-};
-
-const agentTypes = [
-  { id: "supervisor", name: "Supervisor Agent", description: "Orchestrates and delegates tasks" },
-  { id: "writer", name: "Writer Agent", description: "Creates and edits documents" },
-  { id: "researcher", name: "Research Agent", description: "Performs web research" },
-  { id: "coder", name: "Code Agent", description: "Writes and reviews code" },
-  { id: "designer", name: "Design Agent", description: "Creates UI/UX designs" },
-];
+type TaskStatus = "todo" | "in_progress" | "done";
 
 export default function NewTaskPage() {
   const router = useRouter();
+  const t = useT();
   const [loading, setLoading] = useState(false);
-  const [aiBreakdown, setAiBreakdown] = useState(false);
-  const [breakdownLoading, setBreakdownLoading] = useState(false);
-  
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     priority: "medium" as TaskPriority,
-    assignToAgent: false,
-    agentType: "supervisor",
-    dueDate: "",
+    status: "todo" as TaskStatus,
   });
-  
-  const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>([]);
-  const [newSubtask, setNewSubtask] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.title.trim()) return;
-    
+  const priorityOptions: Array<{ value: TaskPriority; label: string }> = [
+    { value: "low", label: t("tasks.prioLow") },
+    { value: "medium", label: t("tasks.prioMedium") },
+    { value: "high", label: t("tasks.prioHigh") },
+    { value: "urgent", label: t("tasks.prioUrgent") },
+  ];
+
+  const statusOptions: Array<{ value: TaskStatus; label: string }> = [
+    { value: "todo", label: t("tasks.colTodo") },
+    { value: "in_progress", label: t("tasks.colInProgress") },
+    { value: "done", label: t("tasks.colDone") },
+  ];
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!formData.title.trim()) {
+      showToast.warning(t("tasks.toastEnterTitle"));
+      return;
+    }
+
     setLoading(true);
-    
     try {
-      const res = await fetch("/api/tasks", {
+      const response = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: formData.title,
           description: formData.description,
           priority: formData.priority,
-          assignToAgent: formData.assignToAgent,
-          agentType: formData.agentType,
-          dueDate: formData.dueDate ? new Date(formData.dueDate).getTime() : null,
-          subtasks: subtasks.map(s => ({ title: s.title })),
+          status: formData.status,
         }),
       });
-      
-      if (res.ok) {
-        const task = await res.json();
-        router.push(`/dashboard/tasks/${task.id}`);
-      } else {
-        console.error("Failed to create task");
+
+      if (!response.ok) {
+        throw new Error(await response.text());
       }
+
+      const task = await response.json();
+      showToast.success(t("tasks.toastCreated"));
+      router.push(`/dashboard/tasks/${task.id}`);
     } catch (error) {
-      console.error("Error creating task:", error);
+      console.error("Failed to create task:", error);
+      showToast.error(t("tasks.toastCreateFailed"));
     } finally {
       setLoading(false);
     }
   };
 
-  const addSubtask = () => {
-    if (!newSubtask.trim()) return;
-    setSubtasks(prev => [...prev, { 
-      id: `temp-${Date.now()}`, 
-      title: newSubtask, 
-      completed: false 
-    }]);
-    setNewSubtask("");
-  };
-
-  const removeSubtask = (id: string) => {
-    setSubtasks(prev => prev.filter(s => s.id !== id));
-  };
-
-  const breakdownWithAI = async () => {
-    if (!formData.description.trim()) return;
-    
-    setBreakdownLoading(true);
-    
-    try {
-      const res = await fetch("/api/agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{
-            role: "user",
-            content: `Break down this task into 3-6 actionable subtasks. Task: "${formData.title}". Description: "${formData.description}". 
-
-Return ONLY a JSON array of subtask titles, nothing else. Example: ["Subtask 1", "Subtask 2", "Subtask 3"]`
-          }],
-          mode: "auto",
-        }),
-      });
-      
-      if (res.ok) {
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let fullText = "";
-        
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split("\n");
-            
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                try {
-                  const data = JSON.parse(line.slice(6));
-                  if (data.type === "final" && data.content) {
-                    fullText = data.content;
-                  }
-                } catch {}
-              }
-            }
-          }
-        }
-        
-        // Parse the AI response
-        const jsonMatch = fullText.match(/\[[\s\S]*?\]/);
-        if (jsonMatch) {
-          try {
-            const subtaskTitles = JSON.parse(jsonMatch[0]);
-            if (Array.isArray(subtaskTitles)) {
-              const newSubtasks = subtaskTitles.map((title: string, i: number) => ({
-                id: `ai-${Date.now()}-${i}`,
-                title: typeof title === "string" ? title : String(title),
-                completed: false,
-              }));
-              setSubtasks(prev => [...prev, ...newSubtasks]);
-            }
-          } catch (e) {
-            console.error("Failed to parse AI subtasks:", e);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error breaking down task:", error);
-    } finally {
-      setBreakdownLoading(false);
-    }
-  };
-
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex items-center gap-4 border-b px-6 py-3">
-        <SidebarTrigger />
-        <Link href="/dashboard/tasks">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="size-4" />
-          </Button>
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-lg font-semibold">Create New Task</h1>
-          <p className="text-sm text-muted-foreground">
-            Add a new task to your board
-          </p>
-        </div>
-      </header>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-3xl mx-auto py-8 px-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Title & Priority */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Task Details</CardTitle>
-                <CardDescription>
-                  Give your task a clear title and description
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="title">Title *</Label>
-                  <Input
-                    id="title"
-                    placeholder="Enter task title..."
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    className="mt-1.5"
-                    autoFocus
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe the task in detail..."
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    className="mt-1.5 min-h-[100px]"
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Priority</Label>
-                    <Select
-                      value={formData.priority}
-                      onValueChange={(value: TaskPriority) => 
-                        setFormData(prev => ({ ...prev, priority: value }))
-                      }
-                    >
-                      <SelectTrigger className="mt-1.5">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(priorityConfig).map(([key, config]) => (
-                          <SelectItem key={key} value={key}>
-                            <div className="flex items-center gap-2">
-                              <div className={`size-2 rounded-full ${config.color}`} />
-                              {config.label}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="dueDate">Due Date</Label>
-                    <Input
-                      id="dueDate"
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                      className="mt-1.5"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* AI Agent Assignment */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BrainCircuit className="size-5 text-purple-500" />
-                  AI Agent Assignment
-                </CardTitle>
-                <CardDescription>
-                  Optionally assign this task to an AI agent for autonomous completion
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Assign to AI Agent</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Let an AI agent work on this task automatically
-                    </p>
-                  </div>
-                  <Switch
-                    checked={formData.assignToAgent}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, assignToAgent: checked }))
-                    }
-                  />
-                </div>
-                
-                {formData.assignToAgent && (
-                  <div className="space-y-3 pt-2">
-                    <Label>Select Agent Type</Label>
-                    <div className="grid grid-cols-1 gap-2">
-                      {agentTypes.map((agent) => (
-                        <button
-                          key={agent.id}
-                          type="button"
-                          onClick={() => setFormData(prev => ({ ...prev, agentType: agent.id }))}
-                          className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-colors ${
-                            formData.agentType === agent.id
-                              ? "border-purple-500 bg-purple-50 dark:bg-purple-950"
-                              : "hover:bg-muted"
-                          }`}
-                        >
-                          <BrainCircuit className={`size-5 ${
-                            formData.agentType === agent.id ? "text-purple-500" : "text-muted-foreground"
-                          }`} />
-                          <div>
-                            <p className="font-medium text-sm">{agent.name}</p>
-                            <p className="text-xs text-muted-foreground">{agent.description}</p>
-                          </div>
-                          {formData.agentType === agent.id && (
-                            <CheckCircle2 className="size-5 text-purple-500 ml-auto" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Subtasks */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Subtasks</CardTitle>
-                    <CardDescription>
-                      Break down your task into smaller actionable items
-                    </CardDescription>
-                  </div>
-                  {formData.description && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={breakdownWithAI}
-                      disabled={breakdownLoading}
-                      className="gap-2"
-                    >
-                      {breakdownLoading ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="size-4 text-purple-500" />
-                      )}
-                      AI Breakdown
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Add a subtask..."
-                    value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSubtask())}
-                  />
-                  <Button type="button" onClick={addSubtask} size="icon" variant="secondary">
-                    <Plus className="size-4" />
-                  </Button>
-                </div>
-                
-                {subtasks.length > 0 && (
-                  <div className="space-y-2">
-                    {subtasks.map((subtask) => (
-                      <div
-                        key={subtask.id}
-                        className="flex items-center gap-3 p-3 rounded-lg border bg-card group"
-                      >
-                        <CheckCircle2 className="size-4 text-muted-foreground" />
-                        <span className="flex-1 text-sm">{subtask.title}</span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => removeSubtask(subtask.id)}
-                        >
-                          <Trash2 className="size-3 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Submit */}
-            <div className="flex gap-3 justify-end">
-              <Button type="button" variant="outline" asChild>
-                <Link href="/dashboard/tasks">Cancel</Link>
-              </Button>
-              <Button type="submit" disabled={!formData.title.trim() || loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="size-4 mr-2 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="size-4 mr-2" />
-                    Create Task
-                  </>
-                )}
-              </Button>
+    <main className="min-h-screen bg-black text-white">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10">
+        <header className="flex items-start justify-between gap-4 border-b border-white/10 pb-8">
+          <div className="space-y-3">
+            <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2">
+              <Link href="/dashboard/tasks">
+                <ArrowLeft className="size-4" />
+                {t("nav.work")}
+              </Link>
+            </Button>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/40">
+                {t("tasks.label")}
+              </p>
+              <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+                {t("tasks.dialogCreateTitle")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm text-white/50">
+                {t("tasks.description")}
+              </p>
             </div>
-          </form>
-        </div>
+          </div>
+        </header>
+
+        <form onSubmit={handleSubmit}>
+          <Card className="max-w-3xl rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-none">
+            <CardHeader className="border-b border-white/10">
+              <CardTitle>{t("tasks.dialogCreateTitle")}</CardTitle>
+              <CardDescription>{t("tasks.dialogCreateDesc")}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <div className="space-y-2">
+                <Label htmlFor="title">{t("tasks.fieldTitle")}</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, title: event.target.value }))
+                  }
+                  placeholder={t("tasks.fieldTitlePlaceholder")}
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">{t("tasks.fieldDesc")}</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(event) =>
+                    setFormData((current) => ({ ...current, description: event.target.value }))
+                  }
+                  placeholder={t("tasks.fieldDescPlaceholder")}
+                  className="min-h-36"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>{t("tasks.fieldPriority")}</Label>
+                  <Select
+                    value={formData.priority}
+                    onValueChange={(value: TaskPriority) =>
+                      setFormData((current) => ({ ...current, priority: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorityOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("tasks.fieldStatus")}</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value: TaskStatus) =>
+                      setFormData((current) => ({ ...current, status: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-white/10 pt-6">
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/dashboard/tasks">{t("common.cancel")}</Link>
+                </Button>
+                <Button type="submit" disabled={!formData.title.trim() || loading} className="gap-2">
+                  {loading ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+                  {loading ? t("common.loading") : t("tasks.newTask")}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </form>
       </div>
-    </div>
+    </main>
   );
 }

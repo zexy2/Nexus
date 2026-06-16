@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/provider";
 
 // Dynamic import for the document editor (avoid SSR issues with Tiptap)
 const DocumentEditor = dynamic(
@@ -29,7 +30,6 @@ const DocumentEditor = dynamic(
           <div className="w-12 h-12 rounded-2xl bg-violet-500/20 flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
           </div>
-          <p className="text-sm text-zinc-500">Loading editor...</p>
         </div>
       </div>
     ),
@@ -45,8 +45,8 @@ interface Document {
 }
 
 export default function DocumentEditPage() {
+  const t = useT();
   const params = useParams();
-  const router = useRouter();
   const { data: session, isPending: isSessionLoading } = useSession();
   const documentId = params.id as string;
 
@@ -65,9 +65,9 @@ export default function DocumentEditPage() {
         const res = await fetch(`/api/docs/${documentId}`);
         if (!res.ok) {
           if (res.status === 404) {
-            setError("Document not found");
+            setError("notFound");
           } else {
-            setError("Failed to load document");
+            setError("loadFailed");
           }
           return;
         }
@@ -75,7 +75,7 @@ export default function DocumentEditPage() {
         setDoc(data);
       } catch (err) {
         console.error("Failed to fetch document:", err);
-        setError("Failed to load document");
+        setError("loadFailed");
       } finally {
         setIsLoading(false);
       }
@@ -149,7 +149,7 @@ export default function DocumentEditPage() {
           >
             <Sparkles className="w-8 h-8 text-violet-400" />
           </motion.div>
-          <p className="text-sm text-zinc-500">Loading your document...</p>
+          <p className="text-sm text-zinc-500">{t("common.loading")}</p>
         </div>
       </div>
     );
@@ -163,16 +163,18 @@ export default function DocumentEditPage() {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 flex items-center justify-center">
             <span className="text-2xl">😕</span>
           </div>
-          <h2 className="text-xl font-semibold text-white mb-2">{error}</h2>
+          <h2 className="text-xl font-semibold text-white mb-2">
+            {error === "notFound" ? t("docs.detail.notFoundTitle") : t("docs.detail.loadFailed")}
+          </h2>
           <p className="text-sm text-zinc-500 mb-6">
-            The document you&apos;re looking for might have been moved or deleted.
+            {t("docs.detail.notFoundDesc")}
           </p>
           <Link
             href="/dashboard/docs"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to documents
+            {t("docs.detail.backToDocs")}
           </Link>
         </div>
       </div>
@@ -184,12 +186,12 @@ export default function DocumentEditPage() {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-zinc-400 mb-4">Please sign in to edit documents</p>
+          <p className="text-zinc-400 mb-4">{t("docs.detail.signInRequired")}</p>
           <Link
             href="/sign-in"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-500 hover:bg-violet-600 text-sm text-white transition-colors"
           >
-            Sign In
+            {t("common.signIn")}
           </Link>
         </div>
       </div>
@@ -212,13 +214,13 @@ export default function DocumentEditPage() {
               )}
             >
               <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Documents</span>
+              <span className="hidden sm:inline">{t("nav.plans")}</span>
             </Link>
             <span className="w-px h-6 bg-white/10" />
             <div className="flex items-center gap-2">
               <span className="text-lg">{doc?.iconEmoji || "📄"}</span>
               <span className="text-sm text-white font-medium truncate max-w-[200px]">
-                {doc?.title || "Untitled Document"}
+                {doc?.title || t("docs.detail.untitled")}
               </span>
             </div>
           </div>
@@ -241,7 +243,7 @@ export default function DocumentEditPage() {
               ) : (
                 <EyeOff className="w-4 h-4" />
               )}
-              <span className="hidden sm:inline">AI Panel</span>
+              <span className="hidden sm:inline">{t("docs.detail.aiPanel")}</span>
             </button>
 
             {/* Collaborators */}
@@ -253,7 +255,7 @@ export default function DocumentEditPage() {
               )}
             >
               <Users className="w-4 h-4" />
-              <span className="hidden sm:inline">Share</span>
+              <span className="hidden sm:inline">{t("docs.detail.share")}</span>
             </button>
 
             {/* Settings */}

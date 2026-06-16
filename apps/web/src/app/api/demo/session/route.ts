@@ -3,9 +3,16 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isDemoMode, writeAuditLog } from "@/lib/production-guardrails";
+import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { users } from "@nexus/database/schema";
 
 export async function POST(request: NextRequest) {
+  const protection = await protectRoute(request, {
+    requireAuth: false,
+    rateLimit: RATE_LIMITS.demoLogin,
+  });
+  if (!protection.success) return protection.response;
+
   if (!isDemoMode()) {
     return NextResponse.json(
       {
@@ -14,6 +21,31 @@ export async function POST(request: NextRequest) {
       },
       { status: 403 }
     );
+  }
+
+  const requiredAccessCode = process.env.DEMO_ACCESS_CODE;
+  if (requiredAccessCode) {
+    const body = await request.json().catch(() => ({}));
+    const providedAccessCode =
+      request.headers.get("x-demo-access-code") ||
+      (typeof body?.accessCode === "string" ? body.accessCode : "");
+
+    if (providedAccessCode !== requiredAccessCode) {
+      await writeAuditLog({
+        event: "auth.demo_login",
+        status: "blocked",
+        request,
+        metadata: { reason: "invalid_demo_access_code" },
+      });
+
+      return NextResponse.json(
+        {
+          error: "DEMO_ACCESS_CODE_REQUIRED",
+          message: "Demo access requires a valid access code.",
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const email = process.env.DEMO_EMAIL;

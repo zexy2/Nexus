@@ -37,10 +37,10 @@ export default function LandingPage() {
 
             <MarqueeBanner
               lines={[
-                "IDEA TO DOCUMENT",
-                "DOCUMENT TO TASKS",
-                "TASKS TO KANBAN",
-                "WORKFLOW HISTORY",
+                "VERSIONED PLAN",
+                "IMPACT REVIEW",
+                "HUMAN APPROVAL",
+                "ALIGNED BOARD",
               ]}
             />
 

@@ -24,8 +24,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CommandSearch } from "@/components/shared/command-search";
 import { signOut, useSession } from "@/lib/auth-client";
+import { useT } from "@/lib/i18n/provider";
 import {
-  Bot,
+  Activity,
+  GitPullRequestArrow,
   FileText,
   Home,
   ListTodo,
@@ -41,23 +43,25 @@ import {
 
 const navigation = [
   {
-    title: "Main",
+    titleKey: "nav.main",
     items: [
-      { title: "Dashboard", href: "/dashboard", icon: Home },
-      { title: "AI Chat", href: "/dashboard/chat", icon: MessageSquare },
+      { titleKey: "nav.home", href: "/dashboard", icon: Home },
+      { titleKey: "chat.askNexus", href: "/dashboard/chat", icon: MessageSquare },
     ],
   },
   {
-    title: "Workspace",
+    titleKey: "nav.workspace",
     items: [
-      { title: "Documents", href: "/dashboard/docs", icon: FileText },
-      { title: "Tasks", href: "/dashboard/tasks", icon: ListTodo },
-      { title: "Agents", href: "/dashboard/agents", icon: Bot },
+      { titleKey: "nav.plans", href: "/dashboard/docs", icon: FileText },
+      { titleKey: "nav.work", href: "/dashboard/tasks", icon: ListTodo },
+      { titleKey: "nav.changes", href: "/dashboard/changes", icon: GitPullRequestArrow },
+      { titleKey: "nav.runs", href: "/dashboard/agents", icon: Activity },
     ],
   },
 ];
 
 export function AppSidebar() {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
@@ -85,7 +89,7 @@ export function AppSidebar() {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold text-sm tracking-tight">Nexus</span>
-                  <span className="text-[11px] text-muted-foreground">Workspace</span>
+                  <span className="text-[11px] text-muted-foreground">{t("nav.workspace")}</span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -98,9 +102,9 @@ export function AppSidebar() {
 
       <SidebarContent className="px-2">
         {navigation.map((group) => (
-          <SidebarGroup key={group.title}>
+          <SidebarGroup key={group.titleKey}>
             <SidebarGroupLabel className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-2">
-              {group.title}
+              {t(group.titleKey)}
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -116,7 +120,7 @@ export function AppSidebar() {
                       >
                         <Link href={item.href}>
                           <item.icon className="size-4" />
-                          <span className="text-sm">{item.title}</span>
+                          <span className="text-sm">{t(item.titleKey)}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -129,7 +133,7 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide px-2">
-            Create
+            {t("nav.create")}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -137,7 +141,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild className="h-9 transition-base">
                   <Link href="/dashboard/docs/new">
                     <Plus className="size-4" />
-                    <span className="text-sm">New Document</span>
+                    <span className="text-sm">{t("docs.newDoc")}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -145,7 +149,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild className="h-9 transition-base">
                   <Link href="/dashboard/tasks/new">
                     <Plus className="size-4" />
-                    <span className="text-sm">New Task</span>
+                    <span className="text-sm">{t("tasks.newTask")}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -160,7 +164,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild className="h-9 transition-base">
                   <Link href="/dashboard/docs/archive">
                     <Archive className="size-4" />
-                    <span className="text-sm">Archive</span>
+                    <span className="text-sm">{t("common.archive")}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -168,7 +172,7 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild className="h-9 transition-base">
                   <Link href="/dashboard/settings">
                     <Settings className="size-4" />
-                    <span className="text-sm">Settings</span>
+                    <span className="text-sm">{t("nav.settings")}</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -210,14 +214,14 @@ export function AppSidebar() {
                   className="cursor-pointer"
                 >
                   <User className="mr-2 size-4" />
-                  Profile
+                  {t("common.profile")}
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => router.push("/dashboard/settings")} 
                   className="cursor-pointer"
                 >
                   <Settings className="mr-2 size-4" />
-                  Settings
+                  {t("nav.settings")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem 
@@ -228,7 +232,7 @@ export function AppSidebar() {
                   }}
                 >
                   <LogOut className="mr-2 size-4" />
-                  Sign Out
+                  {t("common.signOut")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

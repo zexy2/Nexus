@@ -75,7 +75,10 @@ export async function reconcileWorkflowExecution(
     let errorMessage = temporalStatus.error || execution.errorMessage;
 
     if (status !== "running") {
-      const terminalResult = await temporalClient.getWorkflowResult(execution.temporalWorkflowId);
+      const terminalResult =
+        status === "failed" && temporalStatus.error
+          ? temporalStatus
+          : await temporalClient.getWorkflowResult(execution.temporalWorkflowId);
       const terminalStatus = normalizeTemporalStatus(terminalResult.status);
       const terminalOutput = resultToOutput(terminalResult.result);
 

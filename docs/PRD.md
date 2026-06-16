@@ -1,27 +1,29 @@
 # Product Requirements Document (PRD)
-## Nexus - AI-Powered Workspace
+## Nexus - Living Plan Workflow Workspace
 
 ---
 
 ## 1. Product Overview
 
 ### 1.1 Vision Statement
-Nexus is an AI-powered productivity workspace that combines autonomous AI agents with a local-first architecture to help teams manage documents, tasks, and workflows more efficiently while keeping data private and accessible offline.
+Nexus is a portfolio-demo AI workflow workspace that keeps delivery work aligned when a project plan changes. A plan is versioned, requirements receive stable IDs, affected tasks are proposed for review, and nothing reaches the Kanban board until a user approves it.
 
 ### 1.2 Product Goals
 
-| Goal              | Description                                              | Success Metric                               |
-| ----------------- | -------------------------------------------------------- | -------------------------------------------- |
-| **Productivity**  | Reduce time spent on routine tasks through AI automation | 40% reduction in document creation time      |
-| **Privacy**       | Keep user data local-first with optional cloud sync      | 100% offline functionality for core features |
-| **Collaboration** | Enable real-time team collaboration                      | <100ms sync latency between users            |
-| **Accessibility** | Intuitive UI for all skill levels                        | <5 min onboarding for new users              |
+| Goal                  | Description                                                                 | Success Metric                         |
+| --------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
+| **Plan alignment**    | Detect added, changed, and removed requirements when a plan changes          | Impact review generated for each plan  |
+| **Human approval**    | Propose task changes without mutating the board until the user approves them | No unapproved Kanban mutations         |
+| **Workflow evidence** | Show durable workflow history for plan generation and impact analysis        | Running/completed/failed runs visible  |
+| **Demo clarity**      | Let a recruiter understand the main flow quickly                             | <5 min demo journey                    |
 
 ### 1.3 Product Positioning
-**"Build faster with intelligent agents"** - Nexus differentiates from traditional productivity tools by offering:
-- Multi-agent AI system (Researcher, Writer, Coder, Project Manager)
-- Local-first database (Zero sync protocol)
-- Enterprise-ready security with self-hosted options
+**"Change the plan once. Nexus keeps the work aligned."** Nexus is not positioned as a full Jira/Linear replacement. It is a controlled public demo that proves a specific workflow:
+- Generate a project plan with server-managed Gemini.
+- Extract stable requirements such as `REQ-001`.
+- Link requirements to Kanban tasks and coverage status.
+- Analyze plan changes and produce reviewable work proposals.
+- Apply only user-approved proposals, with audit and workflow history.
 
 ---
 
@@ -50,7 +52,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 ### 2.2 Secondary Personas
 - Individual freelancers managing client projects
 - Small teams (2-10 people) needing shared workspace
-- Enterprise teams requiring data sovereignty
+- Future expansion: teams that need self-hosted deployment and stricter data controls
 
 ---
 
@@ -62,21 +64,20 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 ┌─────────────────────────────────────────────────────────────────┐
 │                         NEXUS WORKSPACE                          │
 ├─────────────────┬─────────────────┬─────────────────────────────┤
-│   DOCUMENTS     │     TASKS       │         AI AGENTS           │
+│   LIVING PLANS  │      WORK       │       WORKFLOW CENTER       │
 ├─────────────────┼─────────────────┼─────────────────────────────┤
-│ • Rich Editor   │ • Kanban Board  │ • Supervisor (Orchestrator) │
-│ • AI Writing    │ • Drag & Drop   │ • Researcher (Web + RAG)    │
-│ • Emoji Icons   │ • Priority Lvls │ • Writer (Content Gen)      │
-│ • Favorites     │ • AI Assignment │ • Coder (Code Gen)          │
-│ • Archive       │ • Due Dates     │ • Project Manager (Tasks)   │
-│ • Templates     │ • Tags          │ • Custom Workflows          │
+│ • Versioned plan│ • Kanban Board  │ • Plan generation workflow  │
+│ • REQ IDs       │ • Drag & Drop   │ • Impact analysis workflow  │
+│ • Coverage      │ • Priority Lvls │ • Task alignment workflow   │
+│ • Impact review │ • Alignment     │ • Workflow execution trail  │
+│ • Change sets   │ • Archive       │ • Audit-backed decisions    │
 └─────────────────┴─────────────────┴─────────────────────────────┘
                               │
               ┌───────────────┴───────────────┐
-              │          AI CHAT              │
-              │  • Multi-agent conversations  │
-              │  • Context-aware responses    │
-              │  • Action execution           │
+│          ASK NEXUS            │
+│  • Secondary assistant        │
+│  • Workspace-aware help       │
+│  • No agent-mode selector     │
               └───────────────────────────────┘
 ```
 
@@ -262,7 +263,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 | ID         | Requirement                                               | Priority |
 | ---------- | --------------------------------------------------------- | -------- |
 | FR-CHAT-01 | Send messages to AI agents                                | P0       |
-| FR-CHAT-02 | Select agent mode (auto, researcher, writer, coder, task) | P1       |
+| FR-CHAT-02 | Hide agent mode selection; route by intended outcome        | P1       |
 | FR-CHAT-03 | Display conversation history                              | P0       |
 | FR-CHAT-04 | Copy message content                                      | P2       |
 | FR-CHAT-05 | Retry last message                                        | P2       |
@@ -275,16 +276,16 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 | ID        | Requirement                                       | Priority |
 | --------- | ------------------------------------------------- | -------- |
 | FR-SET-01 | Update profile name and avatar                    | P1       |
-| FR-SET-02 | Configure AI model preference                     | P0       |
-| FR-SET-03 | Connect API keys: Gemini, OpenAI, Anthropic, Groq | P0       |
-| FR-SET-04 | Verify API key validity                           | P1       |
+| FR-SET-02 | Show server-managed AI availability and daily quota | P0       |
+| FR-SET-03 | Keep BYOK fields hidden for normal users            | P0       |
+| FR-SET-04 | Reserve provider/API-key management for admin use   | P2       |
 | FR-SET-05 | Toggle email notifications                        | P2       |
 | FR-SET-06 | Toggle agent activity notifications               | P2       |
 | FR-SET-07 | Toggle task reminders                             | P2       |
 | FR-SET-08 | Select theme (light/dark/system)                  | P1       |
 | FR-SET-09 | Toggle compact mode                               | P3       |
 | FR-SET-10 | Configure sync frequency                          | P2       |
-| FR-SET-11 | Enable/disable offline mode                       | P2       |
+| FR-SET-11 | Show sync status for API-backed/offline queue behavior | P2       |
 
 ---
 
@@ -318,7 +319,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 
 | ID         | Requirement                                  |
 | ---------- | -------------------------------------------- |
-| NFR-SEC-01 | API keys encrypted at rest                   |
+| NFR-SEC-01 | Provider API keys stored only as server environment secrets in v1 |
 | NFR-SEC-02 | HTTPS enforced for all connections           |
 | NFR-SEC-03 | Session tokens use secure, httpOnly cookies  |
 | NFR-SEC-04 | CSRF protection on state-changing operations |
@@ -330,9 +331,9 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 | ID         | Requirement                   | Target                          |
 | ---------- | ----------------------------- | ------------------------------- |
 | NFR-REL-01 | Uptime SLA                    | 99.9%                           |
-| NFR-REL-02 | Data durability (local-first) | No data loss on network failure |
-| NFR-REL-03 | Graceful degradation          | Core features work offline      |
-| NFR-REL-04 | Error recovery                | Auto-retry failed syncs         |
+| NFR-REL-02 | Data durability               | Persist plans, tasks, change sets, workflow runs, audit logs |
+| NFR-REL-03 | Graceful degradation          | AI endpoints return clear 503/429 states instead of mock data |
+| NFR-REL-04 | Error recovery                | Workflow failures are recorded and visible to the user |
 
 ---
 
@@ -343,7 +344,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 | Scenario                     | Expected Behavior                                           |
 | ---------------------------- | ----------------------------------------------------------- |
 | Offline during document edit | Changes saved locally, sync indicator shows "Offline"       |
-| Reconnect after offline      | Auto-sync queued changes, show "Syncing..." then "Synced"   |
+| Reconnect after offline      | Sync queued local mutations through API-backed sync endpoints |
 | Slow network (<2G)           | Show loading skeletons, timeout after 30s with retry option |
 | Network error mid-request    | Show inline error with "Retry" button                       |
 
@@ -360,10 +361,10 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 
 | Scenario                | Expected Behavior                            |
 | ----------------------- | -------------------------------------------- |
-| API key invalid         | Show verification failed, prompt to re-enter |
-| API rate limited        | Show error with estimated retry time         |
-| Agent execution timeout | Show failed status with "Retry" option       |
-| Malformed agent output  | Display partial output with warning          |
+| AI provider unavailable | Return `503 AI_PROVIDER_UNAVAILABLE` with a non-retryable explanation |
+| AI quota exceeded       | Return `429 RATE_LIMIT_EXCEEDED` with reset information              |
+| Workflow timeout        | Show failed status with retry path and persist the error             |
+| Malformed agent output  | Fail the workflow with a controlled error; do not write invented tasks |
 
 ### 7.4 Data Validation
 
@@ -378,7 +379,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 
 | Scenario                        | Expected Behavior                           |
 | ------------------------------- | ------------------------------------------- |
-| Two users edit same doc         | Real-time merge via CRDT (Zero protocol)    |
+| Two users edit same doc         | Real-time merge via Yjs collaboration path  |
 | Conflict in task status         | Last-write-wins with visual indicator       |
 | User goes offline during collab | Local changes preserved, merge on reconnect |
 
@@ -392,7 +393,7 @@ Nexus is an AI-powered productivity workspace that combines autonomous AI agents
 | --- | ---------------------------------------------------------------- | -------------------------------------- |
 | A1  | Users have modern browsers (Chrome 90+, Firefox 88+, Safari 14+) | Polyfills needed, larger bundle        |
 | A2  | AI API costs are acceptable per user                             | Need usage tiers or quotas             |
-| A3  | Local-first sync (Zero) handles <10MB documents                  | May need file attachment limits        |
+| A3  | API-backed sync/offline queue handles small document changes     | Production Zero cache remains deferred |
 | A4  | Single workspace per user initially                              | Multi-workspace architecture later     |
 | A5  | English UI only at launch                                        | i18n framework needed for localization |
 

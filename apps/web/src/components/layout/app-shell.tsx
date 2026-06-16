@@ -37,6 +37,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { CommandPalette } from '@/components/shared/command-palette';
 import { CommandInput } from '@/components/shared/command-input';
+import { useT } from '@/lib/i18n/provider';
 
 // Navigation items with enhanced metadata
 const navItems = [
@@ -351,6 +352,7 @@ interface AppShellV2Props {
 }
 
 export function AppShellV2({ children }: AppShellV2Props) {
+  const t = useT();
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
@@ -610,11 +612,11 @@ export function AppShellV2({ children }: AppShellV2Props) {
                   )}
                 >
                   <Settings className="h-4 w-4" />
-                  {!isCollapsed && <span>Settings</span>}
+                  {!isCollapsed && <span>{t('nav.settings')}</span>}
                 </Link>
               </TooltipTrigger>
               {isCollapsed && (
-                <TooltipContent side="right">Settings</TooltipContent>
+                <TooltipContent side="right">{t('nav.settings')}</TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>

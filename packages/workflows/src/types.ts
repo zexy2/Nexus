@@ -33,6 +33,7 @@ export type ResearchWorkflowInput = z.infer<typeof ResearchWorkflowInputSchema>;
 export const TaskBreakdownInputSchema = z.object({
   workspaceId: z.string(),
   userId: z.string(),
+  docId: z.string().optional(),
   projectDescription: z.string(),
   deadline: z.number().optional(),
   teamSize: z.number().optional(),
@@ -53,6 +54,35 @@ export const CodeGenerationInputSchema = z.object({
 });
 
 export type CodeGenerationInput = z.infer<typeof CodeGenerationInputSchema>;
+
+export const PlanImpactInputSchema = z.object({
+  workspaceId: z.string(),
+  userId: z.string(),
+  docId: z.string(),
+});
+
+export type PlanImpactInput = z.infer<typeof PlanImpactInputSchema>;
+
+export type PlanChangeDecision = {
+  decision: "approve" | "reject";
+  selectedProposalIds?: string[];
+  userId: string;
+};
+
+export interface PlanImpactOutput {
+  changeSetId: string;
+  docId: string;
+  versionNumber: number;
+  decision: "applied" | "rejected" | "expired";
+  summary: string;
+  stats: Record<string, number>;
+  applied?: {
+    applied: number;
+    rejected: number;
+    createdTaskIds: string[];
+  };
+  steps: AgentStepResult[];
+}
 
 /**
  * Workflow execution status

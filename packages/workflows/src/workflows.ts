@@ -5,7 +5,14 @@
  * They automatically handle retries, timeouts, and persistence.
  */
 
-import { proxyActivities, sleep } from "@temporalio/workflow";
+import {
+  condition,
+  defineSignal,
+  proxyActivities,
+  setHandler,
+  sleep,
+  workflowInfo,
+} from "@temporalio/workflow";
 import type * as activities from "./activities";
 import type {
   DocumentGenerationInput,
@@ -17,6 +24,9 @@ import type {
   CodeGenerationInput,
   CodeGenerationOutput,
   AgentStepResult,
+  PlanChangeDecision,
+  PlanImpactInput,
+  PlanImpactOutput,
 } from "./types";
 
 // Configure activity options with retries
@@ -29,6 +39,11 @@ const {
   saveTasks,
   sendNotification,
   searchDocuments,
+  analyzePlanImpact,
+  persistPlanImpact,
+  applyPlanChangeSet,
+  rejectPlanChangeSet,
+  expirePlanChangeSet,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "5 minutes",
   retry: {
@@ -38,6 +53,9 @@ const {
     maximumInterval: "30 seconds",
   },
 });
+
+export const resolvePlanChangeSignal =
+  defineSignal<[PlanChangeDecision]>("resolvePlanChange");
 
 type ParsedTask = {
   title: string;
@@ -273,7 +291,7 @@ export async function taskBreakdownWorkflow(
   }));
   
   // Step 2: Save tasks
-  const taskIds = await saveTasks(input.workspaceId, parsedTasks, input.userId);
+  const taskIds = await saveTasks(input.workspaceId, parsedTasks, input.userId, input.docId);
   const tasks = parsedTasks.map((task, index) => ({
     ...task,
     id: taskIds[index] || task.id,
@@ -288,6 +306,68 @@ export async function taskBreakdownWorkflow(
   return {
     tasks,
     steps,
+  };
+}
+
+export async function planImpactWorkflow(
+  input: PlanImpactInput
+): Promise<PlanImpactOutput> {
+  const analysis = await analyzePlanImpact(input);
+  const persisted = await persistPlanImpact(analysis, workflowInfo().workflowId);
+  const resolution: { value: PlanChangeDecision | null } = { value: null };
+
+  setHandler(resolvePlanChangeSignal, (decision) => {
+    if (resolution.value) return;
+    resolution.value = decision;
+  });
+
+  const resolved = await condition(() => resolution.value !== null, "72 hours");
+  if (!resolved) {
+    await expirePlanChangeSet(persisted.changeSetId, input.userId);
+    return {
+      changeSetId: persisted.changeSetId,
+      docId: input.docId,
+      versionNumber: persisted.versionNumber,
+      decision: "expired",
+      summary: persisted.summary,
+      stats: persisted.stats,
+      steps: persisted.steps,
+    };
+  }
+
+  const decision = resolution.value;
+  if (!decision) {
+    throw new Error("Plan change resolution was not recorded");
+  }
+
+  if (decision.decision === "reject") {
+    await rejectPlanChangeSet(persisted.changeSetId, decision.userId);
+    return {
+      changeSetId: persisted.changeSetId,
+      docId: input.docId,
+      versionNumber: persisted.versionNumber,
+      decision: "rejected",
+      summary: persisted.summary,
+      stats: persisted.stats,
+      steps: persisted.steps,
+    };
+  }
+
+  const applied = await applyPlanChangeSet(
+    persisted.changeSetId,
+    decision.selectedProposalIds || [],
+    decision.userId
+  );
+
+  return {
+    changeSetId: persisted.changeSetId,
+    docId: input.docId,
+    versionNumber: persisted.versionNumber,
+    decision: "applied",
+    summary: persisted.summary,
+    stats: persisted.stats,
+    applied,
+    steps: persisted.steps,
   };
 }
 

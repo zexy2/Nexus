@@ -1,6 +1,11 @@
 import { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import {
+  aiUnavailableResponse,
+  enforceAiBudget,
+  getAiProviderStatus,
+  writeAuditLog,
+} from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,9 +16,29 @@ export const maxDuration = 60;
  */
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
+    const protection = await protectRoute(request, {
+      requireAuth: true,
+      rateLimit: RATE_LIMITS.chat,
+    });
+    if (!protection.success) {
+      return protection.response;
+    }
+    if (!protection.user) {
       return new Response("Unauthorized", { status: 401 });
+    }
+
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "chat",
+    });
+    if (!aiBudget.ok) {
+      return aiBudget.response;
+    }
+
+    const providerStatus = getAiProviderStatus();
+    if (!providerStatus.geminiAvailable) {
+      return aiUnavailableResponse("Gemini writing is not configured on this server.");
     }
 
     const body = await request.json();
@@ -23,11 +48,17 @@ export async function POST(request: NextRequest) {
       return new Response("prompt is required", { status: 400 });
     }
 
-    // Get API key
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return new Response("AI service not configured", { status: 500 });
+      return aiUnavailableResponse("Gemini writing is not configured on this server.");
     }
+
+    await writeAuditLog({
+      userId: protection.user.id,
+      event: "ai.write_stream",
+      metadata: { agentType: agentType || "assistant", hasExistingContent: Boolean(existingContent) },
+      request,
+    });
 
     // Build the prompt based on agent type
     let systemPrompt = "";
@@ -95,7 +126,14 @@ Kurallar:
     if (!response.ok) {
       const error = await response.text();
       console.error("Gemini streaming error:", error);
-      return new Response(`AI error: ${response.status}`, { status: 500 });
+      await writeAuditLog({
+        userId: protection.user.id,
+        event: "ai.write_stream",
+        status: "failed",
+        metadata: { status: response.status, error: error.slice(0, 500) },
+        request,
+      });
+      return aiUnavailableResponse(`Gemini writing failed with status ${response.status}.`);
     }
 
     // Transform Gemini SSE to our format

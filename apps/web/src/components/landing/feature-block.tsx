@@ -2,31 +2,48 @@
 
 import {
   Activity,
-  Database,
+  BadgeCheck,
+  FileClock,
   Gauge,
   GitBranch,
+  GitCompareArrows,
   LockKeyhole,
   Server,
-  Users,
 } from "lucide-react";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
 
 const capabilities = [
   {
-    icon: GitBranch,
-    label: "Temporal workflows",
-    title: "Workflow state is a first-class product surface.",
+    icon: FileClock,
+    label: "Versioned plans",
+    title: "A plan edit never destroys the accepted baseline.",
     description:
-      "Document generation and task breakdown run as tracked executions with running, completed, and failed states.",
-    proof: ["execution id", "step preview", "terminal status"],
+      "Nexus stores immutable plan versions and stable requirement IDs so changes can be compared instead of silently overwriting the source of truth.",
+    proof: ["plan versions", "REQ-001", "accepted baseline"],
   },
   {
-    icon: Database,
-    label: "Persistent workspace",
-    title: "AI output becomes workspace data.",
+    icon: GitCompareArrows,
+    label: "Impact graph",
+    title: "Every changed requirement is traced to delivery work.",
     description:
-      "Generated documents and extracted tasks are saved to the database so the demo continues beyond a single response.",
-    proof: ["docs table", "tasks table", "workspace scope"],
+      "Added, modified, and removed requirements are matched against linked tasks to expose stale work, missing coverage, and orphaned tasks.",
+    proof: ["requirement links", "coverage", "needs review"],
+  },
+  {
+    icon: BadgeCheck,
+    label: "Human approval",
+    title: "AI prepares a change set. It does not rewrite the board.",
+    description:
+      "Users select task creates, updates, archives, and relinks one by one. Only approved proposals are applied inside a transaction.",
+    proof: ["selective apply", "no hard delete", "audit event"],
+  },
+  {
+    icon: GitBranch,
+    label: "Durable workflow",
+    title: "Analysis and approval remain visible as one execution.",
+    description:
+      "Temporal tracks analysis, waits for the review decision, applies selected changes, and records completed or failed states.",
+    proof: ["durable wait", "workflow id", "terminal status"],
   },
   {
     icon: Gauge,
@@ -35,14 +52,6 @@ const capabilities = [
     description:
       "The app uses a server-managed Gemini key, daily limits, audit logs, and clear unavailable states instead of asking visitors for API keys.",
     proof: ["daily quota", "kill switch", "429 limits"],
-  },
-  {
-    icon: Users,
-    label: "Collaboration layer",
-    title: "The workspace is built for shared editing.",
-    description:
-      "Yjs/Hocuspocus collaboration support is part of the stack, while the public demo stays focused on one seeded workspace.",
-    proof: ["Yjs", "Hocuspocus", "single demo team"],
   },
   {
     icon: Server,
@@ -74,11 +83,11 @@ export function FeatureBlocks() {
             Technical credibility
           </span>
           <h2 className="text-5xl font-semibold leading-none md:text-7xl">
-            Built like a small production system, framed as a public demo.
+            AI proposes. People decide. Work stays traceable.
           </h2>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-white/55">
-            Nexus is interesting because the AI result is not the endpoint. The
-            system keeps the document, the tasks, and the execution record.
+            Nexus is not another chat window. It is a controlled layer between
+            a changing project plan and the work that must remain aligned with it.
           </p>
         </ScrollReveal>
 

@@ -8,14 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { signIn } from "@/lib/auth-client";
+import { useLocale } from "@/lib/i18n/provider";
 import { Github, Sparkles } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { t } = useLocale();
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [demoAccessCode, setDemoAccessCode] = useState("");
+  const [showDemoAccessCode, setShowDemoAccessCode] = useState(false);
   const [error, setError] = useState("");
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -30,12 +34,12 @@ export default function LoginPage() {
       });
 
       if (result.error) {
-        setError(result.error.message || "Login failed");
+        setError(result.error.message || t("auth.loginFailed"));
       } else {
         router.push("/dashboard");
       }
     } catch {
-      setError("An unexpected error occurred");
+      setError(t("auth.unexpectedError"));
     } finally {
       setIsLoading(false);
     }
@@ -51,18 +55,22 @@ export default function LoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ accessCode: demoAccessCode || undefined }),
       });
       const result = await response.json().catch(() => null) as
-        | { redirectTo?: string; message?: string }
+        | { error?: string; redirectTo?: string; message?: string }
         | null;
 
       if (!response.ok) {
-        setError(result?.message || "Demo login is not available right now.");
+        if (result?.error === "DEMO_ACCESS_CODE_REQUIRED") {
+          setShowDemoAccessCode(true);
+        }
+        setError(result?.message || t("auth.demoUnavailable"));
       } else {
         router.push(result?.redirectTo || "/dashboard");
       }
     } catch {
-      setError("Demo login failed");
+      setError(t("auth.demoFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -109,70 +117,90 @@ export default function LoginPage() {
 
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-2xl font-semibold tracking-tight mb-1">Sign in</h1>
+            <h1 className="text-2xl font-semibold tracking-tight mb-1">{t("auth.signInTitle")}</h1>
             <p className="text-sm text-muted-foreground">
-              Welcome back. Enter your credentials to continue.
+              {t("auth.signInSubtitle")}
             </p>
           </div>
 
           {demoMode && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="mb-4 w-full h-10"
-              onClick={handleDemoLogin}
-              disabled={isLoading}
-            >
-              Try the public demo
-            </Button>
+            <div className="mb-4 space-y-3">
+              {showDemoAccessCode && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="demoAccessCode" className="text-sm">
+                    {t("auth.demoAccessCode")}
+                  </Label>
+                  <Input
+                    id="demoAccessCode"
+                    value={demoAccessCode}
+                    onChange={(event) => setDemoAccessCode(event.target.value)}
+                    className="h-10"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("auth.demoAccessCodeHint")}
+                  </p>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full h-10"
+                onClick={handleDemoLogin}
+                disabled={isLoading}
+              >
+                {t("auth.tryDemo")}
+              </Button>
+            </div>
           )}
 
           {/* Social Login */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <Button
-              variant="outline"
-              onClick={handleGithubLogin}
-              disabled={isLoading}
-              className="h-10"
-            >
-              <Github className="size-4 mr-2" />
-              GitHub
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleGoogleLogin}
-              disabled={isLoading}
-              className="h-10"
-            >
-              <svg className="size-4 mr-2" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                />
-                <path
-                  fill="currentColor"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                />
-              </svg>
-              Google
-            </Button>
-          </div>
+          {!demoMode && (
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <Button
+                variant="outline"
+                onClick={handleGithubLogin}
+                disabled={isLoading}
+                className="h-10"
+              >
+                <Github className="size-4 mr-2" />
+                GitHub
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="h-10"
+              >
+                <svg className="size-4 mr-2" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  />
+                </svg>
+                Google
+              </Button>
+            </div>
+          )}
 
-          <div className="relative mb-6">
+          <div className={demoMode ? "relative mb-6 hidden" : "relative mb-6"}>
             <div className="absolute inset-0 flex items-center">
               <Separator />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
               <span className="bg-background px-2 text-muted-foreground">
-                or
+                {t("auth.or")}
               </span>
             </div>
           </div>
@@ -180,7 +208,7 @@ export default function LoginPage() {
           {/* Email Login Form */}
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm">Email</Label>
+              <Label htmlFor="email" className="text-sm">{t("auth.email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -193,12 +221,12 @@ export default function LoginPage() {
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm">Password</Label>
+                <Label htmlFor="password" className="text-sm">{t("auth.password")}</Label>
                 <Link
                   href="/forgot-password"
                   className="text-xs text-muted-foreground hover:text-foreground transition-base"
                 >
-                  Forgot?
+                  {t("auth.forgot")}
                 </Link>
               </div>
               <Input
@@ -222,19 +250,19 @@ export default function LoginPage() {
               {isLoading ? (
                 <div className="size-4 border-2 border-background border-t-transparent rounded-full animate-spin" />
               ) : (
-                "Sign in"
+                t("common.signIn")
               )}
             </Button>
           </form>
 
           {/* Footer */}
           <p className="text-sm text-muted-foreground text-center mt-6">
-            Don&apos;t have an account?{" "}
+            {t("auth.noAccount")}{" "}
             {demoMode ? (
-              <span className="text-foreground font-medium">Use the demo account</span>
+              <span className="text-foreground font-medium">{t("auth.useDemoAccount")}</span>
             ) : (
               <Link href="/register" className="text-foreground font-medium hover:underline">
-                Sign up
+                {t("auth.signUp")}
               </Link>
             )}
           </p>
@@ -244,7 +272,7 @@ export default function LoginPage() {
               href="/dashboard" 
               className="block text-center text-xs text-muted-foreground hover:text-foreground transition-base mt-4"
             >
-              Continue without account →
+              {t("auth.continueWithoutAccount")} →
             </Link>
           )}
         </div>
@@ -255,11 +283,10 @@ export default function LoginPage() {
         <div className="max-w-md">
           <blockquote className="space-y-4">
             <p className="text-lg leading-relaxed text-foreground/80">
-              &ldquo;Use the public demo to generate an AI document, convert it into tasks,
-              inspect the Kanban board, and review workflow history.&rdquo;
+              &ldquo;{t("auth.quote")}&rdquo;
             </p>
             <footer className="text-sm text-muted-foreground">
-              Nexus portfolio demo
+              {t("auth.demoFooter")}
             </footer>
           </blockquote>
         </div>

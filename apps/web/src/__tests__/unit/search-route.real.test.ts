@@ -16,8 +16,18 @@ vi.mock("@/lib/auth", () => ({
 const workspacesFindFirst = vi.fn();
 const docsFindMany = vi.fn();
 const tasksFindMany = vi.fn();
+const selectWhere = vi.fn();
+const selectLeftJoin = vi.fn(() => ({ where: selectWhere }));
+const selectFrom = vi.fn(() => ({ leftJoin: selectLeftJoin }));
+const dbSelect = vi.fn(() => ({ from: selectFrom }));
+const rateLimitReturning = vi.fn();
+const rateLimitOnConflictDoUpdate = vi.fn(() => ({ returning: rateLimitReturning }));
+const rateLimitValues = vi.fn(() => ({ onConflictDoUpdate: rateLimitOnConflictDoUpdate }));
+const dbInsert = vi.fn(() => ({ values: rateLimitValues }));
 vi.mock("@/lib/db", () => ({
   db: {
+    select: (...a: unknown[]) => dbSelect(...a),
+    insert: (...a: unknown[]) => dbInsert(...a),
     query: {
       workspaces: { findFirst: (...a: unknown[]) => workspacesFindFirst(...a) },
       docs: { findMany: (...a: unknown[]) => docsFindMany(...a) },
@@ -28,7 +38,10 @@ vi.mock("@/lib/db", () => ({
 
 import { GET } from "@/app/api/search/route";
 
-const authed = { user: { id: "user-1", email: "u@x.com" } };
+const authed = {
+  user: { id: "user-1", email: "u@x.com", name: "User" },
+  session: { id: "session-1", expiresAt: new Date("2026-06-10T01:00:00Z") },
+};
 const now = new Date("2026-06-10T00:00:00Z");
 
 function searchReq(qs: string) {
@@ -39,10 +52,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   docsFindMany.mockResolvedValue([]);
   tasksFindMany.mockResolvedValue([]);
+  selectWhere.mockResolvedValue([{ id: "ws-1" }]);
+  rateLimitReturning.mockResolvedValue([
+    { count: 1, resetAt: new Date("2026-06-10T00:01:00Z") },
+  ]);
 });
 
 describe("GET /api/search (real handler)", () => {
   it("returns 400 when the query is missing", async () => {
+    getSession.mockResolvedValue(authed);
     const res = await GET(searchReq("type=all"));
     expect(res.status).toBe(400);
   });

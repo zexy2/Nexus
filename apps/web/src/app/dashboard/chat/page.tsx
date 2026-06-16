@@ -201,18 +201,14 @@ interface ChatInputProps {
 function ChatInput({ onSend }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isFocused, setIsFocused] = useState(false);
-  const [showAgentMenu, setShowAgentMenu] = useState(false);
 
   const { 
     input, 
     setInput, 
     isLoading,
-    agentMode,
-    setAgentMode,
     activeAgent 
   } = useChatStore();
 
-  const currentAgent = AGENT_DEFINITIONS[agentMode];
   const t = useT();
 
   // Auto-resize textarea
@@ -245,64 +241,10 @@ function ChatInput({ onSend }: ChatInputProps) {
       e.preventDefault();
       handleSubmit();
     }
-    if ((e.key === '@' || e.key === '/') && input.length === 0) {
-      e.preventDefault();
-      setShowAgentMenu(true);
-    }
-    if (e.key === 'Escape') {
-      setShowAgentMenu(false);
-    }
-  }, [handleSubmit, input.length]);
-
-  const selectAgent = useCallback((mode: AgentMode) => {
-    setAgentMode(mode);
-    setShowAgentMenu(false);
-    textareaRef.current?.focus();
-  }, [setAgentMode]);
+  }, [handleSubmit]);
 
   return (
     <div className="relative px-6 md:px-8 pb-6 pt-2">
-      {/* Agent selector dropdown */}
-      <AnimatePresence>
-        {showAgentMenu && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="absolute bottom-full left-0 right-0 mb-2 max-w-2xl mx-auto backdrop-blur-2xl bg-black/80 border border-white/10 rounded-xl p-2 shadow-2xl z-50"
-          >
-            <div className="text-xs font-medium text-white/40 px-3 py-2">
-              Select Agent Mode
-            </div>
-            {(Object.entries(AGENT_DEFINITIONS) as [AgentMode, typeof AGENT_DEFINITIONS[AgentMode]][]).map(([mode, agent]) => (
-              <motion.button
-                key={mode}
-                whileHover={{ x: 4 }}
-                onClick={() => selectAgent(mode)}
-                className={cn(
-                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors',
-                  mode === agentMode
-                    ? 'bg-white/10 text-white'
-                    : 'text-white/60 hover:bg-white/5 hover:text-white'
-                )}
-              >
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10">
-                  <agent.icon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm">{agent.label}</div>
-                  <div className="text-xs text-white/40 truncate">{t(`chat.agentDesc.${mode}`)}</div>
-                </div>
-                {mode === agentMode && (
-                  <div className="w-2 h-2 rounded-full bg-white/60" />
-                )}
-              </motion.button>
-            ))}
-            <div className="fixed inset-0 -z-10" onClick={() => setShowAgentMenu(false)} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Main input container - Lando Norris style */}
       <motion.div
         animate={{
@@ -318,14 +260,10 @@ function ChatInput({ onSend }: ChatInputProps) {
       >
         {/* Top bar */}
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5">
-          <button
-            onClick={() => setShowAgentMenu(!showAgentMenu)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all hover:bg-white/10 text-white/70 hover:text-white"
-          >
-            <currentAgent.icon className="h-4 w-4" />
-            <span>{currentAgent.label}</span>
-            <ChevronDown className={cn('h-3 w-3 transition-transform', showAgentMenu && 'rotate-180')} />
-          </button>
+          <div className="flex items-center gap-2 px-2 py-1.5 text-sm font-medium text-white/70">
+            <Sparkles className="h-4 w-4" />
+            <span>{t('chat.askNexus')}</span>
+          </div>
 
           {activeAgent && (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/10 text-white/70 text-xs">
@@ -391,9 +329,7 @@ function ChatInput({ onSend }: ChatInputProps) {
 
       {/* Footer hints */}
       <div className="flex items-center justify-center gap-4 mt-3 text-xs text-white/30">
-        <span>Press <kbd className="px-1.5 py-0.5 rounded bg-white/10">@</kbd> for agents</span>
-        <span className="text-white/10">•</span>
-        <span>Press <kbd className="px-1.5 py-0.5 rounded bg-white/10">Enter</kbd> to send</span>
+        <span>{t('chat.routingHint')}</span>
       </div>
     </div>
   );
@@ -497,15 +433,19 @@ export default function ChatPage() {
     isStreaming,
     streamingContent,
     error,
-    agentMode,
     activeAgent,
     createSession,
     clearError,
     retryLastMessage,
+    setAgentMode,
   } = useChatStore();
 
-  const currentAgent = AGENT_DEFINITIONS[agentMode];
+  const agentMode: AgentMode = "auto";
   const t = useT();
+
+  useEffect(() => {
+    setAgentMode("auto");
+  }, [setAgentMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -518,7 +458,7 @@ export default function ChatPage() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createSession]);
+  }, [createSession, t]);
 
   // Scroll handling
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -564,7 +504,7 @@ export default function ChatPage() {
         throw new Error(
           errorPayload?.message ||
           errorPayload?.error ||
-          `Failed to get response (${response.status})`
+          `${t('chat.responseFailed')} (${response.status})`
         );
       }
 
@@ -582,13 +522,13 @@ export default function ChatPage() {
       addMessage({ role: 'assistant', content: assistantContent, agentMode });
       setStreamingContent('');
     } catch (err) {
-      useChatStore.getState().setError(err instanceof Error ? err.message : 'Something went wrong');
-      showToast.error('Failed to send message');
+      useChatStore.getState().setError(err instanceof Error ? err.message : t('chat.genericError'));
+      showToast.error(t('chat.sendFailed'));
     } finally {
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [agentMode]);
+  }, [agentMode, t]);
 
   const showScrollButton = messages.length > 3 && !isNearBottom;
 
@@ -611,7 +551,9 @@ export default function ChatPage() {
             </div>
             <div>
               <h1 className="text-sm font-semibold text-white">{t('chat.aiChat')}</h1>
-              <p className="text-xs text-white/40">{t(`chat.agentDesc.${agentMode}`)}</p>
+              <p className="text-xs text-white/40">
+                {t('chat.headerSubtitle')}
+              </p>
             </div>
           </div>
 

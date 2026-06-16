@@ -18,29 +18,29 @@ if (typeof window !== "undefined") {
 
 const stages = [
   {
-    eyebrow: "01 / Prompt",
-    title: "A project idea enters the system.",
-    copy: "The demo starts from a realistic product prompt instead of a blank chat window.",
+    eyebrow: "01 / Plan",
+    title: "The project plan becomes the accepted baseline.",
+    copy: "Nexus turns the plan into a versioned source of truth with stable requirement IDs.",
   },
   {
-    eyebrow: "02 / Document",
-    title: "Research and writer steps create a saved document.",
-    copy: "The output becomes an editable workspace document, not a throwaway response.",
+    eyebrow: "02 / Revision",
+    title: "A plan edit creates a reviewable revision.",
+    copy: "The previous version stays intact while the team works on the next proposed plan.",
   },
   {
-    eyebrow: "03 / Tasks",
-    title: "The document becomes structured work.",
-    copy: "The task agent extracts titles, descriptions, priorities, and real task records.",
+    eyebrow: "03 / Impact",
+    title: "Nexus traces changed requirements to affected work.",
+    copy: "Added, modified, and removed requirements reveal stale tasks and missing coverage.",
   },
   {
-    eyebrow: "04 / Kanban",
-    title: "The board becomes the execution surface.",
-    copy: "Generated tasks appear where a team would actually plan and move work.",
+    eyebrow: "04 / Approval",
+    title: "The user chooses which proposals become real.",
+    copy: "Creates, updates, archives, and relinks remain pending until they are selected.",
   },
   {
-    eyebrow: "05 / History",
-    title: "Every workflow leaves an execution trail.",
-    copy: "Running, completed, and failed states stay visible in workflow history.",
+    eyebrow: "05 / Alignment",
+    title: "The board and audit trail reflect the decision.",
+    copy: "Approved task changes are applied transactionally and remain linked to requirements.",
   },
 ];
 
@@ -58,7 +58,7 @@ function PromptArtifact() {
         status updates, admin review, and delivery history.
       </p>
       <div className="mt-6 flex flex-wrap gap-2 font-mono text-xs uppercase text-white/45">
-        <span className="border border-white/10 px-3 py-2">Gemini workflow</span>
+        <span className="border border-white/10 px-3 py-2">versioned plan</span>
         <span className="border border-white/10 px-3 py-2">Daily quota</span>
         <span className="border border-white/10 px-3 py-2">Demo account</span>
       </div>
@@ -73,7 +73,7 @@ function DocumentArtifact() {
         <div className="flex items-center gap-3">
           <FileText className="size-5" />
           <span className="font-mono text-xs uppercase text-white/45">
-            generated document
+            accepted baseline
           </span>
         </div>
         <span className="font-mono text-xs text-white/45">saved to docs</span>
@@ -113,7 +113,7 @@ function TasksArtifact() {
       <div className="mb-6 flex items-center gap-3">
         <GitBranch className="size-5 text-white/70" />
         <span className="font-mono text-xs uppercase text-white/40">
-          task breakdown
+          impact proposals
         </span>
       </div>
       <div className="space-y-3">
@@ -198,7 +198,7 @@ function HistoryArtifact() {
         <div className="flex items-center gap-3">
           <TerminalSquare className="size-5 text-white" />
           <span className="font-mono text-xs uppercase text-white/40">
-            workflow history
+            change audit
           </span>
         </div>
         <span className="inline-flex items-center gap-2 font-mono text-xs text-white">
@@ -270,13 +270,13 @@ export function BentoGallery() {
               Workflow story
             </span>
             <h2 className="max-w-3xl text-5xl font-semibold leading-none text-white md:text-7xl">
-              Idea to execution, without hiding the machine.
+              Plan change to aligned work, without silent automation.
             </h2>
           </div>
           <p className="max-w-2xl text-lg leading-8 text-white/55 lg:justify-self-end">
-            The landing page follows the same loop the demo proves: one prompt,
-            one saved document, structured tasks, a Kanban board, and auditable
-            workflow status.
+            The landing page follows the same loop the demo proves: version a
+            plan, detect impact, review proposed task changes, and keep delivery
+            work aligned with an auditable decision trail.
           </p>
         </div>
 

@@ -14,8 +14,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Loader2, Sparkles, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
+import { useLocale } from "@/lib/i18n/provider";
 
 export default function ForgotPasswordPage() {
+  const { t } = useLocale();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -27,13 +29,23 @@ export default function ForgotPasswordPage() {
     setError("");
 
     try {
-      // Simulate API call - in production, connect to Better Auth's password reset
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      // For demo purposes, always show success
+      const response = await fetch("/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          redirectTo: "/reset-password",
+        }),
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(body?.message || t("auth.resetFailed"));
+      }
+
       setIsSubmitted(true);
-    } catch {
-      setError("An error occurred. Please try again.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t("auth.resetFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -54,15 +66,15 @@ export default function ForgotPasswordPage() {
           {!isSubmitted ? (
             <>
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl">Forgot password?</CardTitle>
+                <CardTitle className="text-2xl">{t("auth.forgotTitle")}</CardTitle>
                 <CardDescription>
-                  No worries, we&apos;ll send you reset instructions.
+                  {t("auth.forgotDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email">{t("auth.email")}</Label>
                     <Input
                       id="email"
                       type="email"
@@ -83,12 +95,12 @@ export default function ForgotPasswordPage() {
                     {isLoading ? (
                       <>
                         <Loader2 className="size-4 mr-2 animate-spin" />
-                        Sending...
+                        {t("auth.sending")}
                       </>
                     ) : (
                       <>
                         <Mail className="size-4 mr-2" />
-                        Send reset link
+                        {t("auth.sendResetLink")}
                       </>
                     )}
                   </Button>
@@ -103,21 +115,21 @@ export default function ForgotPasswordPage() {
                     <CheckCircle2 className="size-6 text-green-600 dark:text-green-400" />
                   </div>
                 </div>
-                <CardTitle className="text-2xl">Check your email</CardTitle>
+                <CardTitle className="text-2xl">{t("auth.resetSentTitle")}</CardTitle>
                 <CardDescription>
-                  We sent a password reset link to
+                  {t("auth.resetSentDesc")}
                   <br />
                   <span className="font-medium text-foreground">{email}</span>
                 </CardDescription>
               </CardHeader>
               <CardContent className="text-center text-sm text-muted-foreground">
                 <p>
-                  Didn&apos;t receive the email?{" "}
+                  {t("auth.resetSentNote")}{" "}
                   <button
                     onClick={() => setIsSubmitted(false)}
                     className="text-primary hover:underline"
                   >
-                    Click to resend
+                    {t("auth.sendResetLink")}
                   </button>
                 </p>
               </CardContent>
@@ -129,7 +141,7 @@ export default function ForgotPasswordPage() {
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"
             >
               <ArrowLeft className="size-4" />
-              Back to login
+              {t("auth.backToSignIn")}
             </Link>
           </CardFooter>
         </Card>

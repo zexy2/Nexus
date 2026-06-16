@@ -141,10 +141,10 @@ export function MarqueeBanner({ lines, className = "" }: MarqueeBannerProps) {
 // Simple single marquee for headers/CTAs
 export function SimpleMarquee() {
   const words = [
-    { text: "Prompt to document", accent: true },
-    { text: "Document to tasks", accent: false },
-    { text: "Tasks to Kanban", accent: false },
-    { text: "Workflow history", accent: true },
+    { text: "Versioned plan", accent: true },
+    { text: "Impact review", accent: false },
+    { text: "Human approval", accent: false },
+    { text: "Aligned board", accent: true },
     { text: "No visitor API key", accent: false },
   ];
 

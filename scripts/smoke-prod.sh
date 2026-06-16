@@ -14,8 +14,9 @@ fi
 BASE_URL="${SMOKE_BASE_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}"
 COOKIE_JAR="$(mktemp)"
 WORKFLOW_STATUS_FILE="$(mktemp)"
+CHANGE_SET_STATUS_FILE="$(mktemp)"
 cleanup() {
-  rm -f "$COOKIE_JAR" "$WORKFLOW_STATUS_FILE"
+  rm -f "$COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE"
 }
 trap cleanup EXIT
 
@@ -37,6 +38,29 @@ const fs = require("fs");
 const data = JSON.parse(fs.readFileSync(0, "utf8"));
 const tasks = data?.result?.tasks || data?.result?.result?.tasks || [];
 process.stdout.write(String(Array.isArray(tasks) ? tasks.length : 0));
+'
+}
+
+json_first_array_id() {
+  node -e '
+const fs = require("fs");
+const data = JSON.parse(fs.readFileSync(0, "utf8"));
+if (!Array.isArray(data) || !data[0]?.id) process.exit(1);
+process.stdout.write(String(data[0].id));
+'
+}
+
+json_pending_proposal_ids() {
+  node -e '
+const fs = require("fs");
+const data = JSON.parse(fs.readFileSync(0, "utf8"));
+const ids = (Array.isArray(data?.proposals) ? data.proposals : [])
+  .filter((proposal) => proposal?.status === "pending")
+  .slice(0, Number(process.env.SMOKE_PLAN_PROPOSAL_LIMIT || 3))
+  .map((proposal) => proposal.id)
+  .filter(Boolean);
+if (ids.length === 0) process.exit(1);
+process.stdout.write(JSON.stringify(ids));
 '
 }
 
@@ -66,6 +90,29 @@ poll_workflow() {
   done
 
   echo "$label workflow did not complete before timeout." >&2
+  cat "$output_file" >&2 || true
+  exit 1
+}
+
+poll_pending_change_set() {
+  local doc_id="$1"
+  local output_file="$2"
+  local deadline=$((SECONDS + ${SMOKE_WORKFLOW_TIMEOUT_SECONDS:-180}))
+
+  while (( SECONDS < deadline )); do
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets?docId=$doc_id&status=pending&limit=1" > "$output_file"
+
+    local change_set_id
+    if change_set_id="$(json_first_array_id < "$output_file" 2>/dev/null)"; then
+      printf '%s' "$change_set_id"
+      return 0
+    fi
+
+    echo "Plan impact change set is not ready yet." >&2
+    sleep 5
+  done
+
+  echo "Plan impact workflow did not create a pending change set before timeout." >&2
   cat "$output_file" >&2 || true
   exit 1
 }
@@ -150,7 +197,7 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
       -H "Content-Type: application/json" \
       -b "$COOKIE_JAR" \
       "$BASE_URL/api/workflows" \
-      --data "{\"workflowType\":\"tasks\",\"workspaceId\":\"$workspace_id\",\"input\":{\"projectDescription\":\"Create 3 Kanban-ready implementation tasks from the Nexus production smoke brief. Return actionable task titles, descriptions, and priorities.\"}}"
+      --data "{\"workflowType\":\"tasks\",\"workspaceId\":\"$workspace_id\",\"input\":{\"docId\":\"$document_id\",\"projectDescription\":\"Create 3 Kanban-ready implementation tasks from the Nexus production smoke brief. Return actionable task titles, descriptions, and priorities.\"}}"
   )"
   tasks_workflow_id="$(printf '%s' "$tasks_body" | json_get workflowId)"
   poll_workflow "$tasks_workflow_id" "Task breakdown" "$WORKFLOW_STATUS_FILE"
@@ -161,6 +208,39 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
     exit 1
   fi
   echo "Task breakdown created $task_count tasks."
+
+  echo "==> Living plan impact workflow"
+  impact_body="$(
+    curl -fsS \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -b "$COOKIE_JAR" \
+      "$BASE_URL/api/plans/$document_id/analyze-change" \
+      --data '{}'
+  )"
+  plan_workflow_id="$(printf '%s' "$impact_body" | json_get workflowId)"
+  change_set_id="$(poll_pending_change_set "$document_id" "$CHANGE_SET_STATUS_FILE")"
+  echo "Plan impact created change set $change_set_id."
+
+  curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
+  proposal_ids_json="$(json_pending_proposal_ids < "$CHANGE_SET_STATUS_FILE")"
+
+  curl -fsS \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -b "$COOKIE_JAR" \
+    "$BASE_URL/api/change-sets/$change_set_id/apply" \
+    --data "{\"selectedProposalIds\":$proposal_ids_json}" > /dev/null
+
+  poll_workflow "$plan_workflow_id" "Plan impact" "$WORKFLOW_STATUS_FILE"
+  curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
+  change_set_status="$(json_get status < "$CHANGE_SET_STATUS_FILE")"
+  if [[ "$change_set_status" != "applied" && "$change_set_status" != "partially_applied" ]]; then
+    echo "Plan impact completed but change set was not applied." >&2
+    cat "$CHANGE_SET_STATUS_FILE" >&2
+    exit 1
+  fi
+  echo "Plan impact resolved with status $change_set_status."
 fi
 
 if [[ "${SMOKE_CHECK_RATE_LIMIT:-false}" == "true" ]]; then

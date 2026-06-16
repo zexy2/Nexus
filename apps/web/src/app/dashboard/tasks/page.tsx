@@ -28,6 +28,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  ListTodo,
   Trash2,
   CheckCircle2,
   Circle,
@@ -42,6 +43,10 @@ import {
   Search,
   Filter,
   Edit3,
+  GitPullRequestArrow,
+  Link2,
+  Unlink,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,11 +88,6 @@ import { cn } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { useT, useLocale } from "@/lib/i18n/provider";
 
-// Premium Components
-import { TasksBackground } from "./_components/tasks-background";
-import { TasksHeroHeader } from "./_components/tasks-hero-header";
-import { StatsOverview } from "./_components/stats-overview";
-
 // Types
 type TaskStatus = "todo" | "in_progress" | "done";
 type TaskPriority = "low" | "medium" | "high" | "urgent";
@@ -102,6 +102,13 @@ interface Task {
   assigneeAgentType: string | null;
   dueDate?: Date;
   tags?: string[];
+  alignmentStatus: "aligned" | "needs_review" | "orphaned";
+  requirements: Array<{
+    requirementId: string;
+    stableKey: string;
+    title: string;
+    status: string;
+  }>;
   createdAt: Date;
 }
 
@@ -116,6 +123,8 @@ function normalizeTask(task: ApiTask): Task {
     description: task.description || "",
     assigneeId: task.assigneeId || null,
     assigneeAgentType: task.assigneeAgentType || null,
+    alignmentStatus: task.alignmentStatus || "orphaned",
+    requirements: task.requirements || [],
     createdAt: new Date(task.createdAt),
     dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
   };
@@ -133,6 +142,8 @@ function fromSyncTask(t: SyncTask): Task {
     priority: t.priority,
     assigneeId: t.assigneeId || null,
     assigneeAgentType: t.assigneeAgentType || null,
+    alignmentStatus: t.alignmentStatus || "orphaned",
+    requirements: [],
     createdAt: new Date(t.createdAt),
     dueDate: t.dueDate ? new Date(t.dueDate) : undefined,
   };
@@ -221,7 +232,7 @@ function SortableTaskCard({
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
-        "group glass-premium border-white/10 rounded-2xl p-4 transition-all cursor-grab active:cursor-grabbing",
+        "group rounded-xl border border-white/10 bg-white/[0.025] p-4 transition-all cursor-grab active:cursor-grabbing",
         isDragging && "shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black",
         !isDragging && "hover:border-white/20 hover:bg-white/[0.03]"
       )}
@@ -267,6 +278,43 @@ function SortableTaskCard({
               ))}
             </div>
           )}
+
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            {task.requirements.slice(0, 3).map((requirement) => (
+              <span
+                key={requirement.requirementId}
+                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 font-mono text-[10px] text-cyan-200"
+                title={requirement.title}
+              >
+                <Link2 className="size-2.5" />
+                {requirement.stableKey}
+              </span>
+            ))}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                task.alignmentStatus === "aligned" &&
+                  "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
+                task.alignmentStatus === "needs_review" &&
+                  "border-amber-400/20 bg-amber-400/10 text-amber-200",
+                task.alignmentStatus === "orphaned" &&
+                  "border-white/10 bg-white/5 text-white/40"
+              )}
+            >
+              {task.alignmentStatus === "needs_review" ? (
+                <GitPullRequestArrow className="size-2.5" />
+              ) : task.alignmentStatus === "aligned" ? (
+                <CheckCircle2 className="size-2.5" />
+              ) : (
+                <Unlink className="size-2.5" />
+              )}
+              {task.alignmentStatus === "needs_review"
+                ? t('tasks.alignmentNeedsReview')
+                : task.alignmentStatus === "aligned"
+                  ? t('tasks.alignmentAligned')
+                  : t('tasks.alignmentOrphaned')}
+            </span>
+          </div>
 
           {/* Footer */}
           <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
@@ -353,7 +401,7 @@ function TaskCardOverlay({ task }: { task: Task }) {
   const t = useT();
 
   return (
-    <div className="glass-premium border-white/20 rounded-2xl p-4 shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black w-[280px]">
+    <div className="w-[280px] rounded-xl border border-white/20 bg-background p-4 shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black">
       <div className="flex items-start gap-2">
         <div className="p-1 -ml-1">
           <GripVertical className="w-4 h-4 text-muted-foreground" />
@@ -416,19 +464,19 @@ function KanbanColumn({
   const colorClasses = {
     neutral: {
       bg: "bg-white/[0.02]",
-      border: "border-white/5",
+      border: "border-white/10",
       icon: "text-neutral-400",
       badge: "bg-white/10 text-neutral-300",
     },
     amber: {
-      bg: "bg-amber-500/[0.03]",
-      border: "border-amber-500/10",
+      bg: "bg-white/[0.02]",
+      border: "border-white/10",
       icon: "text-amber-400",
       badge: "bg-amber-500/20 text-amber-300",
     },
     emerald: {
-      bg: "bg-emerald-500/[0.03]",
-      border: "border-emerald-500/10",
+      bg: "bg-white/[0.02]",
+      border: "border-white/10",
       icon: "text-emerald-400",
       badge: "bg-emerald-500/20 text-emerald-300",
     },
@@ -437,7 +485,7 @@ function KanbanColumn({
   const colors = colorClasses[column.color as keyof typeof colorClasses];
 
   return (
-    <div className="flex flex-col min-w-0 md:h-full">
+    <div className="flex min-h-0 min-w-0 flex-col md:h-full">
       {/* Column header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div className="flex items-center gap-2.5">
@@ -460,8 +508,24 @@ function KanbanColumn({
       <div
         ref={setNodeRef}
         data-testid={`kanban-column-${column.id}`}
+        onWheel={(event) => {
+          const el = event.currentTarget;
+          const maxScrollTop = el.scrollHeight - el.clientHeight;
+          if (maxScrollTop <= 0) return;
+
+          const nextScrollTop = Math.max(
+            0,
+            Math.min(maxScrollTop, el.scrollTop + event.deltaY)
+          );
+
+          if (nextScrollTop !== el.scrollTop) {
+            event.preventDefault();
+            event.stopPropagation();
+            el.scrollTop = nextScrollTop;
+          }
+        }}
         className={cn(
-          "rounded-2xl p-3 h-[26rem] md:h-auto md:flex-1 md:min-h-0 overflow-y-auto transition-colors border",
+          "max-h-[70vh] min-h-[22rem] overflow-y-auto overscroll-contain rounded-2xl border p-3 pr-2 transition-colors [scrollbar-gutter:stable] md:h-full md:max-h-none md:min-h-0 md:flex-1",
           colors.bg,
           colors.border,
           isOver && "ring-2 ring-primary/50 bg-primary/5"
@@ -544,7 +608,7 @@ export default function TasksPage() {
       try {
         const local = await engine.query<SyncTask>("tasks");
         if (local.length > 0) {
-          setTasks(local.map(fromSyncTask));
+          setTasks(local.filter((task) => !task.isArchived).map(fromSyncTask));
           setIsLoading(false);
           renderedFromCache = true;
         }
@@ -585,7 +649,19 @@ export default function TasksPage() {
       if (activeIdRef.current) return;
       try {
         const local = await engine.query<SyncTask>("tasks");
-        setTasks(local.map(fromSyncTask));
+        setTasks((current) => {
+          const currentById = new Map(current.map((task) => [task.id, task]));
+          return local
+            .filter((task) => !task.isArchived)
+            .map((task) => {
+              const cached = currentById.get(task.id);
+              const normalized = fromSyncTask(task);
+              return {
+                ...normalized,
+                requirements: cached?.requirements || normalized.requirements,
+              };
+            });
+        });
       } catch {
         // ignore
       }
@@ -882,97 +958,110 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="relative min-h-screen pb-32">
-      {/* Premium Animated Background */}
-      <TasksBackground />
-      
-      {/* Content Layer */}
-      <div className="relative z-10 px-4 md:px-6 lg:px-8">
-        {/* Premium Hero Header */}
-        <TasksHeroHeader 
-          stats={stats}
-          onCreateTask={() => setIsCreateOpen(true)}
-        />
+    <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+        <div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-[0.18em] text-white/35">
+            <ListTodo className="size-4" />
+            {t('tasks.label')}
+          </div>
+          <h1 className="text-3xl font-semibold text-white md:text-4xl">{t('tasks.title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+            {t('tasks.description')}
+          </p>
+        </div>
 
-        {/* Premium Stats Bar */}
-        <StatsOverview stats={stats} />
+        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+          <Plus className="size-4" />
+          {t('tasks.newTask')}
+        </Button>
+      </header>
 
-        {/* Toolbar */}
-        <section className="mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4"
+      <section className="mb-8 grid grid-cols-2 gap-px border-y border-white/10 bg-white/10 sm:grid-cols-5">
+        {[
+          [t('tasks.statTotal'), stats.total],
+          [t('tasks.statTodo'), stats.todo],
+          [t('tasks.statInProgress'), stats.inProgress],
+          [t('tasks.statDone'), stats.done],
+          [t('tasks.statAi'), stats.aiTasks],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="bg-background px-4 py-5">
+            <div className="text-2xl font-semibold tabular-nums text-white">{value}</div>
+            <div className="mt-1 text-xs text-white/40">{label}</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mb-6 border-b border-white/10 pb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center md:gap-4"
+        >
+          <div className="relative flex-1 sm:max-w-sm">
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+            <Input
+              placeholder={t('tasks.searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg border-white/10 bg-white/[0.03] pl-10 text-white placeholder:text-white/40"
+            />
+          </div>
+
+          <Select
+            value={filterPriority}
+            onValueChange={(value) => setFilterPriority(value as TaskPriority | "all")}
           >
-            {/* Search */}
-            <div className="relative flex-1 sm:flex-none sm:w-64">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-              <Input
-                placeholder={t('tasks.searchPlaceholder')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-white/[0.03] border-white/10 rounded-full w-full text-white placeholder:text-white/40"
-              />
+            <SelectTrigger className="w-full rounded-lg border-white/10 bg-white/[0.03] sm:w-44">
+              <div className="flex items-center gap-2">
+                <Filter className="size-4 text-white/40" />
+                <SelectValue placeholder={t('tasks.priorityLabel')} />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="border-white/10 bg-black/90 backdrop-blur-xl">
+              <SelectItem value="all">{t('tasks.filterAll')}</SelectItem>
+              <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
+              <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
+              <SelectItem value="medium">{t('tasks.prioMedium')}</SelectItem>
+              <SelectItem value="low">{t('tasks.prioLow')}</SelectItem>
+            </SelectContent>
+          </Select>
+        </motion.div>
+      </section>
+
+      <section className="min-h-[520px] md:min-h-0">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="min-h-0 overflow-x-auto pb-6"
+        >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={kanbanCollisionDetection}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="grid min-h-0 grid-cols-1 items-start gap-4 md:h-[calc(100vh-21rem)] md:min-h-[34rem] md:max-h-[44rem] md:grid-cols-3 md:items-stretch md:gap-6">
+              {columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  tasks={getTasksByStatus(column.id)}
+                  onDelete={handleDeleteTask}
+                  onEdit={setEditingTask}
+                />
+              ))}
             </div>
 
-            {/* Priority filter */}
-            <Select
-              value={filterPriority}
-              onValueChange={(value) => setFilterPriority(value as TaskPriority | "all")}
-            >
-              <SelectTrigger className="w-full sm:w-40 bg-white/[0.03] border-white/10 rounded-full">
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-white/40" />
-                  <SelectValue placeholder="Öncelik" />
-                </div>
-              </SelectTrigger>
-              <SelectContent className="bg-black/90 backdrop-blur-xl border-white/10">
-                <SelectItem value="all">{t('tasks.filterAll')}</SelectItem>
-                <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
-                <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
-                <SelectItem value="medium">{t('tasks.prioMedium')}</SelectItem>
-                <SelectItem value="low">{t('tasks.prioLow')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </motion.div>
-        </section>
-
-        {/* Kanban Board */}
-        <section className="md:sticky md:top-[5rem] md:z-10 md:h-[calc(100vh-6.5rem)]">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="overflow-x-auto pb-6 md:h-full md:overflow-hidden md:pb-0"
-          >
-            <DndContext
-              sensors={sensors}
-              collisionDetection={kanbanCollisionDetection}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={handleDragEnd}
-            >
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 md:h-full">
-                {columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    tasks={getTasksByStatus(column.id)}
-                    onDelete={handleDeleteTask}
-                    onEdit={setEditingTask}
-                  />
-                ))}
-              </div>
-
-              {/* Drag overlay */}
-              <DragOverlay>
-                {activeTask ? <TaskCardOverlay task={activeTask} /> : null}
-              </DragOverlay>
-            </DndContext>
-          </motion.div>
-        </section>
-      </div>
+            <DragOverlay>
+              {activeTask ? <TaskCardOverlay task={activeTask} /> : null}
+            </DragOverlay>
+          </DndContext>
+        </motion.div>
+      </section>
 
       {/* Create Task Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

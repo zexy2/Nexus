@@ -1,176 +1,125 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, inArray, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { docs, tasks, workspaces } from "@nexus/database/schema";
-import { eq, desc } from "drizzle-orm";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { enforceAiBudget } from "@/lib/production-guardrails";
+import {
+  buildWorkspaceSearchContext,
+  createHighlight,
+  searchWorkspaceContent,
+  type WorkspaceSearchResult,
+} from "@/lib/workspace-search";
+import {
+  isEmbeddingsAvailable,
+  semanticSearch,
+} from "@/lib/ai/embeddings";
+import {
+  ensureDefaultWorkspace,
+  getAccessibleWorkspaceIds,
+  requireWorkspaceAccess,
+} from "@/lib/workspace-auth";
+import { docs } from "@nexus/database/schema";
 
-interface SearchResult {
-  id: string;
-  title: string;
-  content: string;
-  type: "document" | "task";
-  score: number;
-  highlight: string;
-  updatedAt: string;
+async function resolveWorkspace(userId: string, workspaceId?: string | null) {
+  if (workspaceId) {
+    const access = await requireWorkspaceAccess(userId, workspaceId);
+    if (!access.ok) return access;
+    return { ok: true as const, workspaceId: access.workspaceId };
+  }
+
+  const accessible = await getAccessibleWorkspaceIds(userId);
+  if (accessible[0]) {
+    return { ok: true as const, workspaceId: accessible[0] };
+  }
+
+  const workspace = await ensureDefaultWorkspace(userId);
+  return { ok: true as const, workspaceId: workspace.id };
 }
 
-function searchScore(query: string, text: string): number {
-  const queryLower = query.toLowerCase();
-  const textLower = text.toLowerCase();
-  const words = queryLower.split(/\s+/).filter(w => w.length > 1);
-  
-  if (words.length === 0) return 0;
-  
-  let score = 0;
-  for (const word of words) {
-    if (textLower.includes(word)) {
-      score += 1;
-      if (text.toLowerCase().includes(word)) {
-        score += 0.5;
-      }
-    }
-  }
-  
-  if (textLower.includes(queryLower)) {
-    score += 2;
-  }
-  
-  return Math.min(score / words.length, 1);
-}
-
-function createHighlight(content: string, query: string, maxLength = 150): string {
-  if (!content) return "";
-  
-  const queryLower = query.toLowerCase();
-  const contentLower = content.toLowerCase();
-  const firstWord = queryLower.split(/\s+/)[0] || "";
-  
-  const index = contentLower.indexOf(firstWord);
-  if (index === -1) {
-    return content.slice(0, maxLength) + (content.length > maxLength ? "..." : "");
-  }
-  
-  const start = Math.max(0, index - 30);
-  const end = Math.min(content.length, index + maxLength - 30);
-  
-  let highlight = content.slice(start, end);
-  if (start > 0) highlight = "..." + highlight;
-  if (end < content.length) highlight = highlight + "...";
-  
-  return highlight;
-}
-
-function extractTextFromContent(content: unknown): string {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-  
-  if (Array.isArray(content)) {
-    return content.map(block => {
-      if (block.content && Array.isArray(block.content)) {
-        return block.content.map((c: { text?: string }) => c.text || "").join(" ");
-      }
-      return "";
-    }).join(" ");
-  }
-  
-  return "";
-}
-
-async function getUserWorkspace() {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const userId = session?.user?.id;
-  
-  // Require authentication - no dev fallback
-  if (!userId) return null;
-  
-  return db.query.workspaces.findFirst({
-    where: eq(workspaces.ownerId, userId),
+async function runSemanticSearch(
+  query: string,
+  workspaceId: string,
+  limit: number
+): Promise<WorkspaceSearchResult[]> {
+  const hits = await semanticSearch(query, workspaceId, {
+    limit,
+    minSimilarity: 0.2,
   });
+
+  const docIds = Array.from(
+    new Set(hits.map((hit) => hit.docId).filter((id): id is string => Boolean(id)))
+  );
+  if (docIds.length === 0) return [];
+
+  const rows = await db
+    .select({ id: docs.id, title: docs.title, updatedAt: docs.updatedAt })
+    .from(docs)
+    .where(and(inArray(docs.id, docIds), eq(docs.workspaceId, workspaceId)));
+
+  const docById = new Map(rows.map((row) => [row.id, row]));
+
+  return hits
+    .filter((hit): hit is typeof hit & { docId: string } => Boolean(hit.docId))
+    .map((hit) => {
+      const doc = docById.get(hit.docId);
+      return {
+        id: hit.docId,
+        title: doc?.title || "Document",
+        content: hit.content,
+        type: "document" as const,
+        score: hit.similarity,
+        highlight: createHighlight(hit.content, query),
+        updatedAt: (doc?.updatedAt || new Date()).toISOString(),
+      };
+    });
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q");
-  const type = searchParams.get("type");
-  const limit = parseInt(searchParams.get("limit") || "10", 10);
-  
-  if (!query) {
-    return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });
-  }
-  
-  const workspace = await getUserWorkspace();
-  if (!workspace) {
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.default,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
     return NextResponse.json(
       { error: "Unauthorized", message: "Authentication required" },
       { status: 401 }
     );
   }
-  
-  const results: SearchResult[] = [];
-  
-  if (!type || type === "all" || type === "document") {
-    const documents = await db.query.docs.findMany({
-      where: eq(docs.workspaceId, workspace.id),
-      orderBy: [desc(docs.updatedAt)],
-    });
-    
-    for (const doc of documents) {
-      const contentText = extractTextFromContent(doc.content);
-      const fullText = `${doc.title} ${contentText}`;
-      const score = searchScore(query, fullText);
-      
-      if (score > 0) {
-        results.push({
-          id: doc.id,
-          title: doc.title,
-          content: contentText,
-          type: "document",
-          score,
-          highlight: createHighlight(contentText || doc.title, query),
-          updatedAt: doc.updatedAt.toISOString(),
-        });
-      }
-    }
+
+  const { searchParams } = new URL(request.url);
+  const query = searchParams.get("q");
+  const type = searchParams.get("type") || undefined;
+  const workspaceId = searchParams.get("workspaceId");
+  const limit = Math.min(Math.max(Number(searchParams.get("limit") || 10), 1), 25);
+
+  if (!query) {
+    return NextResponse.json({ error: "Query parameter 'q' is required" }, { status: 400 });
   }
-  
-  if (!type || type === "all" || type === "task") {
-    const taskList = await db.query.tasks.findMany({
-      where: eq(tasks.workspaceId, workspace.id),
-      orderBy: [desc(tasks.updatedAt)],
-    });
-    
-    for (const task of taskList) {
-      const fullText = `${task.title} ${task.description || ""}`;
-      const score = searchScore(query, fullText);
-      
-      if (score > 0) {
-        results.push({
-          id: task.id,
-          title: task.title,
-          content: task.description || "",
-          type: "task",
-          score,
-          highlight: createHighlight(task.description || task.title, query),
-          updatedAt: task.updatedAt.toISOString(),
-        });
-      }
-    }
+
+  const workspace = await resolveWorkspace(protection.user.id, workspaceId);
+  if (!workspace.ok) {
+    return NextResponse.json({ error: workspace.error }, { status: workspace.status });
   }
-  
-  const sortedResults = results.sort((a, b) => b.score - a.score).slice(0, limit);
-  
+
+  const results = await searchWorkspaceContent(query, workspace.workspaceId, { type, limit });
+
   return NextResponse.json({
     query,
-    results: sortedResults,
-    total: sortedResults.length,
+    workspaceId: workspace.workspaceId,
+    results,
+    total: results.length,
+    searchType: "keyword",
   });
 }
 
 export async function POST(request: NextRequest) {
-  // Check authentication first
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session?.user?.id) {
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.default,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
     return NextResponse.json(
       { error: "Unauthorized", message: "Authentication required" },
       { status: 401 }
@@ -178,117 +127,70 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { query, options = {} } = body;
-  
-  if (!query) {
+  const { query, options = {} } = body as {
+    query?: unknown;
+    options?: {
+      type?: string;
+      limit?: number;
+      includeContext?: boolean;
+      useSemantic?: boolean;
+      workspaceId?: string;
+    };
+  };
+
+  if (typeof query !== "string" || !query.trim()) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
-  
-  const { type, limit = 5, includeContext = false, useSemantic = true } = options;
-  
-  const workspace = await getUserWorkspace();
-  if (!workspace) {
-    return NextResponse.json({ results: [], total: 0, context: "" });
+
+  const limit = Math.min(Math.max(Number(options.limit || 5), 1), 25);
+  const workspace = await resolveWorkspace(protection.user.id, options.workspaceId);
+  if (!workspace.ok) {
+    return NextResponse.json({ error: workspace.error }, { status: workspace.status });
   }
-  
-  const results: SearchResult[] = [];
-  
-  // Try semantic search first if enabled
-  if (useSemantic) {
-    try {
-      const semanticResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/embeddings?q=${encodeURIComponent(query)}&limit=${limit}`,
-        { method: 'GET' }
-      );
-      
-      if (semanticResponse.ok) {
-        const semanticData = await semanticResponse.json();
-        
-        for (const result of semanticData.results || []) {
-          if (result.document && result.document.workspaceId === workspace.id) {
-            results.push({
-              id: result.document.id,
-              title: result.document.title,
-              content: result.content,
-              type: "document" as const,
-              score: result.similarity,
-              highlight: result.content.slice(0, 150) + "...",
-              updatedAt: result.document.updatedAt,
-            });
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Semantic search failed, falling back to keyword:", err);
-    }
-  }
-  
-  // Keyword search as fallback or supplement
-  if (!type || type === "all" || type === "document") {
-    const documents = await db.query.docs.findMany({
-      where: eq(docs.workspaceId, workspace.id),
-      orderBy: [desc(docs.updatedAt)],
+
+  const results: WorkspaceSearchResult[] = [];
+  let semanticAttempted = false;
+
+  if (options.useSemantic !== false && isEmbeddingsAvailable()) {
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "embedding",
     });
-    
-    for (const doc of documents) {
-      // Skip if already in semantic results
-      if (results.some(r => r.id === doc.id)) continue;
-      
-      const contentText = extractTextFromContent(doc.content);
-      const score = searchScore(query, `${doc.title} ${contentText}`);
-      
-      if (score > 0) {
-        results.push({
-          id: doc.id,
-          title: doc.title,
-          content: contentText,
-          type: "document",
-          score: score * 0.8, // Slightly lower weight for keyword matches
-          highlight: createHighlight(contentText || doc.title, query),
-          updatedAt: doc.updatedAt.toISOString(),
-        });
-      }
+    if (!aiBudget.ok) return aiBudget.response;
+
+    semanticAttempted = true;
+    try {
+      results.push(...await runSemanticSearch(query, workspace.workspaceId, limit));
+    } catch (error) {
+      console.error("Semantic search failed, falling back to keyword:", error);
     }
   }
 
-  if (!type || type === "all" || type === "task") {
-    const taskList = await db.query.tasks.findMany({
-      where: eq(tasks.workspaceId, workspace.id),
-      orderBy: [desc(tasks.updatedAt)],
-    });
-    
-    for (const task of taskList) {
-      const score = searchScore(query, `${task.title} ${task.description || ""}`);
-      
-      if (score > 0) {
-        results.push({
-          id: task.id,
-          title: task.title,
-          content: task.description || "",
-          type: "task",
-          score,
-          highlight: createHighlight(task.description || task.title, query),
-          updatedAt: task.updatedAt.toISOString(),
-        });
-      }
+  const keywordResults = await searchWorkspaceContent(query, workspace.workspaceId, {
+    type: options.type,
+    limit,
+  });
+  for (const result of keywordResults) {
+    if (!results.some((existing) => existing.id === result.id && existing.type === result.type)) {
+      results.push({
+        ...result,
+        score: semanticAttempted ? result.score * 0.8 : result.score,
+      });
     }
   }
 
   const sortedResults = results.sort((a, b) => b.score - a.score).slice(0, limit);
-  
-  let context: string | undefined;
-  if (includeContext && sortedResults.length > 0) {
-    context = "### Relevant Context from Workspace:\n\n";
-    for (const result of sortedResults.slice(0, 3)) {
-      context += `**${result.title}** (${result.type}, relevance: ${(result.score * 100).toFixed(0)}%)\n${result.content.slice(0, 500)}\n\n`;
-    }
-  }
+  const context = options.includeContext && sortedResults.length > 0
+    ? buildWorkspaceSearchContext(sortedResults)
+    : undefined;
 
-  return NextResponse.json({ 
-    query, 
-    results: sortedResults, 
-    total: sortedResults.length, 
+  return NextResponse.json({
+    query,
+    workspaceId: workspace.workspaceId,
+    results: sortedResults,
+    total: sortedResults.length,
     context,
-    searchType: useSemantic ? "hybrid" : "keyword"
+    searchType: semanticAttempted ? "hybrid" : "keyword",
   });
 }

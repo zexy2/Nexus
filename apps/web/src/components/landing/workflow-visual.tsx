@@ -5,7 +5,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Sparkles,
   FileText,
-  CheckSquare,
+  GitPullRequestArrow,
   KanbanSquare,
   History,
   CornerDownLeft,
@@ -13,21 +13,19 @@ import {
 
 /**
  * Hero centrepiece: a self-playing "product film". Inside a sleek window,
- * Nexus turns one idea into a full workflow on a loop —
- * prompt → document → tasks → kanban → execution history. Cinematic and
- * eye-catching, but meaning-led (it literally shows what the product does)
- * and monochrome. Pure CSS / framer-motion, no WebGL.
+ * Nexus keeps a changing plan and delivery work aligned on a loop:
+ * edit → compare → review → apply → audit.
  */
 
 const STEP_MS = 2900;
-const STEPS = ["prompt", "document", "tasks", "kanban", "history"] as const;
+const STEPS = ["edit", "compare", "review", "apply", "history"] as const;
 
 const sceneMeta = [
-  { icon: Sparkles, label: "PROMPT" },
-  { icon: FileText, label: "DOCUMENT · saved to docs" },
-  { icon: CheckSquare, label: "TASKS · 8 extracted" },
-  { icon: KanbanSquare, label: "KANBAN" },
-  { icon: History, label: "WORKFLOW HISTORY" },
+  { icon: FileText, label: "PLAN · edited once" },
+  { icon: Sparkles, label: "IMPACT · requirements compared" },
+  { icon: GitPullRequestArrow, label: "REVIEW · human approval" },
+  { icon: KanbanSquare, label: "WORK · aligned" },
+  { icon: History, label: "AUDIT · execution trail" },
 ];
 
 const container: Variants = {
@@ -55,7 +53,7 @@ function PromptScene() {
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-2 font-mono text-[13px] text-white/85">
           <span className="text-white/30">{">"}</span>
-          <span>Build a customer order tracking app</span>
+          <span>Add guest checkout and remove admin review</span>
           <motion.span
             className="inline-block h-4 w-[2px] bg-white"
             animate={{ opacity: [1, 0, 1] }}
@@ -64,7 +62,7 @@ function PromptScene() {
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 text-xs text-white/40">
-        <span>generate workflow</span>
+        <span>review impact</span>
         <kbd className="flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-1 font-mono">
           <CornerDownLeft className="size-3" /> enter
         </kbd>
@@ -77,7 +75,7 @@ function DocumentScene() {
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
       <motion.div variants={item} className="text-base font-semibold text-white">
-        Customer Order App — Specification
+        Requirement impact
       </motion.div>
       <div className="space-y-2.5">
         <Bar w="92%" />
@@ -86,9 +84,16 @@ function DocumentScene() {
         <Bar w="64%" dim />
       </div>
       <motion.div variants={item} className="grid grid-cols-2 gap-2 pt-1">
-        {["User accounts", "Order placement", "Status timeline", "Admin review"].map((t) => (
-          <div key={t} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70">
-            {t}
+        {[
+          ["REQ-004", "Guest checkout", "added"],
+          ["REQ-007", "Order placement", "modified"],
+          ["REQ-009", "Admin review", "removed"],
+          ["REQ-012", "Status timeline", "unchanged"],
+        ].map(([key, title, state]) => (
+          <div key={key} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70">
+            <span className="mr-2 font-mono text-white/35">{key}</span>
+            {title}
+            <span className="ml-2 text-white/35">{state}</span>
           </div>
         ))}
       </motion.div>
@@ -98,10 +103,10 @@ function DocumentScene() {
 
 function TasksScene() {
   const tasks: [string, string][] = [
-    ["User registration flow", "High"],
-    ["Order placement API", "High"],
-    ["Admin review dashboard", "Medium"],
-    ["Delivery status timeline", "Medium"],
+    ["Create guest checkout task", "Create"],
+    ["Update order placement flow", "Update"],
+    ["Archive admin review task", "Archive"],
+    ["Keep status timeline", "No change"],
   ];
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-2.5">
@@ -111,7 +116,7 @@ function TasksScene() {
           variants={item}
           className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5"
         >
-          <span className="size-4 shrink-0 rounded-[5px] border border-white/25" />
+          <span className="size-4 shrink-0 rounded-[5px] border border-white/25 bg-white/5" />
           <span className="flex-1 truncate text-sm text-white/85">{t}</span>
           <span className="shrink-0 rounded-md bg-white/10 px-2 py-0.5 font-mono text-[10px] uppercase text-white/55">
             {p}
@@ -124,9 +129,9 @@ function TasksScene() {
 
 function KanbanScene() {
   const cols: [string, string[]][] = [
-    ["To do", ["Order history", "Profile"]],
-    ["In progress", ["Order placement"]],
-    ["Done", ["Registration"]],
+    ["To do", ["Guest checkout · REQ-004", "Order history · REQ-006"]],
+    ["In progress", ["Order placement · REQ-007"]],
+    ["Done", ["Registration · REQ-001"]],
   ];
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-3 gap-3">
@@ -148,10 +153,10 @@ function KanbanScene() {
 
 function HistoryScene() {
   const rows: [string, string][] = [
-    ["researcher · gather requirements", "1.2s"],
-    ["writer · generate specification", "15.1s"],
-    ["project_manager · extract tasks", "6.7s"],
-    ["workflow · completed", "done"],
+    ["plan.version · proposed", "v3"],
+    ["impact.analysis · 3 affected", "8.4s"],
+    ["human.review · 2 selected", "approved"],
+    ["work.alignment · completed", "done"],
   ];
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-2">

@@ -65,6 +65,9 @@ export interface Task {
   completedAt?: number;
   position?: number;
   docId?: string;
+  isArchived?: number | boolean;
+  alignmentStatus?: "aligned" | "needs_review" | "orphaned";
+  alignmentUpdatedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -923,4 +926,3 @@ export function useOptimisticUpdate<T>(
 
   return { data, update, isPending, error };
 }
-

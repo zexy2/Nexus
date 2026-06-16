@@ -22,7 +22,8 @@ type PublicWorkflowType =
   | "code"
   | "document_generation"
   | "task_breakdown"
-  | "code_generation";
+  | "code_generation"
+  | "plan_impact";
 
 type WorkflowRequest = {
   workflowType?: PublicWorkflowType;
@@ -90,6 +91,12 @@ function normalizeWorkflowType(type: PublicWorkflowType | undefined) {
         temporalName: "codeGenerationWorkflow",
         agentType: "coder" as const,
       };
+    case "plan_impact":
+      return {
+        publicType: "plan_impact",
+        temporalName: "planImpactWorkflow",
+        agentType: "project_manager" as const,
+      };
     default:
       return null;
   }
@@ -101,7 +108,7 @@ function buildTemporalInput(
   workspaceId: string,
   userId: string
 ) {
-  const title = typeof input.title === "string" ? input.title : "Generated Document";
+  const title = deriveWorkflowTitle(input);
 
   if (workflowType === "document") {
     return {
@@ -117,7 +124,16 @@ function buildTemporalInput(
     return {
       workspaceId,
       userId,
+      docId: typeof input.docId === "string" ? input.docId : undefined,
       projectDescription: String(input.projectDescription || input.goal || input.prompt || ""),
+    };
+  }
+
+  if (workflowType === "plan_impact") {
+    return {
+      workspaceId,
+      userId,
+      docId: String(input.docId || ""),
     };
   }
 
@@ -139,6 +155,26 @@ function buildTemporalInput(
     framework: typeof input.framework === "string" ? input.framework : undefined,
     includeTests: Boolean(input.includeTests),
   };
+}
+
+function deriveWorkflowTitle(input: Record<string, unknown>) {
+  const explicitTitle = typeof input.title === "string" ? input.title.trim() : "";
+  if (explicitTitle) return explicitTitle.slice(0, 120);
+
+  const source = [input.prompt, input.topic, input.goal, input.projectDescription]
+    .find((value): value is string => typeof value === "string" && value.trim().length > 0)
+    ?.trim();
+
+  if (!source) return "Untitled Plan";
+
+  const cleaned = source
+    .replace(/[#*_`>~[\]()]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const firstSentence = cleaned.split(/[.!?\n]/)[0]?.trim() || cleaned;
+  return firstSentence.length > 90
+    ? `${firstSentence.slice(0, 87).trim()}...`
+    : firstSentence;
 }
 
 export async function POST(request: NextRequest) {
@@ -166,6 +202,9 @@ export async function POST(request: NextRequest) {
 
   if (!body.input || Object.keys(body.input).length === 0) {
     return NextResponse.json({ error: "Missing workflow input" }, { status: 400 });
+  }
+  if (workflow.publicType === "plan_impact" && typeof body.input.docId !== "string") {
+    return NextResponse.json({ error: "docId is required for plan impact analysis" }, { status: 400 });
   }
 
   const workspaceAccess = await requireWorkspaceAccess(

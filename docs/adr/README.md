@@ -6,7 +6,7 @@ Bu klasör, Nexus projesindeki önemli mimari kararları belgelemektedir.
 
 | #                                         | Karar                                   | Durum          | Tarih        |
 | ----------------------------------------- | --------------------------------------- | -------------- | ------------ |
-| [001](001-local-first-architecture.md)    | Local-First Architecture with Zero Sync | ✅ Kabul Edildi | 18 Ocak 2026 |
+| [001](001-local-first-architecture.md)    | Local-First Architecture with Zero Sync | ⏸️ v1'de ertelendi | 18 Ocak 2026 |
 | [002](002-multi-agent-langgraph.md)       | Multi-Agent AI with LangGraph           | ✅ Kabul Edildi | 18 Ocak 2026 |
 | [003](003-durable-execution-temporal.md)  | Durable Execution with Temporal.io      | ✅ Kabul Edildi | 18 Ocak 2026 |
 | [004](004-observability-opentelemetry.md) | Observability with OpenTelemetry        | ✅ Kabul Edildi | 18 Ocak 2026 |

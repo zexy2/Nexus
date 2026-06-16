@@ -1,7 +1,7 @@
 # ADR-001: Local-First Architecture with Zero Sync
 
 ## Status
-**Accepted** - 18 Ocak 2026
+**Deferred / superseded for v1** - 18 Ocak 2026 kararının kapsamı daraltıldı. Mevcut public demo API-backed sync/offline queue davranışı kullanır; production Zero cache iddiası ertelendi.
 
 ## Context
 
@@ -13,7 +13,7 @@ Modern web uygulamaları için veri yönetimi konusunda kritik bir karar vermemi
 
 ## Decision
 
-**Zero Sync** kullanarak Local-First mimari uyguluyoruz.
+İlk karar Zero Sync ile tam local-first mimari uygulamaktı. Mevcut v1 demo için bu karar daraltıldı: API-backed sync/offline queue davranışı korunur, production Zero cache uyumluluğu daha sonraya bırakılır.
 
 ## Rationale
 

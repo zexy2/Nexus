@@ -37,7 +37,7 @@ export default function PrivacyPolicyPage() {
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 my-6">
             <p className="text-sm font-medium">
               🔒 Nexus is built with a local-first architecture. This means your data 
-              is stored primarily on your device and you maintain control over it.
+              is stored in the application database for authenticated workspace features, with limited local caching for responsiveness.
             </p>
           </div>
 
@@ -53,15 +53,15 @@ export default function PrivacyPolicyPage() {
           </section>
 
           <section className="space-y-4">
-            <h2 className="text-2xl font-semibold">2. Local-First Data Storage</h2>
+            <h2 className="text-2xl font-semibold">2. Data Storage and Sync</h2>
             <p>
-              Nexus uses a local-first architecture powered by Zero Sync. This means:
+              Nexus v1 uses server-backed workspace storage with local cache and queued sync behavior. This means:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>Your documents and data are stored primarily on your device</li>
-              <li>Data syncs to our servers only when you&apos;re online</li>
-              <li>You can work offline with full functionality</li>
-              <li>You have immediate access to your data without network latency</li>
+              <li>Documents, tasks, requirements, workflow runs, and audit events are stored on the server database</li>
+              <li>Some client-side data may be cached locally for faster navigation or offline queue behavior</li>
+              <li>AI features require server connectivity and configured provider keys</li>
+              <li>Production Zero cache support is deferred and is not currently claimed as a full offline sync guarantee</li>
             </ul>
           </section>
 

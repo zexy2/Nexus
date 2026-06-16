@@ -17,9 +17,23 @@ vi.mock("@/lib/auth", () => ({
 
 const findMany = vi.fn();
 const insertReturning = vi.fn();
+let selectResults: unknown[] = [];
+let selectIndex = 0;
+
+function selectChain() {
+  const b: Record<string, unknown> = {};
+  for (const m of ["from", "innerJoin", "leftJoin", "where", "orderBy", "limit"]) {
+    b[m] = () => b;
+  }
+  b.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) =>
+    Promise.resolve(selectResults[selectIndex++] ?? []).then(res, rej);
+  return b;
+}
+
 vi.mock("@/lib/db", () => ({
   db: {
     query: { tasks: { findMany: (...a: unknown[]) => findMany(...a) } },
+    select: () => selectChain(),
     insert: () => ({
       values: () => ({ returning: (...a: unknown[]) => insertReturning(...a) }),
     }),
@@ -58,6 +72,8 @@ function postRequest(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  selectResults = [];
+  selectIndex = 0;
   writeAuditLog.mockResolvedValue(undefined);
 });
 

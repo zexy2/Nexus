@@ -2,8 +2,9 @@ import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
 import { docs, workspaces } from "@nexus/database/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { writeAuditLog } from "@/lib/production-guardrails";
+import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 
 // GET - List all documents
 export async function GET() {
@@ -14,18 +15,13 @@ export async function GET() {
     }
     const userId = session.user.id;
 
-    // Get user's workspace
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, userId),
-    });
-
-    if (!workspace) {
+    const workspaceIds = await getAccessibleWorkspaceIds(userId);
+    if (workspaceIds.length === 0) {
       return Response.json([], { status: 200 });
     }
 
-    // Get all non-archived documents
     const documents = await db.query.docs.findMany({
-      where: and(eq(docs.workspaceId, workspace.id), eq(docs.isArchived, 0)),
+      where: and(inArray(docs.workspaceId, workspaceIds), eq(docs.isArchived, 0)),
       orderBy: [desc(docs.updatedAt)],
     });
 

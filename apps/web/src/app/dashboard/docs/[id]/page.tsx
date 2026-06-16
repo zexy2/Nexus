@@ -31,6 +31,9 @@ import {
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { PartialBlock } from "@blocknote/core";
+import { LivingPlanInspector } from "./_components/living-plan-inspector";
+import { useT, useLocale } from "@/lib/i18n/provider";
+import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 
 // BlockNote content type alias
 type BlockNoteContent = PartialBlock[];
@@ -91,6 +94,8 @@ function extractCreatedTasks(result: unknown): Array<{ id?: string; title?: stri
 }
 
 export default function DocDetailPage() {
+  const t = useT();
+  const { locale } = useLocale();
   const params = useParams();
   const router = useRouter();
   const { data: session } = useSession();
@@ -105,6 +110,14 @@ export default function DocDetailPage() {
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
   const [collaborativeMode, setCollaborativeMode] = useState(false);
   const editorContentRef = useRef<BlockNoteContent>([]);
+  const displayTitle = localizeGeneratedCopy(
+    title === "Generated Document" ? t("docs.detail.generatedTitle") : title,
+    locale
+  );
+  const savedTime = lastSaved?.toLocaleTimeString(locale === "tr" ? "tr-TR" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   // Fetch document from API
   useEffect(() => {
@@ -118,7 +131,7 @@ export default function DocDetailPage() {
         setDoc(data);
         setTitle(data.title);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load document");
+        setError(err instanceof Error ? err.message : t("docs.detail.loadFailed"));
       } finally {
         setIsLoading(false);
       }
@@ -127,7 +140,7 @@ export default function DocDetailPage() {
     if (params.id) {
       fetchDoc();
     }
-  }, [params.id]);
+  }, [params.id, t]);
 
   useEffect(() => {
     if (!taskWorkflow || taskWorkflow.status !== "running") return;
@@ -158,7 +171,7 @@ export default function DocDetailPage() {
             workflowId,
             executionId,
             status: "failed",
-            error: data.error || "Task workflow failed",
+            error: data.error || t("docs.detail.taskWorkflowFailed"),
           });
           setAiLoading(null);
         }
@@ -174,7 +187,7 @@ export default function DocDetailPage() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [taskWorkflow]);
+  }, [taskWorkflow, t]);
 
   const handleContentChange = async (content: BlockNoteContent) => {
     if (!doc) return;
@@ -214,7 +227,7 @@ export default function DocDetailPage() {
     const textContent = extractTextFromContent(currentContent);
     
     if (!textContent.trim()) {
-      alert("Doküman içeriği boş. Lütfen önce içerik ekleyin.");
+      alert(t("docs.detail.emptyContent"));
       return;
     }
 
@@ -247,7 +260,7 @@ export default function DocDetailPage() {
           break;
         case "tasks":
           if (!doc?.workspaceId) {
-            throw new Error("Workspace not found for this document");
+            throw new Error(t("docs.detail.workspaceMissing"));
           }
 
           const workflowResponse = await fetch("/api/workflows", {
@@ -259,14 +272,17 @@ export default function DocDetailPage() {
               input: {
                 workspaceId: doc.workspaceId,
                 docId: doc.id,
-                projectDescription: `Create actionable tasks from this document titled "${title}":\n\n${textContent}`,
+                projectDescription:
+                  locale === "tr"
+                    ? `"${displayTitle}" başlıklı bu plandan uygulanabilir görevler çıkar:\n\n${textContent}`
+                    : `Create actionable tasks from this plan titled "${displayTitle}":\n\n${textContent}`,
               },
             }),
           });
 
           if (!workflowResponse.ok) {
             const errorBody = await workflowResponse.json().catch(() => null);
-            throw new Error(errorBody?.message || errorBody?.error || "Task workflow failed to start");
+            throw new Error(errorBody?.message || errorBody?.error || t("docs.detail.taskWorkflowStartFailed"));
           }
 
           const workflow = await workflowResponse.json();
@@ -287,7 +303,7 @@ export default function DocDetailPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("AI request failed");
+      if (!response.ok) throw new Error(t("docs.detail.aiRequestFailed"));
 
       const rawResult = await response.text();
 
@@ -330,7 +346,7 @@ export default function DocDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          title: `${actionNames[action]}: ${title}`,
+          title: `${actionNames[action]}: ${displayTitle}`,
           content: blockNoteContent 
         }),
       });
@@ -344,7 +360,7 @@ export default function DocDetailPage() {
       }
     } catch (err) {
       console.error("AI action failed:", err);
-      alert("AI işlemi başarısız oldu. Lütfen tekrar deneyin.");
+      alert(t("docs.detail.aiActionFailed"));
       if (action === "tasks") {
         setTaskWorkflow(null);
       }
@@ -375,7 +391,7 @@ export default function DocDetailPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this document?")) return;
+    if (!confirm(t("docs.detail.deleteConfirm"))) return;
     
     try {
       await fetch(`/api/docs/${params.id}`, { method: "DELETE" });
@@ -388,14 +404,14 @@ export default function DocDetailPage() {
   const handleShare = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
-      alert("Link panoya kopyalandı!");
+      alert(t("docs.detail.shareCopied"));
     } catch (err) {
       console.error("Failed to copy:", err);
     }
   };
 
   const handleFavorite = () => {
-    alert("Favorilere eklendi! ⭐");
+    alert(t("docs.detail.favoriteAdded"));
   };
 
   const handleDuplicate = async () => {
@@ -406,7 +422,7 @@ export default function DocDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          title: `${title} (Kopya)`,
+          title: `${displayTitle} (Kopya)`,
           content: doc.content || []
         }),
       });
@@ -432,16 +448,15 @@ export default function DocDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-3 px-6 text-center">
         <FileText className="size-16 text-muted-foreground/60" />
-        <h2 className="text-xl font-semibold">Document not found</h2>
+        <h2 className="text-xl font-semibold">{t("docs.detail.notFoundTitle")}</h2>
         <p className="text-muted-foreground max-w-sm">
-          This document may have been deleted or moved, or the link is no longer
-          valid.
+          {t("docs.detail.notFoundDesc")}
         </p>
         {error && error !== "Document not found" && (
           <p className="text-xs text-muted-foreground/70 max-w-sm">{error}</p>
         )}
         <Link href="/dashboard/docs" className="mt-2">
-          <Button>Back to Documents</Button>
+          <Button>{t("docs.detail.backToDocs")}</Button>
         </Link>
       </div>
     );
@@ -460,10 +475,10 @@ export default function DocDetailPage() {
         <div className="flex-1 flex items-center gap-3">
           <span className="text-2xl">{doc.iconEmoji || "📄"}</span>
           <Input
-            value={title}
+            value={displayTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
             className="text-lg font-semibold border-none shadow-none focus-visible:ring-0 px-0 h-auto"
-            placeholder="Untitled"
+            placeholder={t("docs.detail.untitled")}
           />
         </div>
 
@@ -473,12 +488,12 @@ export default function DocDetailPage() {
             {isSaving ? (
               <>
                 <Loader2 className="size-3 animate-spin" />
-                <span>Saving...</span>
+                <span>{t("docs.detail.saving")}</span>
               </>
             ) : lastSaved ? (
               <>
                 <Clock className="size-3" />
-                <span>Saved {lastSaved.toLocaleTimeString()}</span>
+                <span>{t("docs.detail.saved")} {savedTime}</span>
               </>
             ) : null}
           </div>
@@ -486,23 +501,23 @@ export default function DocDetailPage() {
           {doc.createdBy && (
             <Badge variant="secondary" className="gap-1">
               <Sparkles className="size-3" />
-              AI Generated
+              {t("docs.detail.aiGenerated")}
             </Badge>
           )}
 
           <Button variant="outline" size="sm" className="gap-1" onClick={handleShare}>
             <Share2 className="size-3" />
-            Share
+            {t("docs.detail.share")}
           </Button>
 
           {/* Collaboration Toggle */}
           <div className="flex items-center gap-2 px-2 border-l ml-2">
             <Users className="size-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Collab</span>
+            <span className="text-sm text-muted-foreground">{t("docs.detail.collab")}</span>
             <Switch
               checked={collaborativeMode}
               onCheckedChange={setCollaborativeMode}
-              aria-label="Toggle collaborative editing"
+              aria-label={t("docs.detail.toggleCollab")}
             />
           </div>
 
@@ -515,52 +530,55 @@ export default function DocDetailPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleFavorite}>
                 <Star className="size-4 mr-2" />
-                Add to favorites
+                {t("docs.detail.addFavorite")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDuplicate}>
                 <Copy className="size-4 mr-2" />
-                Duplicate
+                {t("docs.detail.duplicate")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
                 <Trash2 className="size-4 mr-2" />
-                Delete
+                {t("docs.detail.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
 
-      {/* Editor */}
+      {/* Plan editor and traceability inspector */}
       <div className="flex-1 overflow-auto">
-        <div className="max-w-4xl mx-auto py-8 px-6">
-          {collaborativeMode && session?.user ? (
-            <CollaborativeEditorWrapper
-              key={`collab-${doc.id}`}
-              documentId={doc.id}
-              userId={session.user.id}
-              userName={session.user.name || session.user.email?.split('@')[0] || 'Anonymous'}
-              initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
-              onChange={handleContentChange}
-              editable={true}
-            />
-          ) : (
-            <EditorWrapper
-              key={`editor-${doc.id}-${collaborativeMode}`}
-              initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
-              onChange={handleContentChange}
-              editable={true}
-            />
-          )}
+        <div className="grid min-h-full w-full lg:grid-cols-[minmax(0,1fr)_minmax(440px,28vw)] 2xl:grid-cols-[minmax(0,1fr)_minmax(520px,30vw)]">
+          <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10 xl:px-14">
+            {collaborativeMode && session?.user ? (
+              <CollaborativeEditorWrapper
+                key={`collab-${doc.id}`}
+                documentId={doc.id}
+                userId={session.user.id}
+                userName={session.user.name || session.user.email?.split('@')[0] || t("docs.detail.anonymous")}
+                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                onChange={handleContentChange}
+                editable={true}
+              />
+            ) : (
+              <EditorWrapper
+                key={`editor-${doc.id}-${collaborativeMode}`}
+                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                onChange={handleContentChange}
+                editable={true}
+              />
+            )}
+          </div>
+          <LivingPlanInspector docId={doc.id} savePending={isSaving} />
         </div>
       </div>
 
       {/* AI Assistant Bar */}
       <div className="border-t px-6 py-3 bg-muted/30">
-        <div className="max-w-4xl mx-auto flex items-center gap-3">
+        <div className="max-w-[1420px] mx-auto flex items-center gap-3">
           <Sparkles className="size-4 text-primary" />
           <span className="text-sm text-muted-foreground">
-            AI Assistant:
+            {t("docs.detail.aiAssistant")}:
           </span>
           <div className="flex-1 flex gap-2">
             <Button 
@@ -570,11 +588,11 @@ export default function DocDetailPage() {
               disabled={aiLoading !== null}
             >
               {aiLoading === "summarize" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> Özetleniyor...</>
+                <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.summarizing")}</>
               ) : aiSuccess === "summarize" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> Özet oluşturuldu!</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.summarizeDone")}</>
               ) : (
-                "Özetle"
+                t("docs.detail.summarize")
               )}
             </Button>
             <Button 
@@ -584,11 +602,11 @@ export default function DocDetailPage() {
               disabled={aiLoading !== null}
             >
               {aiLoading === "expand" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> Genişletiliyor...</>
+                <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.expanding")}</>
               ) : aiSuccess === "expand" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> Genişletildi!</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.expandDone")}</>
               ) : (
-                "Genişlet"
+                t("docs.detail.expand")
               )}
             </Button>
             <Button 
@@ -598,52 +616,15 @@ export default function DocDetailPage() {
               disabled={aiLoading !== null}
             >
               {aiLoading === "improve" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> İyileştiriliyor...</>
+                <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.improving")}</>
               ) : aiSuccess === "improve" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> İyileştirildi!</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.improveDone")}</>
               ) : (
-                "Yazımı İyileştir"
-              )}
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => handleAiAction("tasks")}
-              disabled={aiLoading !== null}
-            >
-              {taskWorkflow?.status === "running" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> Workflow çalışıyor...</>
-              ) : taskWorkflow?.status === "completed" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {taskWorkflow.taskCount || 0} görev oluşturuldu</>
-              ) : aiLoading === "tasks" ? (
-                <><Loader2 className="size-3 animate-spin mr-1" /> Başlatılıyor...</>
-              ) : aiSuccess === "tasks" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> Görevler hazır</>
-              ) : (
-                "Görev Çıkar"
+                t("docs.detail.improve")
               )}
             </Button>
           </div>
         </div>
-        {taskWorkflow && (
-          <div className="max-w-4xl mx-auto mt-2 text-xs">
-            {taskWorkflow.status === "running" && (
-              <span className="text-muted-foreground">
-                Task breakdown workflow running. Execution: {taskWorkflow.executionId}
-              </span>
-            )}
-            {taskWorkflow.status === "completed" && (
-              <Link href="/dashboard/tasks" className="text-primary hover:underline">
-                {taskWorkflow.taskCount || 0} task created. Open Kanban.
-              </Link>
-            )}
-            {taskWorkflow.status === "failed" && (
-              <span className="text-destructive">
-                Task workflow failed: {taskWorkflow.error || "Unknown error"}
-              </span>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

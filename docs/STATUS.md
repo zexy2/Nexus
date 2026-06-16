@@ -22,7 +22,7 @@
 
 ## Architecture Decisions
 
-See [ADR documentation](adr/) for detailed architectural decisions:
+See [ADR documentation](adr/) for detailed architectural decisions. ADR-001 is historical context; the current v1 demo uses API-backed sync/offline queue behavior while production Zero cache remains deferred.
 
 - [001 - Local-First Architecture](adr/001-local-first-architecture.md)
 - [002 - Multi-Agent System](adr/002-multi-agent-langgraph.md)

@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import {
+  aiUnavailableResponse,
+  enforceAiBudget,
+  getAiProviderStatus,
+  writeAuditLog,
+} from "@/lib/production-guardrails";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { agentExecutions } from "@nexus/database/schema";
 
 export const runtime = "nodejs";
-
-// In-memory store for command status (in production, use Redis or database)
-const commandStatusStore = new Map<string, {
-  status: "processing" | "completed" | "failed";
-  result?: {
-    agentsUsed: string[];
-    documentsCreated: string[];
-    tasksCreated: string[];
-    output: string;
-    duration: number;
-  };
-  error?: string;
-  startedAt: number;
-}>();
 
 interface AgentCommandResult {
   output?: string;
@@ -30,42 +25,149 @@ interface SupervisorCommandResult {
   agentResults?: Record<string, AgentCommandResult>;
 }
 
+type CommandExecutionOutput = {
+  agentsUsed: string[];
+  documentsCreated: string[];
+  tasksCreated: string[];
+  output: string;
+  duration: number;
+};
+
+function commandStatusWhere(commandId: string, userId: string) {
+  return and(
+    sql`${agentExecutions.input}->>'commandId' = ${commandId}`,
+    sql`${agentExecutions.input}->>'userId' = ${userId}`
+  );
+}
+
+function toWireStatus(status: string): "processing" | "completed" | "failed" {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  return "processing";
+}
+
 /**
  * POST /api/commands/process
- * Process a natural language command via Supervisor Agent
+ * Process a natural language command via the Supervisor Agent.
  */
 export async function POST(request: NextRequest) {
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.commands,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const providerStatus = getAiProviderStatus();
+  if (!providerStatus.geminiAvailable) {
+    return aiUnavailableResponse("Command processing requires Gemini to be configured on this server.");
+  }
+
+  const aiBudget = await enforceAiBudget({
+    userId: protection.user.id,
+    email: protection.user.email,
+    kind: "chat",
+  });
+  if (!aiBudget.ok) return aiBudget.response;
+
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
-    const { commandId, command, workspaceId, priority, metadata } = body;
+    const {
+      commandId,
+      command,
+      workspaceId,
+      priority = "normal",
+      metadata = {},
+    } = body as {
+      commandId?: unknown;
+      command?: unknown;
+      workspaceId?: unknown;
+      priority?: unknown;
+      metadata?: unknown;
+    };
 
-    if (!commandId || !command) {
+    if (typeof commandId !== "string" || typeof command !== "string" || !command.trim()) {
       return NextResponse.json(
         { error: "commandId and command are required" },
         { status: 400 }
       );
     }
 
-    // Store initial status
-    commandStatusStore.set(commandId, {
-      status: "processing",
-      startedAt: Date.now(),
+    const access = await requireWorkspaceAccess(
+      protection.user.id,
+      typeof workspaceId === "string" ? workspaceId : undefined
+    );
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
+    const existing = await db
+      .select()
+      .from(agentExecutions)
+      .where(commandStatusWhere(commandId, protection.user.id))
+      .orderBy(desc(agentExecutions.createdAt))
+      .limit(1);
+
+    if (existing[0]?.status === "running" || existing[0]?.status === "pending") {
+      return NextResponse.json({
+        success: true,
+        commandId,
+        executionId: existing[0].id,
+        status: toWireStatus(existing[0].status),
+        message: "Command processing already started",
+      });
+    }
+
+    const [execution] = await db
+      .insert(agentExecutions)
+      .values({
+        workspaceId: access.workspaceId,
+        agentType: "supervisor",
+        status: "running",
+        input: {
+          commandId,
+          command,
+          userId: protection.user.id,
+          priority,
+          metadata,
+        },
+        temporalWorkflowId: `cmd-${commandId}`.slice(0, 255),
+        startedAt: new Date(),
+      })
+      .returning();
+
+    if (!execution) {
+      return NextResponse.json(
+        { error: "Failed to create command execution" },
+        { status: 500 }
+      );
+    }
+
+    await writeAuditLog({
+      userId: protection.user.id,
+      workspaceId: access.workspaceId,
+      event: "command.start",
+      request,
+      metadata: { commandId, executionId: execution.id },
     });
 
-    // Process command asynchronously
-    processCommandAsync(commandId, command, workspaceId, session.user.id, priority, metadata);
-
-    return NextResponse.json({ 
-      success: true, 
+    void processCommandAsync({
+      executionId: execution.id,
       commandId,
-      message: "Command processing started" 
+      command,
+      workspaceId: access.workspaceId,
+      userId: protection.user.id,
     });
 
+    return NextResponse.json({
+      success: true,
+      commandId,
+      executionId: execution.id,
+      status: "processing",
+      message: "Command processing started",
+    });
   } catch (error) {
     console.error("Command process error:", error);
     return NextResponse.json(
@@ -77,15 +179,19 @@ export async function POST(request: NextRequest) {
 
 /**
  * GET /api/commands/status?id=xxx
- * Get status of a command
+ * Get status of a command owned by the authenticated user.
  */
 export async function GET(request: NextRequest) {
-  try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+  const protection = await protectRoute(request, {
+    requireAuth: true,
+    rateLimit: RATE_LIMITS.commands,
+  });
+  if (!protection.success) return protection.response;
+  if (!protection.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
+  try {
     const { searchParams } = new URL(request.url);
     const commandId = searchParams.get("id");
 
@@ -96,17 +202,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const status = commandStatusStore.get(commandId);
-    
-    if (!status) {
+    const [execution] = await db
+      .select()
+      .from(agentExecutions)
+      .where(commandStatusWhere(commandId, protection.user.id))
+      .orderBy(desc(agentExecutions.createdAt))
+      .limit(1);
+
+    if (!execution) {
       return NextResponse.json(
         { error: "Command not found" },
         { status: 404 }
       );
     }
 
-    return NextResponse.json(status);
-
+    return NextResponse.json({
+      status: toWireStatus(execution.status),
+      result: execution.output,
+      error: execution.errorMessage || undefined,
+      startedAt: execution.startedAt?.getTime() ?? execution.createdAt.getTime(),
+      executionId: execution.id,
+    });
   } catch (error) {
     console.error("Command status error:", error);
     return NextResponse.json(
@@ -116,141 +232,107 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Process command asynchronously using LangGraph Supervisor
- */
-async function processCommandAsync(
-  commandId: string,
-  command: string,
-  workspaceId: string,
-  userId: string,
-  priority?: string,
-  metadata?: Record<string, unknown>
-) {
+async function processCommandAsync(input: {
+  executionId: string;
+  commandId: string;
+  command: string;
+  workspaceId: string;
+  userId: string;
+}) {
   const startTime = Date.now();
-  
+
   try {
-    console.log(`🚀 Processing command ${commandId}: "${command.substring(0, 50)}..."`);
-
-    // Dynamically import LangGraph components
-    let createSupervisor: typeof import("@nexus/agents").createSupervisor | null = null;
-    let HumanMessage: typeof import("@langchain/core/messages").HumanMessage | null = null;
-    
-    try {
-      const agentsModule = await import("@nexus/agents");
-      const messagesModule = await import("@langchain/core/messages");
-      createSupervisor = agentsModule.createSupervisor;
-      HumanMessage = messagesModule.HumanMessage;
-    } catch (e) {
-      console.warn("LangGraph not available, using fallback:", e);
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
-    // Initialize result tracking
-    const documentsCreated: string[] = [];
-    const tasksCreated: string[] = [];
-    let output = "";
-    let agentsUsed: string[] = [];
+    const agentsModule = await import("@nexus/agents");
+    const messagesModule = await import("@langchain/core/messages");
 
-    if (createSupervisor && HumanMessage && process.env.GEMINI_API_KEY) {
-      // Use LangGraph Supervisor
-      const supervisor = createSupervisor({
-        provider: "gemini",
-        model: "gemini-2.5-flash",
-        apiKey: process.env.GEMINI_API_KEY,
-      });
-
-      const initialState = {
-        messages: [new HumanMessage(command)],
-        currentAgent: null,
-        agentResults: {},
-        plan: [],
-        completed: [],
-        context: {
-          workspaceId,
-          userId,
-          sessionId: `cmd-${commandId}`,
-        },
-        finalOutput: undefined,
-      };
-
-      const result = await supervisor.invoke(initialState) as SupervisorCommandResult;
-      
-      agentsUsed = result.completed || [];
-      output = result.finalOutput || 
-        Object.values(result.agentResults || {})
-          .map((r) => r.output)
-          .join("\n\n") ||
-        "Command processed successfully.";
-
-      // Check if documents or tasks were created
-      if (result.agentResults) {
-        for (const agentResult of Object.values(result.agentResults)) {
-          const res = agentResult;
-          if (res.documentId) documentsCreated.push(res.documentId);
-          if (res.taskIds) tasksCreated.push(...res.taskIds);
-        }
-      }
-
-    } else {
-      // Fallback: Use simple Gemini call
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `Process this command and provide a helpful response: "${command}"` }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 2048,
-            },
-          }),
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        output = data.candidates?.[0]?.content?.parts?.[0]?.text || "Command processed.";
-        agentsUsed = ["gemini-direct"];
-      } else {
-        throw new Error("Gemini API error");
-      }
-    }
-
-    const duration = Date.now() - startTime;
-
-    // Update status to completed
-    commandStatusStore.set(commandId, {
-      status: "completed",
-      result: {
-        agentsUsed,
-        documentsCreated,
-        tasksCreated,
-        output,
-        duration,
-      },
-      startedAt: startTime,
+    const supervisor = agentsModule.createSupervisor({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      apiKey,
     });
 
-    console.log(`✅ Command ${commandId} completed in ${duration}ms. Agents: ${agentsUsed.join(", ")}`);
+    const initialState = {
+      messages: [new messagesModule.HumanMessage(input.command)],
+      currentAgent: null,
+      agentResults: {},
+      plan: [],
+      completed: [],
+      context: {
+        workspaceId: input.workspaceId,
+        userId: input.userId,
+        sessionId: `cmd-${input.commandId}`,
+      },
+      finalOutput: undefined,
+    };
 
-    // Cleanup old entries after 1 hour
-    setTimeout(() => {
-      commandStatusStore.delete(commandId);
-    }, 3600000);
+    const result = await supervisor.invoke(initialState) as SupervisorCommandResult;
+    const documentsCreated: string[] = [];
+    const tasksCreated: string[] = [];
 
+    if (result.agentResults) {
+      for (const agentResult of Object.values(result.agentResults)) {
+        if (agentResult.documentId) documentsCreated.push(agentResult.documentId);
+        if (agentResult.taskIds) tasksCreated.push(...agentResult.taskIds);
+      }
+    }
+
+    const output: CommandExecutionOutput = {
+      agentsUsed: result.completed || [],
+      documentsCreated,
+      tasksCreated,
+      output:
+        result.finalOutput ||
+        Object.values(result.agentResults || {})
+          .map((agentResult) => agentResult.output)
+          .filter(Boolean)
+          .join("\n\n") ||
+        "Command processed successfully.",
+      duration: Date.now() - startTime,
+    };
+
+    await db
+      .update(agentExecutions)
+      .set({
+        status: "completed",
+        output: output as Record<string, unknown>,
+        completedAt: new Date(),
+      })
+      .where(eq(agentExecutions.id, input.executionId));
+
+    await writeAuditLog({
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      event: "command.complete",
+      metadata: { commandId: input.commandId, executionId: input.executionId },
+    });
   } catch (error) {
-    console.error(`❌ Command ${commandId} failed:`, error);
-    
-    commandStatusStore.set(commandId, {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Command ${input.commandId} failed:`, error);
+
+    await db
+      .update(agentExecutions)
+      .set({
+        status: "failed",
+        errorMessage: message,
+        completedAt: new Date(),
+      })
+      .where(eq(agentExecutions.id, input.executionId));
+
+    await writeAuditLog({
+      userId: input.userId,
+      workspaceId: input.workspaceId,
+      event: "command.fail",
       status: "failed",
-      error: error instanceof Error ? error.message : "Unknown error",
-      startedAt: startTime,
+      metadata: {
+        commandId: input.commandId,
+        executionId: input.executionId,
+        error: message,
+      },
     });
   }
 }

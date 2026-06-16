@@ -121,6 +121,31 @@ describe("POST /api/workflows (real handler)", () => {
     expect(insertReturning).toHaveBeenCalled();
   });
 
+  it("starts a plan impact workflow for a living plan review", async () => {
+    startWorkflow.mockResolvedValue({ workflowId: "plan_impact-abc", runId: "run-2", status: "RUNNING" });
+
+    const res = await POST(wfReq({
+      workflowType: "plan_impact",
+      input: { docId: "doc-1" },
+      workspaceId: "ws-1",
+    }));
+
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body).toMatchObject({ executionId: "exec-1", status: "running" });
+    expect(startWorkflow).toHaveBeenCalledWith(
+      "planImpactWorkflow",
+      expect.objectContaining({ workspaceId: "ws-1", userId: "user-1", docId: "doc-1" }),
+      expect.objectContaining({ taskQueue: "nexus-agents" })
+    );
+  });
+
+  it("requires a doc id for plan impact workflows", async () => {
+    const res = await POST(wfReq({ workflowType: "plan_impact", input: { prompt: "x" } }));
+    expect(res.status).toBe(400);
+    expect(startWorkflow).not.toHaveBeenCalled();
+  });
+
   it("marks the execution failed and returns 503 when the workflow fails to start", async () => {
     startWorkflow.mockRejectedValue(new Error("temporal down"));
     const res = await POST(wfReq({ workflowType: "document", input: { prompt: "x" } }));

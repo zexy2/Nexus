@@ -4,14 +4,11 @@ import { useState, useEffect, type ReactNode } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import CountUp from 'react-countup';
 import {
   FileText,
   ListTodo,
-  Bot,
   Sparkles,
   ArrowRight,
-  TrendingUp,
   Plus,
   MessageSquare,
   CheckCircle2,
@@ -28,13 +25,6 @@ import { formatRelativeDate } from '@/lib/format';
 import { cleanDocTitle } from '@/lib/text';
 import { useT, useLocale } from '@/lib/i18n/provider';
 import { useUIStore } from '@/lib/store';
-import {
-  BentoGrid,
-  BentoCard,
-  ScrollReveal,
-  HoverTilt,
-  MagneticButton,
-} from '@/components/animations';
 
 // Types
 interface Document {
@@ -68,6 +58,12 @@ interface Execution {
   createdAt: number;
 }
 
+interface TaskStats {
+  total: number;
+  done: number;
+  inProgress: number;
+}
+
 // Format relative time — delegates to the shared, locale-aware formatter so the
 // dashboard reads the same as the rest of the app (no more English "6d ago"
 // mixed into a Turkish UI).
@@ -83,16 +79,6 @@ function getGreeting() {
   return 'Evening';
 }
 
-// Animated number component
-function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string }) {
-  return (
-    <span className="tabular-nums">
-      <CountUp end={value} duration={2.5} />
-      {suffix}
-    </span>
-  );
-}
-
 // Agent card with premium styling
 function AgentCard({ agent, index }: { agent: Agent; index: number }) {
   const t = useT();
@@ -104,8 +90,8 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
       className={cn(
-        'group relative p-5 rounded-2xl transition-all duration-200',
-        'bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20',
+        'group relative border-b border-white/10 px-0 py-4 transition-colors',
+        'hover:bg-white/[0.02]',
         isActive && 'ring-1 ring-white/20'
       )}
     >
@@ -168,7 +154,7 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: index * 0.05 }}
         whileHover={{ x: 4 }}
-        className="group flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 transition-all duration-300"
+        className="group flex items-center gap-4 border-b border-white/10 py-4 transition-all duration-300 hover:bg-white/[0.02]"
       >
         <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
           <FileText className="h-4 w-4 text-white/70" />
@@ -201,8 +187,8 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
       className={cn(
-        'group flex items-center gap-3 p-4 rounded-xl transition-all duration-300',
-        checked ? 'opacity-50 bg-transparent' : 'bg-white/5 hover:bg-white/10'
+        'group flex items-center gap-3 border-b border-white/10 py-4 transition-all duration-300',
+        checked ? 'opacity-50 bg-transparent' : 'hover:bg-white/[0.02]'
       )}
     >
       <motion.button
@@ -235,6 +221,7 @@ export default function DashboardPage() {
   const { locale } = useLocale();
   const [docs, setDocs] = useState<Document[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [taskStats, setTaskStats] = useState<TaskStats>({ total: 0, done: 0, inProgress: 0 });
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { openModal } = useUIStore();
@@ -258,8 +245,14 @@ export default function DashboardPage() {
 
         if (tasksRes.ok) {
           const tasksData = await tasksRes.json();
+          const allTasks = Array.isArray(tasksData) ? tasksData as Task[] : [];
+          setTaskStats({
+            total: allTasks.length,
+            done: allTasks.filter((task) => task.status === 'done').length,
+            inProgress: allTasks.filter((task) => task.status === 'in_progress').length,
+          });
           const priorityOrder: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-          const sortedTasks = tasksData
+          const sortedTasks = allTasks
             .filter((t: Task) => t.status !== 'done')
             .sort((a: Task, b: Task) => (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2))
             .slice(0, 5);
@@ -269,11 +262,11 @@ export default function DashboardPage() {
         if (executionsRes.ok) {
           const executions = await executionsRes.json() as Execution[];
           const agentMeta: Record<Execution['agentType'], { name: string; icon: LucideIcon }> = {
-            supervisor: { name: 'Supervisor', icon: BrainCircuit },
-            researcher: { name: 'Researcher', icon: Search },
-            writer: { name: 'Writer', icon: FileText },
-            coder: { name: 'Coder', icon: Code },
-            project_manager: { name: 'Task Manager', icon: Kanban },
+            supervisor: { name: t('dashboard.agentPlanImpact'), icon: BrainCircuit },
+            researcher: { name: t('dashboard.agentResearchRun'), icon: Search },
+            writer: { name: t('dashboard.agentPlanWriter'), icon: FileText },
+            coder: { name: t('dashboard.agentCodeRun'), icon: Code },
+            project_manager: { name: t('dashboard.agentTaskAlignment'), icon: Kanban },
           };
           const latestByAgent = new Map<Execution['agentType'], Execution>();
 
@@ -310,7 +303,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [t]);
 
   if (isLoading) {
     return (
@@ -321,237 +314,173 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative min-h-screen pb-32">
-      {/* Hero Section */}
-      <section className="relative flex flex-col items-center justify-center text-center px-6 pt-12 pb-12">
-        {/* Background gradient */}
-        <div className="absolute inset-0 dashboard-hero-gradient pointer-events-none" />
-
-        <div className="relative z-10 text-center max-w-4xl mx-auto">
-          {/* Greeting */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-          >
-            <span className="text-label text-muted-foreground mb-4 block">
-              {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </span>
-          </motion.div>
-
-          {/* Title */}
-          <motion.h1
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.1 }}
-            className="text-5xl font-bold tracking-tight md:text-7xl mb-4"
-          >
+    <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+        <div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-white/35">
+            <CheckCircle2 className="size-4" />
+            {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+          </div>
+          <h1 className="text-3xl font-semibold text-white md:text-4xl">
             {t(`dashboard.greeting${getGreeting()}`)}
-          </motion.h1>
-
-          {/* Description */}
-          <motion.p
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="text-body-lg text-muted-foreground max-w-2xl mx-auto mb-8"
-          >
-            {activeAgents}/{totalAgents} {t('dashboard.agentsStatus')}
-          </motion.p>
-
-          {/* Quick actions */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-            className="flex items-center justify-center gap-4 flex-wrap"
-          >
-            <MagneticButton>
-              <Button
-                size="lg"
-                onClick={() => openModal('createDocument')}
-                className="rounded-lg px-8 gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                {t('dashboard.newDocument')}
-              </Button>
-            </MagneticButton>
-
-            <MagneticButton>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => openModal('aiAssistant')}
-                className="rounded-lg px-8 gap-2 glass-premium border-white/20"
-              >
-                <Sparkles className="h-4 w-4" />
-                {t('dashboard.askAi')}
-              </Button>
-            </MagneticButton>
-          </motion.div>
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+            {t('dashboard.description')}
+          </p>
         </div>
 
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => openModal('createDocument')} className="gap-2">
+            <Plus className="h-4 w-4" />
+            {t('dashboard.newDocument')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => openModal('aiAssistant')}
+            className="gap-2"
+          >
+            <Sparkles className="h-4 w-4" />
+            {t('dashboard.askAi')}
+          </Button>
+        </div>
+      </header>
+
+      <section className="mb-8 grid grid-cols-2 gap-px border-y border-white/10 bg-white/10 lg:grid-cols-4">
+        {([
+          { label: t('dashboard.statTasksCompleted'), value: taskStats.done, icon: <CheckCircle2 className="h-4 w-4" /> },
+          { label: t('dashboard.statDocuments'), value: docs.length, icon: <FileText className="h-4 w-4" /> },
+          { label: t('dashboard.statAiInteractions'), value: agents.filter((agent) => agent.description !== t('dashboard.noRecentExecutions')).length, icon: <MessageSquare className="h-4 w-4" /> },
+          { label: t('dashboard.statActiveAgents'), value: `${activeAgents}/${totalAgents}`, icon: <ListTodo className="h-4 w-4" /> },
+        ] as Array<{ label: string; value: number | string; icon: ReactNode }>).map((stat) => (
+          <div key={stat.label} className="bg-background px-4 py-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <span className="text-xs text-white/40">{stat.label}</span>
+              <span className="text-white/45">{stat.icon}</span>
+            </div>
+            <div className="text-3xl font-semibold tabular-nums text-white">{stat.value}</div>
+          </div>
+        ))}
       </section>
 
-      {/* Stats Section */}
-      <ScrollReveal>
-        <section className="px-6 md:px-12 lg:px-24 mb-16">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-            {/* Stats Cards */}
-            {([
-              { label: t('dashboard.statTasksCompleted'), value: tasks.filter((task) => task.status === 'done').length, icon: <CheckCircle2 className="h-5 w-5" /> },
-              { label: t('dashboard.statDocuments'), value: docs.length, icon: <FileText className="h-5 w-5" /> },
-              { label: t('dashboard.statAiInteractions'), value: agents.filter((agent) => agent.description !== t('dashboard.noRecentExecutions')).length, icon: <MessageSquare className="h-5 w-5" /> },
-              { label: t('dashboard.statActiveAgents'), value: activeAgents, suffix: `/${totalAgents}`, icon: <Bot className="h-5 w-5" /> },
-            ] as Array<{ label: string; value: number; trend?: string; suffix?: string; icon: ReactNode }>).map((stat, index) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <HoverTilt tiltAmount={5}>
-                  <div className="relative p-6 rounded-2xl bg-card border border-white/10 hover:border-white/20 transition-colors">
-                    <div className="relative">
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-caption text-muted-foreground">{stat.label}</span>
-                        <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
-                          {stat.icon}
-                        </div>
-                      </div>
-
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-4xl md:text-5xl font-bold tracking-tighter tabular-nums">
-                          <AnimatedNumber value={stat.value} />
-                        </span>
-                        {stat.suffix && (
-                          <span className="text-xl text-muted-foreground">{stat.suffix}</span>
-                        )}
-                      </div>
-
-                      {stat.trend && (
-                        <div className="flex items-center gap-1.5 mt-2">
-                          <TrendingUp className="h-3 w-3 text-emerald-500" />
-                          <span className="text-xs font-medium text-emerald-500">{stat.trend}</span>
-                          <span className="text-xs text-muted-foreground">this week</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </HoverTilt>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-      </ScrollReveal>
-
-      {/* Bento Grid Section */}
-      <section className="px-6 md:px-12 lg:px-24 mb-16">
-        <BentoGrid columns={2} gap="md">
-          {/* Agent Activity - Takes 2 rows */}
-          <BentoCard
-            title={t('dashboard.bentoAgentActivity')}
-            subtitle={t('dashboard.bentoAiWorkspace')}
-            className="min-h-[440px]"
-            interactive={false}
-          >
-            <div className="space-y-3 mt-4">
-              {agents.map((agent, i) => (
-                <AgentCard key={agent.id} agent={agent} index={i} />
-              ))}
+      <div className="grid gap-8 xl:grid-cols-2">
+        <section className="min-w-0">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+                {t('dashboard.bentoAiWorkspace')}
+              </div>
+              <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoAgentActivity')}</h2>
             </div>
-            <Link href="/dashboard/agents" className="mt-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link href="/dashboard/agents" className="inline-flex items-center gap-2 text-sm text-white/50 transition-colors hover:text-white">
               {t('dashboard.viewAllAgents')}
               <ArrowRight className="h-4 w-4" />
             </Link>
-          </BentoCard>
+          </div>
+          <div className="border-y border-white/10">
+            {agents.map((agent, i) => (
+              <AgentCard key={agent.id} agent={agent} index={i} />
+            ))}
+          </div>
+        </section>
 
-          {/* Recent Documents */}
-          <BentoCard
-            title={t('dashboard.bentoRecentDocs')}
-            subtitle={t('dashboard.bentoWorkspace')}
-            className="min-h-[440px]"
-            interactive={false}
-          >
-            {docs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <FileText className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground mb-4">{t('dashboard.noDocuments')}</p>
-                <Button size="sm" onClick={() => openModal('createDocument')}>
-                  {t('dashboard.createFirstDoc')}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2 mt-4">
-                {docs.map((doc, i) => (
-                  <DocumentCard key={doc.id} doc={doc} index={i} />
-                ))}
-              </div>
-            )}
-          </BentoCard>
+        <section className="min-w-0">
+          <div className="mb-4">
+            <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+              {t('dashboard.bentoWorkspace')}
+            </div>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoRecentDocs')}</h2>
+          </div>
+          {docs.length === 0 ? (
+            <div className="border-y border-white/10 py-8 text-center">
+              <FileText className="mx-auto mb-3 h-8 w-8 text-white/30" />
+              <p className="mb-4 text-sm text-white/50">{t('dashboard.noDocuments')}</p>
+              <Button size="sm" onClick={() => openModal('createDocument')}>
+                {t('dashboard.createFirstDoc')}
+              </Button>
+            </div>
+          ) : (
+            <div className="border-y border-white/10">
+              {docs.map((doc, i) => (
+                <DocumentCard key={doc.id} doc={doc} index={i} />
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Priority Tasks */}
-          <BentoCard
-            title={t('dashboard.bentoPriorityTasks')}
-            subtitle={t('dashboard.bentoToday')}
-            className="min-h-[440px]"
-            interactive={false}
-          >
-            {tasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <ListTodo className="h-10 w-10 text-muted-foreground/50 mb-3" />
-                <p className="text-muted-foreground mb-4">{t('dashboard.noTasks')}</p>
-                <Button size="sm" onClick={() => openModal('createTask')}>
-                  {t('dashboard.createFirstTask')}
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-2 mt-4">
-                {tasks.map((task, i) => (
-                  <TaskItem key={task.id} task={task} index={i} onToggle={() => {}} />
-                ))}
-              </div>
-            )}
-          </BentoCard>
+        <section className="min-w-0">
+          <div className="mb-4">
+            <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+              {t('dashboard.bentoToday')}
+            </div>
+            <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoPriorityTasks')}</h2>
+          </div>
+          {tasks.length === 0 ? (
+            <div className="border-y border-white/10 py-8 text-center">
+              <ListTodo className="mx-auto mb-3 h-8 w-8 text-white/30" />
+              <p className="mb-4 text-sm text-white/50">{t('dashboard.noTasks')}</p>
+              <Button size="sm" onClick={() => openModal('createTask')}>
+                {t('dashboard.createFirstTask')}
+              </Button>
+            </div>
+          ) : (
+            <div className="border-y border-white/10">
+              {tasks.map((task, i) => (
+                <TaskItem key={task.id} task={task} index={i} onToggle={() => {}} />
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Quick Actions */}
-          <BentoCard
-            title={t('dashboard.bentoQuickActions')}
-            className="min-h-[440px]"
-            gradient="bg-gradient-to-br from-white/10 to-transparent"
-            interactive={false}
-          >
-            <div className="grid grid-cols-2 gap-3 mt-4">
-              {([
-                { icon: <FileText className="h-5 w-5" />, label: t('dashboard.qaNewDoc'), action: 'createDocument' },
-                { icon: <ListTodo className="h-5 w-5" />, label: t('dashboard.qaNewTask'), action: 'createTask' },
-                { icon: <Sparkles className="h-5 w-5" />, label: t('dashboard.qaAskAi'), action: 'aiAssistant' },
-                { icon: <MessageSquare className="h-5 w-5" />, label: t('dashboard.qaChat'), href: '/dashboard/chat' },
-              ] as Array<{
-                icon: ReactNode;
-                label: string;
-                action?: 'createDocument' | 'createTask' | 'settings' | 'onboarding' | 'aiAssistant';
-                href?: string;
-              }>).map((action) => (
+        <section className="min-w-0">
+          <h2 className="mb-4 text-xl font-semibold text-white">{t('dashboard.bentoQuickActions')}</h2>
+          <div className="grid grid-cols-2 gap-px border border-white/10 bg-white/10">
+            {([
+              { icon: <FileText className="h-5 w-5" />, label: t('dashboard.qaPlans'), href: '/dashboard/docs' },
+              { icon: <ListTodo className="h-5 w-5" />, label: t('dashboard.qaWork'), href: '/dashboard/tasks' },
+              { icon: <Sparkles className="h-5 w-5" />, label: t('dashboard.qaChanges'), href: '/dashboard/changes' },
+              { icon: <MessageSquare className="h-5 w-5" />, label: t('dashboard.qaAskNexus'), href: '/dashboard/chat' },
+            ] as Array<{
+              icon: ReactNode;
+              label: string;
+              action?: 'createDocument' | 'createTask' | 'settings' | 'onboarding' | 'aiAssistant';
+              href?: string;
+            }>).map((action) => {
+              const content = (
+                <>
+                  <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
+                    {action.icon}
+                  </div>
+                  <span className="text-xs font-medium">{action.label}</span>
+                </>
+              );
+
+              if (action.href) {
+                return (
+                  <Link
+                    key={action.label}
+                    href={action.href}
+                    className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-white/[0.03]"
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
                 <motion.button
                   key={action.label}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => action.action && openModal(action.action)}
-                  className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors"
+                  className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-white/[0.03]"
                 >
-                  <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
-                    {action.icon}
-                  </div>
-                  <span className="text-xs font-medium">{action.label}</span>
+                  {content}
                 </motion.button>
-              ))}
-            </div>
-          </BentoCard>
-        </BentoGrid>
-      </section>
-
+              );
+            })}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }

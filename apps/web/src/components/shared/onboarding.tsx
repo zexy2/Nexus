@@ -7,13 +7,11 @@ import {
   FileText,
   MessageSquare,
   ListTodo,
-  Users,
   Zap,
   ArrowRight,
   ArrowLeft,
   Check,
   X,
-  Bot,
   Palette,
   Bell,
   Shield,
@@ -51,10 +49,10 @@ const steps: OnboardingStep[] = [
     color: "blue",
   },
   {
-    id: "agents",
-    title: "AI Ajanlarıyla Tanışın",
-    description: "Size yardımcı olacak güçlü AI ajanları",
-    icon: Bot,
+    id: "flow",
+    title: "Living Plan Akışını Tanıyın",
+    description: "Plan değiştiğinde iş nasıl hizalanır?",
+    icon: Zap,
     color: "emerald",
   },
   {
@@ -73,34 +71,33 @@ const steps: OnboardingStep[] = [
   },
 ];
 
-// AI Agent cards
-const aiAgents = [
+const controlPoints = [
   {
-    id: "research",
-    name: "Araştırma Ajanı",
-    description: "Web'de araştırma yapar ve bilgi toplar",
-    icon: "🔍",
+    id: "version",
+    name: "Plan sürümü",
+    description: "Kabul edilen plan geçmişte korunur",
+    icon: "01",
     color: "bg-white/10",
   },
   {
-    id: "writer",
-    name: "Yazı Ajanı",
-    description: "İçerik oluşturur ve düzenler",
-    icon: "✍️",
+    id: "requirements",
+    name: "Gereksinimler",
+    description: "REQ kimlikleri görevlere bağlanır",
+    icon: "02",
     color: "bg-white/10",
   },
   {
-    id: "coder",
-    name: "Kod Ajanı",
-    description: "Kod yazar ve hataları düzeltir",
-    icon: "💻",
+    id: "impact",
+    name: "Etki analizi",
+    description: "Değişen planın etkilediği işler bulunur",
+    icon: "03",
     color: "bg-emerald-500/15",
   },
   {
-    id: "planner",
-    name: "Planlama Ajanı",
-    description: "Görevleri organize eder ve planlar",
-    icon: "📋",
+    id: "approval",
+    name: "İnsan onayı",
+    description: "AI önerir; hangi işin değişeceğini sen seçersin",
+    icon: "04",
     color: "bg-white/10",
   },
 ];
@@ -109,23 +106,23 @@ const aiAgents = [
 const features = [
   {
     icon: FileText,
-    title: "Akıllı Dökümanlar",
-    description: "AI destekli döküman oluşturma",
-  },
-  {
-    icon: MessageSquare,
-    title: "AI Sohbet",
-    description: "Ajanlarla gerçek zamanlı iletişim",
+    title: "Yaşayan Planlar",
+    description: "Planlar sürümlenir ve geçmiş korunur",
   },
   {
     icon: ListTodo,
-    title: "Görev Yönetimi",
-    description: "Kanban board ile organize olun",
+    title: "Bağlı İşler",
+    description: "Görevler gereksinimlerle ilişkilendirilir",
   },
   {
-    icon: Users,
-    title: "Takım Çalışması",
-    description: "Ekibinizle işbirliği yapın",
+    icon: Shield,
+    title: "Onaylı Değişiklik",
+    description: "AI görevleri izinsiz değiştirmez",
+  },
+  {
+    icon: MessageSquare,
+    title: "Ask Nexus",
+    description: "Sohbet ikincil analiz aracı olarak kalır",
   },
 ];
 
@@ -137,7 +134,10 @@ interface OnboardingModalProps {
 export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [workspaceName, setWorkspaceName] = useState("");
-  const [selectedAgents, setSelectedAgents] = useState<string[]>(["research", "writer"]);
+  const [selectedControlPoints, setSelectedControlPoints] = useState<string[]>([
+    "version",
+    "impact",
+  ]);
   
   const {
     setHasCompletedOnboarding,
@@ -172,11 +172,11 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
     onSkip();
   }, [setHasCompletedOnboarding, onSkip]);
 
-  const toggleAgent = useCallback((agentId: string) => {
-    setSelectedAgents((prev) =>
-      prev.includes(agentId)
-        ? prev.filter((id) => id !== agentId)
-        : [...prev, agentId]
+  const toggleControlPoint = useCallback((pointId: string) => {
+    setSelectedControlPoints((prev) =>
+      prev.includes(pointId)
+        ? prev.filter((id) => id !== pointId)
+        : [...prev, pointId]
     );
   }, []);
 
@@ -366,17 +366,17 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                 </div>
               )}
 
-              {step.id === "agents" && (
+              {step.id === "flow" && (
                 <div className="grid grid-cols-2 gap-3">
-                  {aiAgents.map((agent) => (
+                  {controlPoints.map((point) => (
                     <motion.button
-                      key={agent.id}
-                      onClick={() => toggleAgent(agent.id)}
+                      key={point.id}
+                      onClick={() => toggleControlPoint(point.id)}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       className={cn(
                         "p-4 rounded-xl border-2 text-left transition-all",
-                        selectedAgents.includes(agent.id)
+                        selectedControlPoints.includes(point.id)
                           ? "border-white/40 bg-popover/[0.06]"
                           : "border-border hover:border-white/20"
                       )}
@@ -385,22 +385,22 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                         <div
                           className={cn(
                             "w-10 h-10 rounded-lg flex items-center justify-center text-xl",
-                            agent.color
+                            point.color
                           )}
                         >
-                          {agent.icon}
+                          {point.icon}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h4 className="font-medium text-foreground">
-                              {agent.name}
+                              {point.name}
                             </h4>
-                            {selectedAgents.includes(agent.id) && (
+                            {selectedControlPoints.includes(point.id) && (
                               <Check className="w-4 h-4 text-foreground" />
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground mt-0.5">
-                            {agent.description}
+                            {point.description}
                           </p>
                         </div>
                       </div>
@@ -488,7 +488,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     </span>
                     <span className="flex items-center gap-1">
                       <Check className="w-4 h-4 text-emerald-400" />
-                      {selectedAgents.length} ajan seçildi
+                      {selectedControlPoints.length} kontrol noktası hazır
                     </span>
                   </div>
                 </div>
@@ -548,20 +548,20 @@ const tourSteps: QuickTourStep[] = [
   },
   {
     target: "[data-tour='documents']",
-    title: "Dökümanlar",
-    description: "Tüm dökümanlarınızı burada yönetin",
+    title: "Planlar",
+    description: "Sürümlenen proje planlarını burada yönetin",
     position: "bottom",
   },
   {
     target: "[data-tour='chat']",
-    title: "AI Sohbet",
-    description: "AI ajanlarıyla gerçek zamanlı iletişim kurun",
+    title: "Ask Nexus",
+    description: "Plan ve iş akışı hakkında soru sorun",
     position: "bottom",
   },
   {
     target: "[data-tour='tasks']",
-    title: "Görevler",
-    description: "Kanban board ile görevlerinizi organize edin",
+    title: "İşler",
+    description: "Gereksinimlere bağlı işleri Kanban üzerinde izleyin",
     position: "bottom",
   },
 ];

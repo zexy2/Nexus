@@ -36,23 +36,23 @@ const playfairDisplay = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus - AI Workflow Workspace Demo",
+  title: "Nexus - Controlled Plan Change Demo",
   description:
-    "A public portfolio demo that turns a project idea into an AI document, task breakdown, Kanban board, and workflow history.",
-  keywords: ["AI", "workspace", "workflow", "Kanban", "Temporal", "portfolio demo"],
+    "A public portfolio demo that reviews plan changes, traces affected work, applies approved task updates, and records the workflow history.",
+  keywords: ["AI", "change control", "workflow", "Kanban", "Temporal", "portfolio demo"],
   authors: [{ name: "Nexus Team" }],
   openGraph: {
-    title: "Nexus - AI Workflow Workspace Demo",
+    title: "Nexus - Controlled Plan Change Demo",
     description:
-      "Generate a document, extract tasks, manage Kanban, and inspect every AI workflow step behind it.",
+      "Change the plan once. Nexus finds the impact, proposes task updates, waits for approval, and keeps delivery work aligned.",
     type: "website",
     locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Nexus - AI Workflow Workspace Demo",
+    title: "Nexus - Controlled Plan Change Demo",
     description:
-      "Generate a document, extract tasks, manage Kanban, and inspect every AI workflow step behind it.",
+      "Change the plan once. Nexus finds the impact, proposes task updates, waits for approval, and keeps delivery work aligned.",
   },
 };
 

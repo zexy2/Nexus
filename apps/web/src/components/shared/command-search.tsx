@@ -22,6 +22,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
+import { useT } from "@/lib/i18n/provider";
 
 interface SearchResult {
   id: string;
@@ -33,20 +34,21 @@ interface SearchResult {
 }
 
 const typeConfig = {
-  document: { icon: FileText, color: "text-blue-500", label: "Document" },
-  task: { icon: CheckSquare, color: "text-green-500", label: "Task" },
-  message: { icon: MessageSquare, color: "text-purple-500", label: "Message" },
+  document: { icon: FileText, color: "text-blue-500", labelKey: "palette.typeDocument" },
+  task: { icon: CheckSquare, color: "text-green-500", labelKey: "palette.typeTask" },
+  message: { icon: MessageSquare, color: "text-purple-500", labelKey: "palette.typeMessage" },
 };
 
 const quickActions = [
-  { id: "new-doc", label: "New Document", icon: FileText, action: "/dashboard/docs" },
-  { id: "new-task", label: "New Task", icon: CheckSquare, action: "/dashboard/tasks" },
-  { id: "chat", label: "Start AI Chat", icon: MessageSquare, action: "/dashboard/chat" },
-  { id: "agents", label: "Launch Workflow", icon: BrainCircuit, action: "/dashboard/agents" },
-  { id: "settings", label: "Settings", icon: Settings, action: "/dashboard/settings" },
+  { id: "new-doc", labelKey: "docs.newDoc", icon: FileText, action: "/dashboard/docs" },
+  { id: "new-task", labelKey: "tasks.newTask", icon: CheckSquare, action: "/dashboard/tasks" },
+  { id: "chat", labelKey: "chat.askNexus", icon: MessageSquare, action: "/dashboard/chat" },
+  { id: "agents", labelKey: "agents.center.startWorkflow", icon: BrainCircuit, action: "/dashboard/agents" },
+  { id: "settings", labelKey: "nav.settings", icon: Settings, action: "/dashboard/settings" },
 ];
 
 export function CommandSearch() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -113,7 +115,7 @@ export function CommandSearch() {
         className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground rounded-md border bg-background hover:bg-accent hover:text-accent-foreground transition-colors"
       >
         <Search className="size-4" />
-        <span className="hidden sm:inline">Search...</span>
+        <span className="hidden sm:inline">{t("common.search")}</span>
         <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
           <span className="text-xs">⌘</span>K
         </kbd>
@@ -121,7 +123,7 @@ export function CommandSearch() {
 
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput 
-          placeholder="Search documents, tasks, or type a command..." 
+          placeholder={t("palette.searchPlaceholder")}
           value={query}
           onValueChange={setQuery}
         />
@@ -136,16 +138,16 @@ export function CommandSearch() {
             <CommandEmpty>
               <div className="flex flex-col items-center gap-2 py-4">
                 <Sparkles className="size-8 text-muted-foreground" />
-                <p>No results found for &ldquo;{query}&rdquo;</p>
+                <p>{t("palette.noResultsFor")} &ldquo;{query}&rdquo;</p>
                 <p className="text-xs text-muted-foreground">
-                  Try different keywords or use AI search
+                  {t("palette.tryDifferentKeywords")}
                 </p>
               </div>
             </CommandEmpty>
           )}
 
           {!isSearching && results.length > 0 && (
-            <CommandGroup heading="Search Results">
+            <CommandGroup heading={t("palette.searchResults")}>
               {results.map((result) => {
                 const config = typeConfig[result.type];
                 const Icon = config.icon;
@@ -161,7 +163,7 @@ export function CommandSearch() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate">{result.title}</span>
                         <Badge variant="secondary" className="text-xs shrink-0">
-                          {config.label}
+                          {t(config.labelKey)}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">
@@ -179,7 +181,7 @@ export function CommandSearch() {
 
           {(!query || query.length < 2) && (
             <>
-              <CommandGroup heading="Quick Actions">
+              <CommandGroup heading={t("palette.quickActions")}>
                 {quickActions.map((action) => {
                   const Icon = action.icon;
                   return (
@@ -189,17 +191,17 @@ export function CommandSearch() {
                       onSelect={() => handleSelect(action)}
                     >
                       <Icon className="mr-2 size-4" />
-                      {action.label}
+                      {t(action.labelKey)}
                     </CommandItem>
                   );
                 })}
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading="Tips">
+              <CommandGroup heading={t("palette.tips")}>
                 <div className="px-2 py-2 text-xs text-muted-foreground">
-                  <p>• Type to search across all your documents and tasks</p>
-                  <p>• Use ⌘K to open this dialog from anywhere</p>
-                  <p>• Results are ranked by semantic relevance</p>
+                  <p>• {t("palette.tipSearch")}</p>
+                  <p>• {t("palette.tipShortcut")}</p>
+                  <p>• {t("palette.tipRanked")}</p>
                 </div>
               </CommandGroup>
             </>

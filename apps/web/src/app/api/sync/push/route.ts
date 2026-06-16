@@ -15,7 +15,6 @@ import { and, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import {
-  agentExecutions,
   chatMessages,
   docs,
   tasks,
@@ -37,7 +36,6 @@ const tableMap = {
   tasks,
   workspaces,
   chat_messages: chatMessages,
-  agent_executions: agentExecutions,
 } as const;
 
 type ValidTable = keyof typeof tableMap;
@@ -237,14 +235,6 @@ async function findRecordWorkspaceId(table: Exclude<ValidTable, "workspaces">, i
         .limit(1);
       return row?.workspaceId;
     }
-    case "agent_executions": {
-      const [row] = await db
-        .select({ workspaceId: agentExecutions.workspaceId })
-        .from(agentExecutions)
-        .where(eq(agentExecutions.id, id))
-        .limit(1);
-      return row?.workspaceId;
-    }
   }
 }
 
@@ -271,6 +261,14 @@ async function handleUpdate(table: ValidTable, data: Record<string, unknown>) {
 
 async function handleDelete(table: ValidTable, id: string) {
   const schemaTable = tableMap[table];
+
+  if (table === "tasks") {
+    await db
+      .update(tasks)
+      .set({ isArchived: 1, updatedAt: new Date() })
+      .where(eq(tasks.id, id));
+    return;
+  }
   
   await db.delete(schemaTable)
     .where(eq((schemaTable as typeof docs).id, id));

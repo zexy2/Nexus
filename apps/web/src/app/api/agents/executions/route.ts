@@ -4,7 +4,6 @@ import { auth } from "@/lib/auth";
 import { agentExecutions, workspaces, workspaceMembers } from "@nexus/database/schema";
 import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { headers } from "next/headers";
-import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { reconcileRunningWorkflowExecutions } from "@/lib/workflow-reconcile";
 
 export const runtime = "nodejs";
@@ -131,123 +130,24 @@ export async function GET(request: NextRequest) {
 
 // POST /api/agents/executions - Create new execution record
 export async function POST(request: NextRequest) {
-  try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { workspaceId: providedWorkspaceId, agentType, input, status: execStatus, output } = body;
-
-    if (!agentType) {
-      return NextResponse.json(
-        { error: "agentType is required" },
-        { status: 400 }
-      );
-    }
-
-    const workspaceId = providedWorkspaceId || (await ensureDefaultWorkspace(session.user.id)).id;
-    const access = await requireWorkspaceAccess(session.user.id, workspaceId);
-
-    if (!access.ok) {
-      return NextResponse.json({ error: access.error }, { status: access.status });
-    }
-
-    // Create execution record
-    const [execution] = await db
-      .insert(agentExecutions)
-      .values({
-        workspaceId: access.workspaceId,
-        agentType,
-        status: execStatus || "running",
-        input: input || {},
-        output: output || null,
-        startedAt: new Date(),
-        completedAt: execStatus === "completed" ? new Date() : null,
-      })
-      .returning();
-
-    return NextResponse.json(execution);
-  } catch (error) {
-    console.error("Error creating agent execution:", error);
-    return NextResponse.json(
-      { error: "Failed to create agent execution" },
-      { status: 500 }
-    );
-  }
+  void request;
+  return NextResponse.json(
+    {
+      error: "WORKFLOW_HISTORY_READ_ONLY",
+      message: "Workflow execution records are written by the workflow service only.",
+    },
+    { status: 403 }
+  );
 }
 
 // PATCH /api/agents/executions - Update execution status
 export async function PATCH(request: NextRequest) {
-  try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const body = await request.json();
-    const { id, status, output, error: errorMessage } = body;
-
-    if (!id || !status) {
-      return NextResponse.json(
-        { error: "id and status are required" },
-        { status: 400 }
-      );
-    }
-
-    const workspaceIds = await getAccessibleWorkspaceIds(session.user.id);
-    if (workspaceIds.length === 0) {
-      return NextResponse.json({ error: "Execution not found" }, { status: 404 });
-    }
-
-    const existing = await db.query.agentExecutions.findFirst({
-      where: and(
-        eq(agentExecutions.id, id),
-        inArray(agentExecutions.workspaceId, workspaceIds)
-      ),
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: "Execution not found" }, { status: 404 });
-    }
-
-    const updateData: Partial<typeof agentExecutions.$inferInsert> = { status };
-    
-    if (output !== undefined) {
-      updateData.output = output;
-    }
-    
-    if (errorMessage !== undefined) {
-      updateData.errorMessage = errorMessage;
-    }
-    
-    if (status === "completed" || status === "failed") {
-      updateData.completedAt = new Date();
-    }
-
-    const [updated] = await db
-      .update(agentExecutions)
-      .set(updateData)
-      .where(eq(agentExecutions.id, id))
-      .returning();
-
-    if (!updated) {
-      return NextResponse.json({ error: "Execution not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(updated);
-  } catch (error) {
-    console.error("Error updating agent execution:", error);
-    return NextResponse.json(
-      { error: "Failed to update agent execution" },
-      { status: 500 }
-    );
-  }
+  void request;
+  return NextResponse.json(
+    {
+      error: "WORKFLOW_HISTORY_READ_ONLY",
+      message: "Workflow execution records are reconciled by the workflow service only.",
+    },
+    { status: 403 }
+  );
 }

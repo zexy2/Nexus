@@ -25,12 +25,6 @@ import {
   User,
 } from "lucide-react";
 
-// Premium Components
-import {
-  PremiumBackground,
-  PremiumHeroHeader,
-  PremiumStatCard,
-} from "@/components/premium";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -64,6 +58,7 @@ import { cn } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { cleanDocTitle } from "@/lib/text";
 import { useT, useLocale } from "@/lib/i18n/provider";
+import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import Link from "next/link";
 
 // Document type
@@ -118,7 +113,7 @@ function DocumentCard({
   const t = useT();
   const { locale } = useLocale();
   const formatDate = (date: Date) => formatRelativeDate(date, locale);
-  const displayTitle = cleanDocTitle(doc.title);
+  const displayTitle = localizeGeneratedCopy(cleanDocTitle(doc.title), locale);
 
   if (viewMode === "list") {
     return (
@@ -130,10 +125,10 @@ function DocumentCard({
         whileHover={{ backgroundColor: "rgba(255,255,255,0.03)" }}
         onHoverStart={() => setIsHovered(true)}
         onHoverEnd={() => setIsHovered(false)}
-        className="group relative flex items-center gap-4 p-4 border-b border-white/5 transition-colors"
+        className="group relative flex items-center gap-4 border-b border-white/10 py-4 transition-colors"
       >
         {/* Emoji Icon */}
-        <div className="flex-shrink-0 w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center">
+        <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-white/[0.04] flex items-center justify-center">
           <FileText className="w-5 h-5 text-white/70" />
         </div>
 
@@ -275,24 +270,11 @@ function DocumentCard({
       initial={{ opacity: 0, scale: 0.95, y: 20 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -4, scale: 1.01 }}
-      whileTap={{ scale: 0.98 }}
+      whileHover={{ y: -2 }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      className="group relative bg-white/[0.02] backdrop-blur-md border border-white/[0.06] rounded-2xl overflow-hidden transition-all duration-300 hover:border-white/20 hover:bg-white/[0.04]"
+      className="group relative overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] transition-all duration-200 hover:border-white/20 hover:bg-white/[0.035]"
     >
-      {/* Hover glow effect */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isHovered ? 1 : 0 }}
-        className="absolute inset-0 -z-10 blur-2xl bg-white/5 transition-opacity duration-200"
-      />
-
-      {/* Gradient border on hover */}
-      <div
-        className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-gradient-to-br from-white/10 via-transparent to-transparent pointer-events-none"
-      />
-
       {/* Favorite badge */}
       {doc.isFavorite && (
         <motion.div 
@@ -306,7 +288,7 @@ function DocumentCard({
       {/* Card content */}
       <Link href={`/dashboard/docs/${doc.id}`} className="block p-5">
         {/* Icon */}
-        <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4">
+        <div className="w-12 h-12 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center mb-4">
           <FileText className="w-6 h-6 text-white/70" />
         </div>
 
@@ -353,7 +335,7 @@ function DocumentCard({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/90 to-transparent pt-10"
+            className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-background/95 p-4 backdrop-blur"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1">
@@ -609,7 +591,7 @@ export default function DocsPage() {
     } finally {
       setIsCreating(false);
     }
-  }, [newDocTitle, newDocEmoji, engine, workspaceId, userId]);
+  }, [newDocTitle, newDocEmoji, engine, workspaceId, userId, t]);
 
   const handleDuplicate = useCallback(async (id: string) => {
     if (!(engine && workspaceId && userId)) {
@@ -631,7 +613,7 @@ export default function DocsPage() {
       updatedAt: now,
     });
     showToast.success(t('docs.toastDuplicated'));
-  }, [engine, workspaceId, userId]);
+  }, [engine, workspaceId, userId, t]);
 
   // Soft-delete/archive: mark the doc archived locally and queue the sync. This
   // also fixes a prior bug where delete/archive only updated React state and
@@ -652,12 +634,12 @@ export default function DocsPage() {
   const handleArchive = useCallback(async (id: string) => {
     await archiveDoc(id);
     showToast.info(t('docs.toastArchived'));
-  }, [archiveDoc]);
+  }, [archiveDoc, t]);
 
   const handleDelete = useCallback(async (id: string) => {
     await archiveDoc(id);
     showToast.success(t('docs.toastDeleted'));
-  }, [archiveDoc]);
+  }, [archiveDoc, t]);
 
   const handleToggleFavorite = useCallback((id: string) => {
     setDocuments((prev) =>
@@ -675,128 +657,101 @@ export default function DocsPage() {
   }), [documents]);
 
   return (
-    <div className="relative min-h-screen pb-32">
-      {/* Premium Animated Background */}
-      <PremiumBackground colorScheme="blue-violet" blobCount={3} />
+    <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+        <div>
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-white/35">
+            <FileText className="size-4" />
+            {t('docs.label')}
+          </div>
+          <h1 className="text-3xl font-semibold text-white md:text-4xl">{t('docs.title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+            {t('docs.description')}
+          </p>
+        </div>
 
-      {/* Content Layer */}
-      <div className="relative z-10 px-4 md:px-6 lg:px-8">
-        {/* Premium Hero Header */}
-        <PremiumHeroHeader
-          label={t('docs.label')}
-          title={t('docs.title')}
-          description={
-            <>
-              <span className="text-white/70 font-medium">{stats.total}</span> {t('docs.unitDocs')}
-              <span className="mx-2 text-white/20">•</span>
-              <span className="text-white/70">{stats.favorites}</span> {t('docs.unitFavorites')}
-              <span className="mx-2 text-white/20">•</span>
-              <span className="text-white/70">{stats.aiGenerated}</span> {t('docs.unitAi')}
-            </>
-          }
-          action={
-            <Button
-              onClick={() => setIsCreateOpen(true)}
-              className="gap-2 rounded-lg px-6 bg-white text-black hover:bg-white/90 shadow-lg shadow-white/10"
-            >
-              <Plus className="w-4 h-4" />
-              {t('docs.newDoc')}
-            </Button>
-          }
-        />
+        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+          <Plus className="w-4 h-4" />
+          {t('docs.newDoc')}
+        </Button>
+      </header>
 
-        {/* Premium Stats Bar */}
-        <section className="mb-8">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-            <PremiumStatCard
-              icon={FileText}
-              value={stats.total}
-              label={t('docs.statTotal')}
-              color="blue"
-              delay={0.2}
-            />
-            <PremiumStatCard
-              icon={Star}
-              value={stats.favorites}
-              label={t('docs.statFavorites')}
-              color="amber"
-              delay={0.28}
-            />
-            <PremiumStatCard
-              icon={Sparkles}
-              value={stats.aiGenerated}
-              label={t('docs.statAi')}
-              color="violet"
-              delay={0.36}
+      <section className="mb-8 grid grid-cols-1 gap-px border-y border-white/10 bg-white/10 sm:grid-cols-3">
+        {[
+          { label: t('docs.statTotal'), value: stats.total, icon: <FileText className="size-4" /> },
+          { label: t('docs.statFavorites'), value: stats.favorites, icon: <Star className="size-4" /> },
+          { label: t('docs.statAi'), value: stats.aiGenerated, icon: <Sparkles className="size-4" /> },
+        ].map((stat) => (
+          <div key={stat.label} className="bg-background px-4 py-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <span className="text-xs text-white/40">{stat.label}</span>
+              <span className="text-white/45">{stat.icon}</span>
+            </div>
+            <div className="text-3xl font-semibold tabular-nums text-white">{stat.value}</div>
+          </div>
+        ))}
+      </section>
+
+      <section className="mb-6 border-b border-white/10 pb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center md:gap-4"
+        >
+          <div className="relative flex-1 sm:max-w-md">
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+            <Input
+              placeholder={t('docs.searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg border-white/10 bg-white/[0.03] pl-10 text-white placeholder:text-white/40"
             />
           </div>
-        </section>
 
-        {/* Toolbar */}
-        <section className="mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 md:gap-4"
-          >
-            {/* Search */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-              <Input
-                placeholder={t('docs.searchPlaceholder')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-white/[0.03] border-white/10 rounded-full w-full text-white placeholder:text-white/40"
-              />
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Favorites filter */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={showFavoritesOnly ? "default" : "outline"}
-                      size="icon"
-                      onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-                      className={cn(
-                        "rounded-full border-white/20",
-                        showFavoritesOnly && "bg-amber-500 hover:bg-amber-600 border-amber-500"
-                      )}
-                    >
-                      <Star className={cn("w-4 h-4", showFavoritesOnly && "fill-white")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {showFavoritesOnly ? t('docs.showAll') : t('docs.onlyFavorites')}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {/* Sort dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-2 rounded-full border-white/20">
-                    <SortAsc className="w-4 h-4" />
-                    {t('docs.sort')}
+          <div className="flex flex-wrap items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={showFavoritesOnly ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                    className={cn(
+                      "rounded-lg border-white/20",
+                      showFavoritesOnly && "bg-amber-500 hover:bg-amber-600 border-amber-500"
+                    )}
+                  >
+                    <Star className={cn("w-4 h-4", showFavoritesOnly && "fill-white")} />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48 bg-black/90 backdrop-blur-xl border-white/10">
-                  <DropdownMenuItem
-                    onClick={() => setSortBy("updated")}
-                    className={cn(sortBy === "updated" && "bg-white/10")}
-                  >
-                    <Clock className="w-4 h-4 mr-2" />
-                    {t('docs.sortUpdated')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setSortBy("created")}
-                    className={cn(sortBy === "created" && "bg-white/10")}
-                  >
-                    <Calendar className="w-4 h-4 mr-2" />
-                    {t('docs.sortCreated')}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {showFavoritesOnly ? t('docs.showAll') : t('docs.onlyFavorites')}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2 rounded-lg border-white/20">
+                  <SortAsc className="w-4 h-4" />
+                  {t('docs.sort')}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 bg-black/90 backdrop-blur-xl border-white/10">
+                <DropdownMenuItem
+                  onClick={() => setSortBy("updated")}
+                  className={cn(sortBy === "updated" && "bg-white/10")}
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  {t('docs.sortUpdated')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSortBy("created")}
+                  className={cn(sortBy === "created" && "bg-white/10")}
+                >
+                  <Calendar className="w-4 h-4 mr-2" />
+                  {t('docs.sortCreated')}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => setSortBy("title")}
@@ -815,15 +770,14 @@ export default function DocsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* View toggle */}
-            <div className="flex items-center border border-white/10 rounded-full p-1 bg-white/5">
+            <div className="flex items-center rounded-lg border border-white/10 bg-white/5 p-1">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       onClick={() => setDocumentsView("grid")}
                       className={cn(
-                        "p-2 rounded-full transition-colors",
+                        "p-2 rounded-md transition-colors",
                         documentsView === "grid"
                           ? "bg-white text-black"
                           : "text-muted-foreground hover:text-white"
@@ -842,7 +796,7 @@ export default function DocsPage() {
                     <button
                       onClick={() => setDocumentsView("list")}
                       className={cn(
-                        "p-2 rounded-full transition-colors",
+                        "p-2 rounded-md transition-colors",
                         documentsView === "list"
                           ? "bg-white text-black"
                           : "text-muted-foreground hover:text-white"
@@ -855,28 +809,27 @@ export default function DocsPage() {
                 </Tooltip>
               </TooltipProvider>
             </div>
-            </div>
-          </motion.div>
-        </section>
+          </div>
+        </motion.div>
+      </section>
 
-        {/* Content */}
-        <section>
-          {isLoading ? (
-            <SkeletonDocumentList count={6} />
-          ) : filteredDocuments.length === 0 ? (
-            searchQuery ? (
-              <EmptyState
-                type="search"
-                title={t('docs.searchEmptyTitle')}
-                description={`"${searchQuery}"`}
-                action={{
-                  label: t('docs.clearSearch'),
-                  onClick: () => setSearchQuery(""),
-                }}
-              />
-            ) : (
-              <EmptyState
-                type="documents"
+      <section>
+        {isLoading ? (
+          <SkeletonDocumentList count={6} />
+        ) : filteredDocuments.length === 0 ? (
+          searchQuery ? (
+            <EmptyState
+              type="search"
+              title={t('docs.searchEmptyTitle')}
+              description={`"${searchQuery}"`}
+              action={{
+                label: t('docs.clearSearch'),
+                onClick: () => setSearchQuery(""),
+              }}
+            />
+          ) : (
+            <EmptyState
+              type="documents"
               title={t('docs.emptyTitle')}
               description={t('docs.emptyDesc')}
               action={{
@@ -890,10 +843,10 @@ export default function DocsPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.15 }}
           >
             {documentsView === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 md:gap-5">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 <AnimatePresence mode="popLayout">
                   {filteredDocuments.map((doc) => (
                     <DocumentCard
@@ -909,7 +862,7 @@ export default function DocsPage() {
                 </AnimatePresence>
               </div>
             ) : (
-              <div className="glass-premium border-white/10 rounded-2xl overflow-hidden">
+              <div className="border-y border-white/10">
                 <AnimatePresence mode="popLayout">
                   {filteredDocuments.map((doc) => (
                     <DocumentCard
@@ -926,15 +879,13 @@ export default function DocsPage() {
               </div>
             )}
 
-            {/* Results count */}
             <div className="mt-6 text-center text-sm text-white/40">
               {filteredDocuments.length} {t('docs.shown')}
               {showFavoritesOnly && ` ${t('docs.onlyFavoritesSuffix')}`}
             </div>
           </motion.div>
         )}
-        </section>
-      </div>
+      </section>
 
       {/* Create Document Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -969,6 +920,7 @@ export default function DocsPage() {
             </Button>
             <Button
               onClick={handleCreateDocument}
+              disabled={isCreating}
               className="rounded-full"
             >
               {t('common.create')}

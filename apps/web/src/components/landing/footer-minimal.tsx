@@ -25,14 +25,14 @@ export function FooterMinimal() {
               final check
             </span>
             <h2 className="mx-auto max-w-4xl text-5xl font-semibold leading-none md:text-7xl">
-              Open the demo and run the full AI workflow loop.
+              Change a plan. Review the impact. Approve the work.
             </h2>
           </ScrollReveal>
 
           <ScrollReveal animation="fade-up" delay={0.1}>
             <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-white/55">
-              Generate a document, convert it into tasks, move through Kanban,
-              and inspect the workflow history that proves what happened.
+              Nexus keeps the accepted baseline, prepares a controlled change
+              set, updates only selected tasks, and records the decision trail.
             </p>
           </ScrollReveal>
 
@@ -73,8 +73,8 @@ export function FooterMinimal() {
               <span className="text-2xl font-semibold">Nexus</span>
             </Link>
             <p className="mt-4 max-w-lg text-sm leading-6 text-white/50">
-              A public portfolio demo for an AI workspace: documents, task
-              breakdown, Kanban, and auditable workflow history.
+              A public portfolio demo for controlled plan changes, requirement
+              traceability, human approval, and aligned delivery work.
             </p>
             <div className="mt-5 inline-flex items-center gap-2 font-mono text-xs uppercase text-white/35">
               <ShieldCheck className="size-4 text-white" />

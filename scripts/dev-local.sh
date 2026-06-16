@@ -118,6 +118,40 @@ stop_port_listeners() {
   fi
 }
 
+repo_process_pids() {
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Port cleanup only catches web/collab. Temporal workers have no listener and
+  # can keep polling the task queue with an old workflow bundle after code moves.
+  pgrep -f "${ROOT_DIR}.*(src/worker\\.ts|src/server/collaboration\\.ts|next/dist/bin/next dev)" \
+    2>/dev/null \
+    | awk -v current="$$" '$1 != current' \
+    || true
+}
+
+stop_stale_repo_processes() {
+  local pids
+  pids="$(repo_process_pids | tr '\n' ' ' || true)"
+  if [ -z "${pids// }" ]; then
+    return 0
+  fi
+
+  echo "Stopping stale Nexus local processes: ${pids}"
+  # shellcheck disable=SC2086
+  kill ${pids} >/dev/null 2>&1 || true
+  sleep 1
+
+  local remaining
+  remaining="$(repo_process_pids | tr '\n' ' ' || true)"
+  if [ -n "${remaining// }" ]; then
+    echo "Forcing stale Nexus local processes: ${remaining}"
+    # shellcheck disable=SC2086
+    kill -9 ${remaining} >/dev/null 2>&1 || true
+  fi
+}
+
 container_env() {
   local name="$1"
   local key="$2"
@@ -260,6 +294,7 @@ if [ ! -d node_modules ]; then
 fi
 
 if [ "${DEV_LOCAL_KILL_PORTS:-true}" = "true" ]; then
+  stop_stale_repo_processes
   stop_port_listeners 3000 "web"
   stop_port_listeners 1234 "collaboration"
 else

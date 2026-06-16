@@ -10,10 +10,10 @@ import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
 import { useT } from '@/lib/i18n/provider';
 import {
-  Home,
   ListTodo,
   FileText,
-  Bot,
+  GitPullRequestArrow,
+  Activity,
   Settings,
   Search,
   User,
@@ -41,11 +41,10 @@ import { CommandInput } from '@/components/shared/command-input';
 
 // Navigation items
 const navItems = [
-  { key: 'home', href: '/dashboard', icon: Home, shortcut: '⌘1' },
-  { key: 'chat', href: '/dashboard/chat', icon: MessageSquare, shortcut: '⌘2' },
-  { key: 'tasks', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘3' },
-  { key: 'docs', href: '/dashboard/docs', icon: FileText, shortcut: '⌘4' },
-  { key: 'agents', href: '/dashboard/agents', icon: Bot, shortcut: '⌘5' },
+  { key: 'plans', href: '/dashboard/docs', icon: FileText, shortcut: '⌘1' },
+  { key: 'work', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘2' },
+  { key: 'changes', href: '/dashboard/changes', icon: GitPullRequestArrow, shortcut: '⌘3' },
+  { key: 'runs', href: '/dashboard/agents', icon: Activity, shortcut: '⌘4' },
 ];
 
 // Sync status types
@@ -120,7 +119,6 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
 // Mobile Menu
 function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { openModal } = useUIStore();
   const t = useT();
 
@@ -188,22 +186,31 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
               })}
             </nav>
 
+            <Link
+              href="/dashboard/chat"
+              onClick={onClose}
+              className="mb-8 flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
+              <MessageSquare className="h-5 w-5" />
+              <span className="font-medium">{t('chat.askNexus')}</span>
+            </Link>
+
             {/* Quick Actions */}
             <div className="space-y-2">
-              <p className="text-label text-muted-foreground px-4 mb-2">Quick Actions</p>
+              <p className="text-label text-muted-foreground px-4 mb-2">{t('dashboard.bentoQuickActions')}</p>
               <button
                 onClick={() => { openModal('createDocument'); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <Plus className="h-5 w-5" />
-                <span>New Document</span>
+                <span>{t('dashboard.newDocument')}</span>
               </button>
               <button
                 onClick={() => { openModal('createTask'); onClose(); }}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
               >
                 <Plus className="h-5 w-5" />
-                <span>New Task</span>
+                <span>{t('dashboard.qaNewTask')}</span>
               </button>
             </div>
           </motion.div>
@@ -218,6 +225,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const { data: session } = useSession();
   const router = useRouter();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
   const { openModal } = useUIStore();
   const t = useT();
 
@@ -230,6 +238,11 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
     await signOut();
     router.push('/login');
   }, [router]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setClientReady(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -340,42 +353,57 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             </motion.div>
 
             {/* User menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="p-1 rounded-full glass-premium hover:bg-white/10 transition-colors"
-                >
-                  <Avatar className="h-8 w-8 ring-2 ring-white/10">
-                    <AvatarImage src={userImage} />
-                    <AvatarFallback className="bg-muted text-xs font-medium">
-                      {userInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                </motion.button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{userName}</p>
-                  <p className="text-xs text-muted-foreground">{user?.email}</p>
-                </div>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/dashboard/settings?tab=profile')}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {clientReady ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="p-1 rounded-full glass-premium hover:bg-white/10 transition-colors"
+                  >
+                    <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                      <AvatarImage src={userImage} />
+                      <AvatarFallback className="bg-muted text-xs font-medium">
+                        {userInitials}
+                      </AvatarFallback>
+                    </Avatar>
+                  </motion.button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <div className="px-2 py-1.5">
+                    <p className="text-sm font-medium">{userName}</p>
+                    <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => router.push('/dashboard/settings?tab=profile')}>
+                    <User className="mr-2 h-4 w-4" />
+                    {t('common.profile')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    {t('nav.settings')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    {t('common.signOut')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <button
+                type="button"
+                aria-label="User menu loading"
+                className="p-1 rounded-full glass-premium transition-colors"
+                disabled
+              >
+                <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                  <AvatarFallback className="bg-muted text-xs font-medium">
+                    U
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
@@ -461,6 +489,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
 // Floating AI Command Button with Modal
 function AICommandButton({ userId }: { userId: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const t = useT();
 
   return (
     <>
@@ -481,7 +510,7 @@ function AICommandButton({ userId }: { userId: string }) {
           'hover:shadow-xl hover:shadow-black/30',
           'transition-shadow duration-200'
         )}
-        title="Ask AI (⌘J)"
+        title={`${t('chat.askAiAnything')} (⌘J)`}
       >
         <Wand2 className="h-6 w-6" />
       </motion.button>
@@ -511,7 +540,7 @@ function AICommandButton({ userId }: { userId: string }) {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                   <div className="flex items-center gap-2 text-white/60 text-sm">
                     <Sparkles className="h-4 w-4" />
-                    <span>Ask AI anything</span>
+                    <span>{t('chat.askAiAnything')}</span>
                   </div>
                   <button
                     onClick={() => setIsOpen(false)}
@@ -523,7 +552,7 @@ function AICommandButton({ userId }: { userId: string }) {
                 <CommandInput
                   workspaceId="default"
                   userId={userId}
-                  placeholder="e.g., 'Create a marketing plan', 'Summarize my tasks'..."
+                  placeholder={t('chat.commandPlaceholder')}
                   onCommandCreated={() => setIsOpen(false)}
                 />
               </div>

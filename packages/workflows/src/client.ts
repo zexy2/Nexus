@@ -9,6 +9,53 @@ import type { WorkflowResult, WorkflowStatus } from "./types";
 
 let client: Client | null = null;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function getNestedString(value: unknown, keys: string[]): string | undefined {
+  let current: unknown = value;
+  for (const key of keys) {
+    const record = asRecord(current);
+    if (!record) return undefined;
+    current = record[key];
+  }
+  return typeof current === "string" && current.trim().length > 0
+    ? current
+    : undefined;
+}
+
+function getWorkflowWorkerFailure(events: unknown[] = []) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = asRecord(events[index]);
+    if (!event) continue;
+
+    const eventType = String(event.eventType || "");
+    const hasFailureAttrs = !!event.workflowTaskFailedEventAttributes;
+    const isWorkflowTaskFailure =
+      hasFailureAttrs ||
+      eventType === "9" ||
+      eventType.includes("WORKFLOW_TASK_FAILED");
+    if (!isWorkflowTaskFailure) continue;
+
+    const message =
+      getNestedString(event, ["workflowTaskFailedEventAttributes", "failure", "message"]) ||
+      getNestedString(event, ["workflowTaskFailedEventAttributes", "failure", "stackTrace"]);
+    if (!message) continue;
+
+    if (
+      /Failed to initialize workflow/i.test(message) ||
+      /no such function is exported by the workflow bundle/i.test(message)
+    ) {
+      return message;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Create or get the Temporal client
  */
@@ -66,11 +113,25 @@ export async function getWorkflowStatus(
   const handle = temporalClient.workflow.getHandle(workflowId);
 
   const description = await handle.describe();
+  const status = description.status.name as WorkflowStatus;
+
+  if (status === "RUNNING") {
+    const history = await handle.fetchHistory();
+    const workerFailure = getWorkflowWorkerFailure((history.events || []) as unknown[]);
+    if (workerFailure) {
+      return {
+        workflowId,
+        runId: description.runId,
+        status: "FAILED",
+        error: workerFailure,
+      };
+    }
+  }
 
   return {
     workflowId,
     runId: description.runId,
-    status: description.status.name as WorkflowStatus,
+    status,
   };
 }
 

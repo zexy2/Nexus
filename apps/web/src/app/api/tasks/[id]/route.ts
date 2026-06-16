@@ -9,6 +9,7 @@ import {
   parseTaskStatus,
   parseTaskTitle,
 } from "@/lib/task-validation";
+import { writeAuditLog } from "@/lib/production-guardrails";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,6 +73,7 @@ export async function GET(
     return Response.json({
       id: task.id,
       workspaceId: task.workspaceId,
+      docId: task.docId,
       title: task.title,
       description: task.description,
       status: task.status,
@@ -79,6 +81,8 @@ export async function GET(
       assigneeId: task.assigneeId,
       assigneeAgentType: task.assigneeAgentType,
       dueDate: task.dueDate?.getTime(),
+      alignmentStatus: task.alignmentStatus,
+      isArchived: task.isArchived === 1,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
     });
@@ -208,6 +212,7 @@ export async function PATCH(
     return Response.json({
       id: updated.id,
       workspaceId: updated.workspaceId,
+      docId: updated.docId,
       title: updated.title,
       description: updated.description,
       status: updated.status,
@@ -215,6 +220,8 @@ export async function PATCH(
       assigneeId: updated.assigneeId,
       assigneeAgentType: updated.assigneeAgentType,
       dueDate: updated.dueDate?.getTime(),
+      alignmentStatus: updated.alignmentStatus,
+      isArchived: updated.isArchived === 1,
       updatedAt: updated.updatedAt.toISOString(),
     });
   } catch (error) {
@@ -252,16 +259,27 @@ export async function DELETE(
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const [deleted] = await db
-      .delete(tasks)
+    const [archived] = await db
+      .update(tasks)
+      .set({
+        isArchived: 1,
+        updatedAt: new Date(),
+      })
       .where(and(eq(tasks.id, id), eq(tasks.workspaceId, existing.workspaceId)))
       .returning();
 
-    if (!deleted) {
+    if (!archived) {
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
 
-    return Response.json({ success: true });
+    await writeAuditLog({
+      userId,
+      workspaceId: existing.workspaceId,
+      event: "task.archive",
+      metadata: { taskId: id, title: existing.title },
+    });
+
+    return Response.json({ success: true, archived: true });
   } catch (error) {
     console.error("Failed to delete task:", error);
     return Response.json({ error: "Failed to delete task" }, { status: 500 });
