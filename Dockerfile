@@ -10,7 +10,6 @@ COPY apps/web/package.json apps/web/package.json
 COPY packages/agents/package.json packages/agents/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/workflows/package.json packages/workflows/package.json
-COPY packages/zero-schema/package.json packages/zero-schema/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
 RUN pnpm install --frozen-lockfile
 
