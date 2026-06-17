@@ -2,7 +2,7 @@
   "name": "nexus",
   "version": "0.1.0",
   "private": true,
-  "description": "Yerel-Öncelikli, Otonom Çoklu-Ajan Orkestrasyonu ve İşbirliği Platformu",
+  "description": "Living Plan impact review, Kanban alignment, and AI workflow workspace demo",
   "scripts": {
     "dev:local": "bash scripts/dev-local.sh",
     "dev": "turbo dev",

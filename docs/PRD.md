@@ -1,456 +1,210 @@
-# Product Requirements Document (PRD)
-## Nexus - Living Plan Workflow Workspace
-
----
-
-## 1. Product Overview
-
-### 1.1 Vision Statement
-Nexus is a portfolio-demo AI workflow workspace that keeps delivery work aligned when a project plan changes. A plan is versioned, requirements receive stable IDs, affected tasks are proposed for review, and nothing reaches the Kanban board until a user approves it.
-
-### 1.2 Product Goals
-
-| Goal                  | Description                                                                 | Success Metric                         |
-| --------------------- | --------------------------------------------------------------------------- | -------------------------------------- |
-| **Plan alignment**    | Detect added, changed, and removed requirements when a plan changes          | Impact review generated for each plan  |
-| **Human approval**    | Propose task changes without mutating the board until the user approves them | No unapproved Kanban mutations         |
-| **Workflow evidence** | Show durable workflow history for plan generation and impact analysis        | Running/completed/failed runs visible  |
-| **Demo clarity**      | Let a recruiter understand the main flow quickly                             | <5 min demo journey                    |
-
-### 1.3 Product Positioning
-**"Change the plan once. Nexus keeps the work aligned."** Nexus is not positioned as a full Jira/Linear replacement. It is a controlled public demo that proves a specific workflow:
-- Generate a project plan with server-managed Gemini.
-- Extract stable requirements such as `REQ-001`.
-- Link requirements to Kanban tasks and coverage status.
-- Analyze plan changes and produce reviewable work proposals.
-- Apply only user-approved proposals, with audit and workflow history.
-
----
-
-## 2. Target Users
-
-### 2.1 Primary Personas
-
-#### Persona 1: "Alex the Startup Founder"
-- **Demographics:** 28-40, technical background
-- **Goals:** Move fast, automate repetitive work, maintain data control
-- **Pain Points:** Context switching between tools, AI tools that don't understand business context
-- **Use Cases:** Generate investor reports, break down product roadmaps, automate documentation
-
-#### Persona 2: "Sarah the Product Lead"
-- **Demographics:** 30-45, manages cross-functional team
-- **Goals:** Keep team aligned, track progress, produce stakeholder updates
-- **Pain Points:** Information scattered across tools, manual status reporting
-- **Use Cases:** AI-assisted meeting notes, task delegation to agents, weekly report generation
-
-#### Persona 3: "Dev the Developer"
-- **Demographics:** 22-35, writes code daily
-- **Goals:** Document code efficiently, manage technical tasks, research solutions
-- **Pain Points:** Context switching, documentation debt, repetitive boilerplate
-- **Use Cases:** Code documentation, API spec generation, technical research
-
-### 2.2 Secondary Personas
-- Individual freelancers managing client projects
-- Small teams (2-10 people) needing shared workspace
-- Future expansion: teams that need self-hosted deployment and stricter data controls
-
----
-
-## 3. Core Features & User Flows
-
-### 3.1 Feature Map
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         NEXUS WORKSPACE                          │
-├─────────────────┬─────────────────┬─────────────────────────────┤
-│   LIVING PLANS  │      WORK       │       WORKFLOW CENTER       │
-├─────────────────┼─────────────────┼─────────────────────────────┤
-│ • Versioned plan│ • Kanban Board  │ • Plan generation workflow  │
-│ • REQ IDs       │ • Drag & Drop   │ • Impact analysis workflow  │
-│ • Coverage      │ • Priority Lvls │ • Task alignment workflow   │
-│ • Impact review │ • Alignment     │ • Workflow execution trail  │
-│ • Change sets   │ • Archive       │ • Audit-backed decisions    │
-└─────────────────┴─────────────────┴─────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-│          ASK NEXUS            │
-│  • Secondary assistant        │
-│  • Workspace-aware help       │
-│  • No agent-mode selector     │
-              └───────────────────────────────┘
-```
-
-### 3.2 User Flows
-
-#### Flow 1: Document Creation with AI
-```
-[Dashboard] → [New Document] → [Title Input] → [Editor Opens]
-                                                     ↓
-                                            [Type or Ask AI]
-                                                     ↓
-                                    [AI generates content with agent]
-                                                     ↓
-                                         [Edit & Save] → [Auto-sync]
-```
-
-#### Flow 2: Task Management
-```
-[Tasks Page] → [View Kanban Board] → [Create Task (+)]
-                                            ↓
-                                    [Fill Task Form]
-                                    • Title, Description
-                                    • Priority (low/medium/high/urgent)
-                                    • Assign to User or AI Agent
-                                    • Tags, Due Date
-                                            ↓
-                                    [Drag between columns]
-                                    Todo → In Progress → Done
-```
-
-#### Flow 3: AI Agent Workflow Execution
-```
-[Agents Page] → [Select Workflow Type]
-                • Document Generation
-                • Deep Research
-                • Task Breakdown
-                • Code Generation
-                        ↓
-                [Configure Parameters]
-                        ↓
-                [Execute] → [View Progress] → [Output Generated]
-                                                    ↓
-                                            [Save to Documents/Tasks]
-```
-
-#### Flow 4: AI Chat Interaction
-```
-[Chat Page] → [Select Agent Mode]
-              • Auto (AI decides)
-              • Researcher
-              • Writer
-              • Coder
-              • Task Manager
-                    ↓
-            [Type Message] → [Send]
-                    ↓
-            [AI Response with Actions]
-            • Create document
-            • Add task
-            • Search web
-            • Generate code
-```
-
----
-
-## 4. UI/UX Requirements
-
-### 4.1 Design System
-
-#### Color Palette (Dark Mode - Primary)
-| Token                | Value                   | Usage              |
-| -------------------- | ----------------------- | ------------------ |
-| `--background`       | `#000000`               | Main background    |
-| `--foreground`       | `#ffffff`               | Primary text       |
-| `--card`             | `#0a0a0a`               | Card backgrounds   |
-| `--muted`            | `#171717`               | Secondary surfaces |
-| `--muted-foreground` | `#a3a3a3`               | Secondary text     |
-| `--border`           | `rgba(255,255,255,0.1)` | Borders            |
-| `--primary`          | `#ffffff`               | Primary actions    |
-| `--destructive`      | `#ef4444`               | Error states       |
-
-#### Typography
-| Style   | Font             | Size                       | Weight | Usage           |
-| ------- | ---------------- | -------------------------- | ------ | --------------- |
-| Display | Playfair Display | clamp(3rem, 8vw, 8rem)     | 600    | Hero headlines  |
-| Heading | Inter            | clamp(1.5rem, 3vw, 2.5rem) | 600    | Section headers |
-| Title   | Inter            | 1.25rem                    | 600    | Card titles     |
-| Body    | Inter            | 1rem                       | 400    | Content text    |
-| Caption | Inter            | 0.875rem                   | 400    | Secondary info  |
-| Label   | Inter            | 0.75rem                    | 500    | Form labels     |
-| Mono    | Geist Mono       | 0.875rem                   | 400    | Code blocks     |
-
-#### Component Library
-- Based on Radix UI primitives
-- Tailwind CSS for styling
-- Framer Motion for animations
-- Glass-morphism effects (`glass-premium` class)
-
-### 4.2 Layout Requirements
-
-#### Responsive Breakpoints
-| Breakpoint | Width      | Layout Adjustments                           |
-| ---------- | ---------- | -------------------------------------------- |
-| Mobile     | <768px     | Single column, hamburger menu, stacked cards |
-| Tablet     | 768-1024px | 2-column grid, condensed nav                 |
-| Desktop    | >1024px    | Full layout, floating nav, 3-4 column grids  |
-
-#### Navigation Structure
-- **Landing Page:** Fixed header with scroll-aware styling (transparent → solid)
-- **Dashboard:** Floating pill navigation (centered, top), mobile hamburger menu
-- **Sidebar:** Collapsible app sidebar with user menu at bottom
-
-### 4.3 Animation Requirements
-| Interaction      | Animation                      | Duration |
-| ---------------- | ------------------------------ | -------- |
-| Page transition  | Fade + slight Y translate      | 300ms    |
-| Card hover       | translateY(-4px) + border glow | 200ms    |
-| Button click     | scale(0.98)                    | 100ms    |
-| Modal open       | Fade in + zoom from 95%        | 200ms    |
-| Skeleton loading | Shimmer effect                 | 2s loop  |
-| Agent status     | Pulse indicator                | 2s loop  |
-
----
-
-## 5. Functional Requirements
-
-### 5.1 Authentication (FR-AUTH)
-
-| ID         | Requirement                                        | Priority |
-| ---------- | -------------------------------------------------- | -------- |
-| FR-AUTH-01 | Users can sign up with email/password              | P0       |
-| FR-AUTH-02 | Users can sign in with GitHub OAuth                | P0       |
-| FR-AUTH-03 | Users can sign in with Google OAuth                | P0       |
-| FR-AUTH-04 | Users can reset password via email                 | P1       |
-| FR-AUTH-05 | Session persists across browser refreshes          | P0       |
-| FR-AUTH-06 | Guest mode allows dashboard access without account | P2       |
-
-### 5.2 Documents (FR-DOC)
-
-| ID        | Requirement                                               | Priority |
-| --------- | --------------------------------------------------------- | -------- |
-| FR-DOC-01 | Users can create new documents with title and emoji icon  | P0       |
-| FR-DOC-02 | Rich text editor with headings, lists, code blocks, links | P0       |
-| FR-DOC-03 | AI writing assistance via inline commands                 | P0       |
-| FR-DOC-04 | Documents auto-save on edit (debounced)                   | P0       |
-| FR-DOC-05 | Users can favorite/unfavorite documents                   | P1       |
-| FR-DOC-06 | Users can archive documents (soft delete)                 | P1       |
-| FR-DOC-07 | Users can duplicate documents                             | P2       |
-| FR-DOC-08 | Grid and list view toggle                                 | P2       |
-| FR-DOC-09 | Search and filter documents                               | P1       |
-| FR-DOC-10 | Sort by updated, created, title, favorite                 | P2       |
-
-### 5.3 Tasks (FR-TASK)
-
-| ID         | Requirement                                          | Priority |
-| ---------- | ---------------------------------------------------- | -------- |
-| FR-TASK-01 | Kanban board with 3 columns: Todo, In Progress, Done | P0       |
-| FR-TASK-02 | Drag and drop tasks between columns                  | P0       |
-| FR-TASK-03 | Create task with title, description, priority, tags  | P0       |
-| FR-TASK-04 | Assign task to user or AI agent                      | P1       |
-| FR-TASK-05 | Set due date on tasks                                | P1       |
-| FR-TASK-06 | Priority levels: low, medium, high, urgent           | P0       |
-| FR-TASK-07 | Visual priority indicators (color-coded badges)      | P0       |
-| FR-TASK-08 | Edit task inline or via modal                        | P1       |
-| FR-TASK-09 | Delete task with confirmation                        | P1       |
-| FR-TASK-10 | AI badge for agent-assigned tasks                    | P2       |
-
-### 5.4 AI Agents (FR-AGENT)
-
-| ID          | Requirement                                         | Priority |
-| ----------- | --------------------------------------------------- | -------- |
-| FR-AGENT-01 | Display all available agent types with capabilities | P0       |
-| FR-AGENT-02 | Execute workflows: document, research, task, code   | P0       |
-| FR-AGENT-03 | Show real-time execution progress                   | P0       |
-| FR-AGENT-04 | Display execution history with status               | P1       |
-| FR-AGENT-05 | View execution output and errors                    | P0       |
-| FR-AGENT-06 | Retry failed executions                             | P2       |
-| FR-AGENT-07 | Cancel running executions                           | P2       |
-| FR-AGENT-08 | Metrics dashboard: total, success rate, avg time    | P1       |
-
-### 5.5 AI Chat (FR-CHAT)
-
-| ID         | Requirement                                               | Priority |
-| ---------- | --------------------------------------------------------- | -------- |
-| FR-CHAT-01 | Send messages to AI agents                                | P0       |
-| FR-CHAT-02 | Hide agent mode selection; route by intended outcome        | P1       |
-| FR-CHAT-03 | Display conversation history                              | P0       |
-| FR-CHAT-04 | Copy message content                                      | P2       |
-| FR-CHAT-05 | Retry last message                                        | P2       |
-| FR-CHAT-06 | Clear conversation history                                | P2       |
-| FR-CHAT-07 | Typing indicator during AI response                       | P1       |
-| FR-CHAT-08 | Timestamp on messages                                     | P2       |
-
-### 5.6 Settings (FR-SET)
-
-| ID        | Requirement                                       | Priority |
-| --------- | ------------------------------------------------- | -------- |
-| FR-SET-01 | Update profile name and avatar                    | P1       |
-| FR-SET-02 | Show server-managed AI availability and daily quota | P0       |
-| FR-SET-03 | Keep BYOK fields hidden for normal users            | P0       |
-| FR-SET-04 | Reserve provider/API-key management for admin use   | P2       |
-| FR-SET-05 | Toggle email notifications                        | P2       |
-| FR-SET-06 | Toggle agent activity notifications               | P2       |
-| FR-SET-07 | Toggle task reminders                             | P2       |
-| FR-SET-08 | Select theme (light/dark/system)                  | P1       |
-| FR-SET-09 | Toggle compact mode                               | P3       |
-| FR-SET-10 | Configure sync frequency                          | P2       |
-| FR-SET-11 | Show sync status for API-backed/offline queue behavior | P2       |
-
----
-
-## 6. Non-Functional Requirements
-
-### 6.1 Performance (NFR-PERF)
-
-| ID          | Requirement                   | Target |
-| ----------- | ----------------------------- | ------ |
-| NFR-PERF-01 | Initial page load (LCP)       | <2.5s  |
-| NFR-PERF-02 | Time to interactive (TTI)     | <3.5s  |
-| NFR-PERF-03 | First input delay (FID)       | <100ms |
-| NFR-PERF-04 | Cumulative layout shift (CLS) | <0.1   |
-| NFR-PERF-05 | API response time (p95)       | <500ms |
-| NFR-PERF-06 | Real-time sync latency        | <200ms |
-| NFR-PERF-07 | Animation frame rate          | 60fps  |
-
-### 6.2 Accessibility (NFR-A11Y)
-
-| ID          | Requirement                                      | Standard    |
-| ----------- | ------------------------------------------------ | ----------- |
-| NFR-A11Y-01 | WCAG 2.1 Level AA compliance                     | Required    |
-| NFR-A11Y-02 | Keyboard navigation for all interactive elements | Required    |
-| NFR-A11Y-03 | Screen reader compatible                         | Required    |
-| NFR-A11Y-04 | Color contrast ratio ≥4.5:1 for text             | Required    |
-| NFR-A11Y-05 | Focus indicators visible                         | Required    |
-| NFR-A11Y-06 | Respect prefers-reduced-motion                   | Required    |
-| NFR-A11Y-07 | Touch targets ≥44x44px on mobile                 | Recommended |
-
-### 6.3 Security (NFR-SEC)
-
-| ID         | Requirement                                  |
-| ---------- | -------------------------------------------- |
-| NFR-SEC-01 | Provider API keys stored only as server environment secrets in v1 |
-| NFR-SEC-02 | HTTPS enforced for all connections           |
-| NFR-SEC-03 | Session tokens use secure, httpOnly cookies  |
-| NFR-SEC-04 | CSRF protection on state-changing operations |
-| NFR-SEC-05 | Input sanitization to prevent XSS            |
-| NFR-SEC-06 | Rate limiting on authentication endpoints    |
-
-### 6.4 Reliability (NFR-REL)
-
-| ID         | Requirement                   | Target                          |
-| ---------- | ----------------------------- | ------------------------------- |
-| NFR-REL-01 | Uptime SLA                    | 99.9%                           |
-| NFR-REL-02 | Data durability               | Persist plans, tasks, change sets, workflow runs, audit logs |
-| NFR-REL-03 | Graceful degradation          | AI endpoints return clear 503/429 states instead of mock data |
-| NFR-REL-04 | Error recovery                | Workflow failures are recorded and visible to the user |
-
----
-
-## 7. Edge Cases & Error States
-
-### 7.1 Network Conditions
-
-| Scenario                     | Expected Behavior                                           |
-| ---------------------------- | ----------------------------------------------------------- |
-| Offline during document edit | Changes saved locally, sync indicator shows "Offline"       |
-| Reconnect after offline      | Sync queued local mutations through API-backed sync endpoints |
-| Slow network (<2G)           | Show loading skeletons, timeout after 30s with retry option |
-| Network error mid-request    | Show inline error with "Retry" button                       |
-
-### 7.2 Authentication Errors
-
-| Scenario             | Expected Behavior                                |
-| -------------------- | ------------------------------------------------ |
-| Invalid credentials  | Show error message "Invalid email or password"   |
-| Expired session      | Redirect to login with "Session expired" message |
-| OAuth provider error | Show fallback to email login with error message  |
-| Rate limited         | Show "Too many attempts. Try again in X minutes" |
-
-### 7.3 AI Agent Errors
-
-| Scenario                | Expected Behavior                            |
-| ----------------------- | -------------------------------------------- |
-| AI provider unavailable | Return `503 AI_PROVIDER_UNAVAILABLE` with a non-retryable explanation |
-| AI quota exceeded       | Return `429 RATE_LIMIT_EXCEEDED` with reset information              |
-| Workflow timeout        | Show failed status with retry path and persist the error             |
-| Malformed agent output  | Fail the workflow with a controlled error; do not write invented tasks |
-
-### 7.4 Data Validation
-
-| Scenario                | Expected Behavior                             |
-| ----------------------- | --------------------------------------------- |
-| Empty document title    | Default to "Untitled"                         |
-| Task title >200 chars   | Truncate with ellipsis in UI, store full text |
-| Duplicate document name | Allow (no unique constraint)                  |
-| Invalid emoji selected  | Fallback to default 📄 icon                    |
-
-### 7.5 Concurrent Editing
-
-| Scenario                        | Expected Behavior                           |
-| ------------------------------- | ------------------------------------------- |
-| Two users edit same doc         | Real-time merge via Yjs collaboration path  |
-| Conflict in task status         | Last-write-wins with visual indicator       |
-| User goes offline during collab | Local changes preserved, merge on reconnect |
-
----
-
-## 8. Assumptions & Open Questions
-
-### 8.1 Assumptions
-
-| ID  | Assumption                                                       | Risk if False                          |
-| --- | ---------------------------------------------------------------- | -------------------------------------- |
-| A1  | Users have modern browsers (Chrome 90+, Firefox 88+, Safari 14+) | Polyfills needed, larger bundle        |
-| A2  | AI API costs are acceptable per user                             | Need usage tiers or quotas             |
-| A3  | API-backed sync/offline queue handles small document changes     | Production Zero cache remains deferred |
-| A4  | Single workspace per user initially                              | Multi-workspace architecture later     |
-| A5  | English UI only at launch                                        | i18n framework needed for localization |
-
-### 8.2 Open Questions
-
-| ID  | Question                                    | Owner       | Due Date |
-| --- | ------------------------------------------- | ----------- | -------- |
-| Q1  | What is the free tier AI token limit?       | Product     | TBD      |
-| Q2  | Should documents support nested folders?    | Design      | TBD      |
-| Q3  | Do we need document version history?        | Engineering | TBD      |
-| Q4  | What is the max team size per workspace?    | Product     | TBD      |
-| Q5  | Should we support custom AI agent creation? | Product     | TBD      |
-| Q6  | Is white-label deployment a requirement?    | Sales       | TBD      |
-| Q7  | What analytics events should we track?      | Product     | TBD      |
-| Q8  | Do we need GDPR data export/deletion?       | Legal       | TBD      |
-
----
-
-## 9. Success Metrics
-
-| Metric                   | Definition                              | Target           |
-| ------------------------ | --------------------------------------- | ---------------- |
-| Daily Active Users (DAU) | Unique users with ≥1 action per day     | 1,000 @ 3 months |
-| Document Creation Rate   | Avg documents created per user per week | 5                |
-| AI Agent Adoption        | % of users running ≥1 workflow per week | 40%              |
-| Task Completion Rate     | Tasks moved to "Done" / Total tasks     | 60%              |
-| Session Duration         | Avg time in app per session             | 15 min           |
-| Retention (D7)           | Users returning 7 days after signup     | 30%              |
-| NPS Score                | Net Promoter Score survey               | ≥40              |
-
----
-
-## 10. Release Phases
-
-### Phase 1: MVP (Current)
-- ✅ Landing page with product info
-- ✅ Authentication (email + OAuth)
-- ✅ Document editor with AI assistance
-- ✅ Task kanban board
-- ✅ AI agent workflows
-- ✅ Basic settings
-
-### Phase 2: Collaboration
-- [ ] Real-time multiplayer editing
-- [ ] User presence indicators
-- [ ] Comments on documents
-- [ ] @mentions in tasks
-
-### Phase 3: Enterprise
-- [ ] Team workspaces
-- [ ] Role-based permissions
-- [ ] Audit logs
-- [ ] SSO (SAML/OIDC)
-- [ ] Self-hosted deployment
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** 26 Ocak 2026  
-**Author:** Senior Product Manager (AI-Generated from Codebase Analysis)
+# Nexus Product Requirements
+
+## 1. Summary
+
+Nexus is a public portfolio demo for an AI-assisted workflow workspace.
+
+The product is not "AI generates a document and a task list." That is easy to reproduce in ChatGPT. The real product claim is:
+
+> Change the plan once. Nexus keeps the work aligned.
+
+Nexus stores the plan, extracts stable requirements, links them to delivery tasks, detects what changed, proposes work updates, and applies only the changes approved by the user.
+
+## 2. Target Audience
+
+Primary reviewers:
+
+- Recruiters evaluating a real full-stack product demo.
+- Technical leads evaluating product thinking and implementation depth.
+- Small-team founders who understand the pain of stale project plans and disconnected task boards.
+
+Primary user in-product:
+
+- A solo builder, product lead, or small software team member who wants to keep a project plan and Kanban board aligned after scope changes.
+
+## 3. Problem
+
+Project plans change, but delivery work often stays stale.
+
+Common failure modes:
+
+- A requirement changes but the task board is not updated.
+- New requirements have no tasks.
+- Removed requirements leave orphaned tasks behind.
+- AI produces plausible text, but no durable link exists between plan, tasks, and decisions.
+- Teams cannot inspect why a task was created or changed.
+
+## 4. Positioning
+
+Nexus is a change-control layer for AI-assisted planning.
+
+It is not:
+
+- A Jira/Linear replacement.
+- A generic multi-agent chat product.
+- A full SaaS with public signup and billing.
+- A tool where AI can silently rewrite the task board.
+
+It is:
+
+- A controlled public demo.
+- A Living Plan workspace.
+- A human-approved impact review system.
+- A proof that AI output can become auditable product data.
+
+## 5. Product Principles
+
+- Plans are versioned artifacts, not disposable chat responses.
+- Requirements have stable IDs such as `REQ-001`.
+- Tasks should link back to requirements.
+- AI proposes changes; users approve mutations.
+- Failed or unavailable AI should be explicit, not hidden behind mock output.
+- Workflow history is part of the product, not a debug screen.
+- Demo AI spend must be bounded with server-side quotas.
+
+## 6. Core Objects
+
+| Object                | Purpose                                                         |
+| --------------------- | --------------------------------------------------------------- |
+| Document / Plan       | Editable source plan content.                                   |
+| Plan version          | Immutable snapshot used for comparison.                         |
+| Requirement           | Stable requirement extracted from a plan version.               |
+| Task                  | Kanban work item.                                               |
+| Requirement-task link | Relationship between scope and delivery work.                   |
+| Change set            | Impact analysis result for a plan change.                       |
+| Change proposal       | Suggested task/link/archive action awaiting approval.           |
+| Workflow run          | Durable execution record with status, steps, output, and error. |
+| Audit log             | Record of critical user/system actions.                         |
+
+## 7. Main User Flow
+
+### 7.1 First plan
+
+1. User signs in with the demo account.
+2. User creates or generates a project plan.
+3. User runs Living Plan analysis.
+4. Nexus extracts requirements.
+5. Nexus proposes initial tasks.
+6. User approves selected proposals.
+7. Approved tasks appear on the Kanban board with requirement links.
+
+### 7.2 Plan change
+
+1. User edits the plan.
+2. User runs impact analysis.
+3. Nexus compares the new plan with the previous accepted version.
+4. Nexus classifies added, modified, removed, and unchanged requirements.
+5. Nexus identifies impacted, orphaned, and missing work.
+6. Nexus creates proposals.
+7. User applies selected proposals or rejects the change set.
+8. Kanban and workflow history update accordingly.
+
+## 8. Functional Requirements
+
+### 8.1 Living Plans
+
+| ID    | Requirement                                                     | Priority |
+| ----- | --------------------------------------------------------------- | -------- |
+| LP-01 | Users can create and edit project plans.                        | P0       |
+| LP-02 | Users can create immutable plan versions from document content. | P0       |
+| LP-03 | AI extracts stable requirement IDs from a plan.                 | P0       |
+| LP-04 | Requirements show coverage and linked task count.               | P0       |
+| LP-05 | Users can inspect accepted and pending requirement states.      | P1       |
+
+### 8.2 Change Impact Review
+
+| ID    | Requirement                                                            | Priority |
+| ----- | ---------------------------------------------------------------------- | -------- |
+| CH-01 | Users can trigger impact analysis for a changed plan.                  | P0       |
+| CH-02 | Nexus classifies added, modified, removed, and unchanged requirements. | P0       |
+| CH-03 | Nexus identifies affected tasks and orphaned work.                     | P0       |
+| CH-04 | Nexus creates proposals without mutating tasks immediately.            | P0       |
+| CH-05 | Users can apply selected proposals.                                    | P0       |
+| CH-06 | Users can reject a change set without changing data.                   | P0       |
+
+### 8.3 Kanban Work
+
+| ID    | Requirement                                                                | Priority |
+| ----- | -------------------------------------------------------------------------- | -------- |
+| WK-01 | Users can view tasks in Todo, In Progress, and Done columns.               | P0       |
+| WK-02 | Users can drag tasks between columns.                                      | P0       |
+| WK-03 | Tasks show requirement links where available.                              | P0       |
+| WK-04 | Tasks expose alignment states such as aligned, needs review, and orphaned. | P0       |
+| WK-05 | Tasks are archived rather than hard-deleted by generated proposals.        | P1       |
+
+### 8.4 Workflow History
+
+| ID    | Requirement                                                         | Priority |
+| ----- | ------------------------------------------------------------------- | -------- |
+| RN-01 | Workflow runs persist status, steps, result, error, and timing.     | P0       |
+| RN-02 | Running workflows reconcile with Temporal before being shown.       | P0       |
+| RN-03 | Failed workflows are visible and include controlled error messages. | P0       |
+| RN-04 | Completed impact workflows create pending change sets.              | P0       |
+
+### 8.5 AI and Demo Safety
+
+| ID    | Requirement                                                    | Priority |
+| ----- | -------------------------------------------------------------- | -------- |
+| AI-01 | Normal users do not enter provider API keys in v1.             | P0       |
+| AI-02 | Server-managed Gemini is the primary provider.                 | P0       |
+| AI-03 | Missing provider config returns `503 AI_PROVIDER_UNAVAILABLE`. | P0       |
+| AI-04 | Daily and per-minute limits return `429 RATE_LIMIT_EXCEEDED`.  | P0       |
+| AI-05 | AI output parsers fail safely instead of inventing tasks.      | P0       |
+
+### 8.6 Authentication and Demo Entry
+
+| ID    | Requirement                                              | Priority |
+| ----- | -------------------------------------------------------- | -------- |
+| AU-01 | Public signup is disabled in demo mode.                  | P0       |
+| AU-02 | Demo login creates a server-side session.                | P0       |
+| AU-03 | Demo passwords are never bundled into client JavaScript. | P0       |
+| AU-04 | Optional demo access code can limit casual public usage. | P1       |
+
+## 9. Non-Functional Requirements
+
+| Area          | Requirement                                                                  |
+| ------------- | ---------------------------------------------------------------------------- |
+| Reliability   | No fake success fallback for AI, Temporal, or database failures.             |
+| Security      | Secrets live in environment variables, not the database or client bundle.    |
+| Authorization | Workspace-scoped endpoints must check ownership or membership.               |
+| Observability | Health checks expose database, Temporal, AI provider, and worker heartbeat.  |
+| Cost control  | Demo AI usage is bounded by global and per-user quotas.                      |
+| Deployment    | Docker VPS deployment must be reproducible with migrations and smoke checks. |
+
+## 10. Public Demo Acceptance Criteria
+
+The demo is acceptable for a CV link when:
+
+1. A reviewer can open the public URL.
+2. Demo login works without manual setup.
+3. The reviewer can create or open a plan.
+4. Living Plan analysis extracts requirements.
+5. The reviewer can approve proposals and see tasks appear on Kanban.
+6. Editing the plan and running impact review produces a new change set.
+7. Workflow history shows the relevant run statuses and steps.
+8. `/api/health` reports healthy database, Temporal, worker heartbeat, and configured AI provider.
+9. Quota and unavailable states are clear instead of silent failures.
+
+## 11. Known Constraints
+
+- This is a portfolio demo, not production SaaS.
+- Public signup stays disabled until email verification, captcha, and stronger abuse controls exist.
+- BYOK is deferred; it may be useful later, but it weakens the current demo story if added too early.
+- OpenAI embeddings and Tavily search are optional.
+- Production Zero cache is deferred; API-backed sync and offline queue behavior are used in v1.
+- Oracle/VPS deployment requires cloud ingress, HTTPS, and provider secrets before the public demo is fully ready.
+
+## 12. Future Options
+
+Potential next steps after the core demo is stable:
+
+- GitHub Issues or Linear export/import.
+- Provider selection and BYOK for advanced/admin users.
+- Better requirement matching with embeddings.
+- Commenting and review discussions on change proposals.
+- Email notifications for pending impact reviews.
+- Multi-workspace roles and member invitations.
+
+## 13. Last Updated
+
+June 2026
