@@ -147,6 +147,7 @@ demo_login_body="$(
   curl -fsS \
     -X POST \
     -H "Content-Type: application/json" \
+    -H "x-demo-access-code: ${DEMO_ACCESS_CODE:-}" \
     -c "$COOKIE_JAR" \
     "$BASE_URL/api/demo/session"
 )"
