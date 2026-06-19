@@ -15,6 +15,11 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY . .
+# Next.js evaluates auth-dependent routes while collecting build metadata.
+# This value exists only in the discarded builder stage; production runtime
+# still requires BETTER_AUTH_SECRET from .env.production.
+ENV BETTER_AUTH_SECRET="nexus-build-only-secret-not-used-at-runtime"
+ENV BETTER_AUTH_URL="http://localhost:3000"
 RUN pnpm build
 
 FROM base AS runner
