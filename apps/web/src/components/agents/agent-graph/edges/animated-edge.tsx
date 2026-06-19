@@ -60,11 +60,6 @@ export function AnimatedEdge({
     curvature: 0.25,
   });
 
-  // Calculate path length for animation
-  const pathLength = Math.sqrt(
-    Math.pow(targetX - sourceX, 2) + Math.pow(targetY - sourceY, 2)
-  );
-
   return (
     <>
       {/* Base edge */}

@@ -20,7 +20,7 @@ import {
 
 type StoreName = "docs" | "tasks";
 
-interface UseOfflineDataOptions<T> {
+interface UseOfflineDataOptions {
   store: StoreName;
   fetchUrl: string;
   enabled?: boolean;
@@ -41,7 +41,7 @@ interface UseOfflineDataResult<T> {
 }
 
 export function useOfflineData<T extends { id: string }>(
-  options: UseOfflineDataOptions<T>
+  options: UseOfflineDataOptions
 ): UseOfflineDataResult<T> {
   const { store, fetchUrl, enabled = true, onSync } = options;
 

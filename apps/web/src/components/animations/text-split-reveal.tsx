@@ -61,7 +61,7 @@ export function TextSplitReveal({
       const scrambleCycles = Math.floor(perCharDuration * 1000 / 50) + 3;
       let cycle = 0;
 
-      const intervalId = window.setTimeout(() => {
+      window.setTimeout(() => {
         const interval = setInterval(() => {
           cycle++;
           if (cycle >= scrambleCycles) {

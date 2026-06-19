@@ -364,7 +364,10 @@ export function AppShellV2({ children }: AppShellV2Props) {
   const [mounted, setMounted] = useState(false);
 
   const isCollapsed = !sidebarOpen;
-  const setIsCollapsed = (collapsed: boolean) => setSidebarOpen(!collapsed);
+  const setIsCollapsed = useCallback(
+    (collapsed: boolean) => setSidebarOpen(!collapsed),
+    [setSidebarOpen]
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => setMounted(true), 0);
@@ -415,7 +418,7 @@ export function AppShellV2({ children }: AppShellV2Props) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isCollapsed, router]);
+  }, [isCollapsed, router, setIsCollapsed]);
 
   const handleSignOut = useCallback(async () => {
     await signOut();

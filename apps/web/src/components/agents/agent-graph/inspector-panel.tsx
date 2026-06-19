@@ -167,7 +167,6 @@ export function InspectorPanel({
                 {filteredLogs.map((log, index) => {
                   const AgentIcon = agentIcons[log.agentType];
                   const typeConfig = logTypeConfig[log.type];
-                  const TypeIcon = typeConfig.icon;
 
                   return (
                     <motion.div

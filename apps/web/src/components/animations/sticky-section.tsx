@@ -188,6 +188,7 @@ export function StickySection({
                 {/* Image if provided */}
                 {item.image && (
                   <div className="relative aspect-video">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={item.image}
                       alt={item.title}

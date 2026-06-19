@@ -12,14 +12,6 @@ import { enforceAiBudget } from "@/lib/production-guardrails";
  * 4. Reporting - Generate comprehensive report with sources
  */
 
-interface ResearchStep {
-  phase: string;
-  status: "pending" | "running" | "completed";
-  details?: string;
-  duration?: number;
-  data?: unknown;
-}
-
 interface SearchResult {
   title: string;
   url: string;
@@ -184,7 +176,6 @@ Return ONLY a JSON array of search queries in Turkish. Example: ["query 1", "que
         
         const allResults: SearchResult[] = [];
         const allAnswers: string[] = [];
-        let totalSources = 0;
         
         for (let i = 0; i < searchQueries.length; i++) {
           const searchQuery = searchQueries[i];
@@ -198,7 +189,6 @@ Return ONLY a JSON array of search queries in Turkish. Example: ["query 1", "que
           
           if (searchResult.results.length > 0) {
             allResults.push(...searchResult.results);
-            totalSources += searchResult.results.length;
           }
           
           if (searchResult.answer) {
@@ -255,7 +245,7 @@ Return ONLY a JSON array of search queries in Turkish. Example: ["query 1", "que
 ${answerSummaries}
 
 **KAYNAK ÖZETLERİ:**
-${uniqueResults.slice(0, 10).map((r, i) => `[${i + 1}] ${r.title}: ${r.content.slice(0, 300)}`).join("\n\n")}
+${sourceSummaries}
 
 **TALİMATLAR:**
 - Türkçe yaz

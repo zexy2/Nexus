@@ -61,8 +61,6 @@ test.describe('Chat', () => {
     });
 
     test('should support multi-line input', async ({ page }) => {
-      const chat = new ChatPage(page);
-      
       await page.click('[data-testid="chat-input"]');
       await page.keyboard.type('Line 1');
       await page.keyboard.press('Shift+Enter');

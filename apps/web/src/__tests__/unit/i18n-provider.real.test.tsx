@@ -2,7 +2,7 @@
  * Confirms the locale provider actually flips language + persists, so we can
  * tell whether a "reverts to Turkish" bug is in the provider or the consumer.
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { LocaleProvider, useLocale, useT } from "@/lib/i18n/provider";
 

@@ -637,7 +637,7 @@ export default function TasksPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [engine]);
+  }, [engine, t]);
 
   useEffect(() => {
     void fetchTasks();
@@ -793,7 +793,7 @@ export default function TasksPage() {
       activeIdRef.current = null;
       dragTargetStatusRef.current = null;
     }
-  }, [fetchTasks, tasks, engine]);
+  }, [fetchTasks, tasks, engine, t]);
 
   // CRUD handlers
   const resetNewTask = useCallback(() => {
@@ -855,7 +855,7 @@ export default function TasksPage() {
       console.error("Failed to create task:", error);
       showToast.error(t('tasks.toastCreateFailed'));
     }
-  }, [newTask, engine, workspaceId, userId, resetNewTask]);
+  }, [newTask, engine, workspaceId, userId, resetNewTask, t]);
 
   const handleUpdateTask = useCallback(async () => {
     if (!editingTask) return;
@@ -909,7 +909,7 @@ export default function TasksPage() {
       showToast.error(t('tasks.toastUpdateFailed'));
       void fetchTasks();
     }
-  }, [editingTask, engine, fetchTasks]);
+  }, [editingTask, engine, fetchTasks, t]);
 
   const handleDeleteTask = useCallback(async (id: string) => {
     const previousTasks = tasks;
@@ -940,7 +940,7 @@ export default function TasksPage() {
       showToast.error(t('tasks.toastDeleteFailed'));
       setTasks(previousTasks);
     }
-  }, [tasks, engine]);
+  }, [tasks, engine, t]);
 
   if (isLoading) {
     return (

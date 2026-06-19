@@ -99,6 +99,7 @@ export function VideoHero({
           className="absolute inset-0 z-0"
           style={{ y, scale }}
         >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={posterSrc}
             alt=""

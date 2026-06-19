@@ -154,6 +154,7 @@ export function HorizontalScroll({
               {/* Image */}
               {item.image && (
                 <div className="absolute inset-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={item.image}
                     alt={item.title}
