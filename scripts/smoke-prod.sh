@@ -21,47 +21,20 @@ cleanup() {
 trap cleanup EXIT
 
 json_get() {
-  node -e '
-const fs = require("fs");
-const path = process.argv[1].split(".");
-const data = JSON.parse(fs.readFileSync(0, "utf8"));
-let current = data;
-for (const key of path) current = current == null ? undefined : current[key];
-if (current == null) process.exit(1);
-process.stdout.write(String(current));
-' "$1"
+  jq -er --arg path "$1" 'getpath($path | split(".")) | select(. != null) | tostring'
 }
 
 json_task_count() {
-  node -e '
-const fs = require("fs");
-const data = JSON.parse(fs.readFileSync(0, "utf8"));
-const tasks = data?.result?.tasks || data?.result?.result?.tasks || [];
-process.stdout.write(String(Array.isArray(tasks) ? tasks.length : 0));
-'
+  jq -r '(.result.tasks // .result.result.tasks // []) | if type == "array" then length else 0 end'
 }
 
 json_first_array_id() {
-  node -e '
-const fs = require("fs");
-const data = JSON.parse(fs.readFileSync(0, "utf8"));
-if (!Array.isArray(data) || !data[0]?.id) process.exit(1);
-process.stdout.write(String(data[0].id));
-'
+  jq -er 'if type == "array" and .[0].id then .[0].id else empty end'
 }
 
 json_pending_proposal_ids() {
-  node -e '
-const fs = require("fs");
-const data = JSON.parse(fs.readFileSync(0, "utf8"));
-const ids = (Array.isArray(data?.proposals) ? data.proposals : [])
-  .filter((proposal) => proposal?.status === "pending")
-  .slice(0, Number(process.env.SMOKE_PLAN_PROPOSAL_LIMIT || 3))
-  .map((proposal) => proposal.id)
-  .filter(Boolean);
-if (ids.length === 0) process.exit(1);
-process.stdout.write(JSON.stringify(ids));
-'
+  jq -cer --argjson limit "${SMOKE_PLAN_PROPOSAL_LIMIT:-3}" \
+    '[.proposals[]? | select(.status == "pending") | .id | select(. != null)][: $limit] | select(length > 0)'
 }
 
 poll_workflow() {
