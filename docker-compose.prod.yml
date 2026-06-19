@@ -34,6 +34,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
+        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
+        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -49,7 +54,7 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
       AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?AUTH_TRUSTED_ORIGINS is required}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
-      NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:-ws://localhost:1234}
+      NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
       COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}
       DEMO_MODE: ${DEMO_MODE:-true}
       PUBLIC_SIGNUP_ENABLED: ${PUBLIC_SIGNUP_ENABLED:-false}
@@ -93,6 +98,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
+        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
+        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
     restart: unless-stopped
     depends_on:
       temporal:
@@ -115,6 +125,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
+        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
+        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
     restart: unless-stopped
     command: ["pnpm", "--filter", "@nexus/web", "collab"]
     environment:

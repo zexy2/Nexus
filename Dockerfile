@@ -15,11 +15,19 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY . .
+ARG NEXT_PUBLIC_APP_URL="http://localhost:3000"
+ARG NEXT_PUBLIC_COLLABORATION_URL="ws://localhost:1234"
+ARG NEXT_PUBLIC_DEMO_MODE="true"
+ARG NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED="false"
 # Next.js evaluates auth-dependent routes while collecting build metadata.
 # This value exists only in the discarded builder stage; production runtime
 # still requires BETTER_AUTH_SECRET from .env.production.
 ENV BETTER_AUTH_SECRET="nexus-build-only-secret-not-used-at-runtime"
 ENV BETTER_AUTH_URL="http://localhost:3000"
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_COLLABORATION_URL=$NEXT_PUBLIC_COLLABORATION_URL
+ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
+ENV NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=$NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED
 RUN pnpm build
 
 FROM base AS runner
