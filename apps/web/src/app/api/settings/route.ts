@@ -4,7 +4,7 @@ import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
 import { userSettings, users } from "@nexus/database";
 import { eq } from "drizzle-orm";
-import { getAiProviderStatus, getAiUsageLimits, getAiUsageRemaining, isAdminEmail } from "@/lib/production-guardrails";
+import { getAiProviderStatus, getAiUsageLimits, getAiUsageRemaining, isAdminEmail, isDemoEmail } from "@/lib/production-guardrails";
 
 const SERVER_MANAGED_MODEL = "gemini-2.5-flash";
 
@@ -37,9 +37,9 @@ export async function GET() {
       where: eq(users.id, session.user.id),
     });
     const providerStatus = getAiProviderStatus();
-    const isAdmin = isAdminEmail(user?.email || session.user.email);
-    const usageLimits = getAiUsageLimits(isAdmin);
-    const usageRemaining = await getAiUsageRemaining(session.user.id, user?.email || session.user.email);
+    const email = user?.email || session.user.email;
+    const usageLimits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
+    const usageRemaining = await getAiUsageRemaining(session.user.id, email);
 
     return NextResponse.json({
       // Profile

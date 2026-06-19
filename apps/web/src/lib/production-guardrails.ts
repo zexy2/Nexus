@@ -49,7 +49,12 @@ export function isAdminEmail(email?: string | null) {
     .includes(email.toLowerCase());
 }
 
-export function getAiUsageLimits(isAdmin = false) {
+export function isDemoEmail(email?: string | null) {
+  if (!email || !isDemoMode()) return false;
+  return email.toLowerCase() === (process.env.DEMO_EMAIL || "").trim().toLowerCase();
+}
+
+export function getAiUsageLimits(isAdmin = false, isDemo = false) {
   if (isAdmin) {
     return {
       globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 100),
@@ -59,6 +64,18 @@ export function getAiUsageLimits(isAdmin = false) {
       workflowDaily: intEnv("AI_ADMIN_WORKFLOW_DAILY_LIMIT", 20),
       chatDaily: intEnv("AI_ADMIN_CHAT_DAILY_LIMIT", 100),
       maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 8),
+    };
+  }
+
+  if (isDemo) {
+    return {
+      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 100),
+      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
+      userDaily: intEnv("AI_DEMO_DAILY_LIMIT", 25),
+      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 4),
+      workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", 20),
+      chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", 30),
+      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 5),
     };
   }
 
@@ -179,7 +196,7 @@ export async function enforceAiBudget(options: {
   }
 
   const admin = isAdminEmail(options.email);
-  const limits = getAiUsageLimits(admin);
+  const limits = getAiUsageLimits(admin, isDemoEmail(options.email));
   const oneDay = 24 * 60 * 60 * 1000;
   const oneMinute = 60 * 1000;
 
@@ -232,7 +249,7 @@ export async function enforceAiBudget(options: {
 }
 
 export async function getAiUsageRemaining(userId: string, email?: string | null) {
-  const limits = getAiUsageLimits(isAdminEmail(email));
+  const limits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
   const now = new Date();
 
   const rows = await db

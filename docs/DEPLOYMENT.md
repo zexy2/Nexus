@@ -36,6 +36,10 @@ AI_USER_DAILY_LIMIT=5
 AI_USER_PER_MINUTE_LIMIT=2
 AI_WORKFLOW_DAILY_LIMIT=3
 AI_CHAT_DAILY_LIMIT=10
+AI_DEMO_DAILY_LIMIT=25
+AI_DEMO_PER_MINUTE_LIMIT=4
+AI_DEMO_WORKFLOW_DAILY_LIMIT=20
+AI_DEMO_CHAT_DAILY_LIMIT=30
 AI_MAX_STEPS_PER_WORKFLOW=5
 ```
 
@@ -43,7 +47,7 @@ AI_MAX_STEPS_PER_WORKFLOW=5
 
 `DEMO_ACCESS_CODE` is optional. If set, `POST /api/demo/session` requires that code before creating the demo session; this is useful when a CV link is public but you want to reduce casual AI spend.
 
-`pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis. Keep `AI_WORKFLOW_DAILY_LIMIT` at `3` or higher while running the production smoke check.
+`pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis. The shared demo account uses the separate `AI_DEMO_*` limits so one recruiter does not exhaust the normal per-user quota for every later visitor. The global daily limit remains the hard budget ceiling.
 
 ## Start
 

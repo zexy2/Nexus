@@ -33,11 +33,13 @@ const getAiProviderStatus = vi.fn();
 const getAiUsageLimits = vi.fn();
 const getAiUsageRemaining = vi.fn();
 const isAdminEmail = vi.fn();
+const isDemoEmail = vi.fn();
 vi.mock("@/lib/production-guardrails", () => ({
   getAiProviderStatus: (...a: unknown[]) => getAiProviderStatus(...a),
   getAiUsageLimits: (...a: unknown[]) => getAiUsageLimits(...a),
   getAiUsageRemaining: (...a: unknown[]) => getAiUsageRemaining(...a),
   isAdminEmail: (...a: unknown[]) => isAdminEmail(...a),
+  isDemoEmail: (...a: unknown[]) => isDemoEmail(...a),
 }));
 
 import { GET, PATCH } from "@/app/api/settings/route";
@@ -78,6 +80,7 @@ beforeEach(() => {
   });
   getAiUsageRemaining.mockResolvedValue({ globalDaily: 100, userDaily: 5, workflowsDaily: 3, chatDaily: 10 });
   isAdminEmail.mockReturnValue(false);
+  isDemoEmail.mockReturnValue(false);
 });
 
 describe("GET /api/settings (real handler)", () => {
