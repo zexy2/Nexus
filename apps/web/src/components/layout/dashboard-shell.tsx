@@ -25,6 +25,7 @@ import {
   X,
   Cloud,
   CloudOff,
+  AlertTriangle,
   RefreshCw,
   Wand2,
 } from 'lucide-react';
@@ -48,7 +49,7 @@ const navItems = [
 ];
 
 // Sync status types
-type SyncState = 'synced' | 'syncing' | 'offline';
+type SyncState = 'synced' | 'syncing' | 'offline' | 'error';
 
 // Floating Navigation Component
 function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
@@ -300,12 +301,14 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
                 'hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
                 syncState === 'synced' && 'text-emerald-500 bg-emerald-500/10',
                 syncState === 'syncing' && 'text-amber-500 bg-amber-500/10',
-                syncState === 'offline' && 'text-red-500 bg-red-500/10'
+                syncState === 'offline' && 'text-red-500 bg-red-500/10',
+                syncState === 'error' && 'text-red-500 bg-red-500/10'
               )}
             >
               {syncState === 'synced' && <Cloud className="h-3 w-3" />}
               {syncState === 'syncing' && <RefreshCw className="h-3 w-3 animate-spin" />}
               {syncState === 'offline' && <CloudOff className="h-3 w-3" />}
+              {syncState === 'error' && <AlertTriangle className="h-3 w-3" />}
               <span className="capitalize">{t(`nav.${syncState}`)}</span>
             </motion.div>
           </div>
@@ -421,7 +424,7 @@ interface DashboardShellProps {
 export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const { isOnline, isSyncing, pendingMutations } = useZeroStatus();
+  const { status, isOnline, isSyncing, pendingMutations } = useZeroStatus();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -442,7 +445,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   const syncState: SyncState = !mounted
     ? 'synced'
-    : !isOnline
+    : status === 'error'
+      ? 'error'
+      : !isOnline
       ? 'offline'
       : isSyncing || pendingMutations > 0
         ? 'syncing'

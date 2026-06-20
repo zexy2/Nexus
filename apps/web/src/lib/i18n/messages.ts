@@ -109,6 +109,7 @@ export const messages = {
       synced: "Senkronize",
       syncing: "Senkronize ediliyor",
       offline: "Çevrimdışı",
+      error: "Senkronizasyon hatası",
     },
     settings: {
       title: "Ayarlar",
@@ -766,6 +767,7 @@ export const messages = {
       synced: "Synced",
       syncing: "Syncing",
       offline: "Offline",
+      error: "Sync error",
     },
     settings: {
       title: "Settings",
