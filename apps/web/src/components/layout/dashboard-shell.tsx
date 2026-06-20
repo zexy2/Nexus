@@ -37,7 +37,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CommandPalette } from '@/components/shared/command-palette';
-import { CommandInput } from '@/components/shared/command-input';
 
 // Navigation items
 const navItems = [
@@ -480,87 +479,38 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
       {/* AI Command Button - Floating - Hide on chat page */}
       {user && !pathname.startsWith('/dashboard/chat') && (
-        <AICommandButton userId={user.id} />
+        <AICommandButton />
       )}
     </>
   );
 }
 
-// Floating AI Command Button with Modal
-function AICommandButton({ userId }: { userId: string }) {
-  const [isOpen, setIsOpen] = useState(false);
+// Floating Ask Nexus shortcut.
+function AICommandButton() {
+  const router = useRouter();
   const t = useT();
 
   return (
-    <>
-      {/* Floating Button */}
-      <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className={cn(
-          'fixed bottom-6 right-6 z-40',
-          'w-14 h-14 rounded-full',
-          'bg-white text-black',
-          'flex items-center justify-center',
-          'shadow-lg shadow-black/20',
-          'hover:shadow-xl hover:shadow-black/30',
-          'transition-shadow duration-200'
-        )}
-        title={`${t('chat.askAiAnything')} (⌘J)`}
-      >
-        <Wand2 className="h-6 w-6" />
-      </motion.button>
-
-      {/* Modal Overlay */}
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-            />
-
-            {/* Modal */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4"
-            >
-              <div className="bg-neutral-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <div className="flex items-center gap-2 text-white/60 text-sm">
-                    <Sparkles className="h-4 w-4" />
-                    <span>{t('chat.askAiAnything')}</span>
-                  </div>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <CommandInput
-                  workspaceId="default"
-                  userId={userId}
-                  placeholder={t('chat.commandPlaceholder')}
-                  onCommandCreated={() => setIsOpen(false)}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
+    <motion.button
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      onClick={() => router.push('/dashboard/chat')}
+      className={cn(
+        'fixed bottom-6 right-6 z-40',
+        'w-14 h-14 rounded-full',
+        'bg-white text-black',
+        'flex items-center justify-center',
+        'shadow-lg shadow-black/20',
+        'hover:shadow-xl hover:shadow-black/30',
+        'transition-shadow duration-200'
+      )}
+      title={`${t('chat.askAiAnything')} (⌘J)`}
+    >
+      <Wand2 className="h-6 w-6" />
+    </motion.button>
   );
 }
 
