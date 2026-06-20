@@ -10,7 +10,6 @@ const navLinks = [
   { href: "#workflow", label: "Workflow" },
   { href: "#stack", label: "Stack" },
   { href: "#demo", label: "Demo Scope" },
-  { href: "/login", label: "Try Demo" },
 ];
 
 /** Section IDs that can be active via scroll spy */
@@ -162,15 +161,6 @@ export function Navigation() {
           <div className="hidden md:flex items-center gap-3">
             <Link
               href="/login"
-              className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${isScrolled
-                  ? "text-white/65 hover:text-white"
-                  : "text-white/70 hover:text-white"
-                }`}
-            >
-              Demo login
-            </Link>
-            <Link
-              href="/login"
               className={`px-5 py-2.5 text-sm font-medium rounded-full transition-all ${isScrolled
                   ? "bg-white text-black hover:bg-white/90"
                   : "bg-white text-black hover:bg-white/90"
@@ -259,23 +249,6 @@ export function Navigation() {
                   transition={{
                     duration: 0.4,
                     delay: navLinks.length * 0.05,
-                    ease: [0.25, 0.46, 0.45, 0.94],
-                  }}
-                >
-                  <Link
-                    href="/login"
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="block text-2xl font-light text-white/50 hover:text-white transition-colors py-2"
-                  >
-                    Demo login
-                  </Link>
-                </motion.div>
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{
-                    duration: 0.4,
-                    delay: (navLinks.length + 1) * 0.05,
                     ease: [0.25, 0.46, 0.45, 0.94],
                   }}
                 >
