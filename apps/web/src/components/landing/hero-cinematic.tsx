@@ -103,6 +103,14 @@ export function HeroCinematic() {
               </Link>
             </MagneticButton>
           </div>
+
+          <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[11px] uppercase tracking-[0.22em] text-white/35">
+            <span>Demo login ready</span>
+            <span className="h-px w-6 bg-white/15" />
+            <span>No setup</span>
+            <span className="h-px w-6 bg-white/15" />
+            <span>5-minute walkthrough</span>
+          </div>
         </div>
 
         {/* Right — self-playing workflow film */}

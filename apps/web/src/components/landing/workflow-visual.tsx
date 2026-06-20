@@ -21,11 +21,19 @@ const STEP_MS = 2900;
 const STEPS = ["edit", "compare", "review", "apply", "history"] as const;
 
 const sceneMeta = [
-  { icon: FileText, label: "PLAN · edited once" },
-  { icon: Sparkles, label: "IMPACT · requirements compared" },
-  { icon: GitPullRequestArrow, label: "REVIEW · human approval" },
-  { icon: KanbanSquare, label: "WORK · aligned" },
-  { icon: History, label: "AUDIT · execution trail" },
+  { icon: FileText, label: "PLAN · edited once", chapter: "Plan" },
+  {
+    icon: Sparkles,
+    label: "IMPACT · requirements compared",
+    chapter: "Impact",
+  },
+  {
+    icon: GitPullRequestArrow,
+    label: "REVIEW · human approval",
+    chapter: "Review",
+  },
+  { icon: KanbanSquare, label: "WORK · aligned", chapter: "Board" },
+  { icon: History, label: "AUDIT · execution trail", chapter: "Audit" },
 ];
 
 const container: Variants = {
@@ -34,7 +42,12 @@ const container: Variants = {
 };
 const item: Variants = {
   hidden: { opacity: 0, y: 10, filter: "blur(6px)" },
-  show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] } },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: "blur(0px)",
+    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+  },
 };
 
 function Bar({ w, dim = false }: { w: string; dim?: boolean }) {
@@ -49,7 +62,12 @@ function Bar({ w, dim = false }: { w: string; dim?: boolean }) {
 
 function PromptScene() {
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-5">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-5"
+    >
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-2 font-mono text-[13px] text-white/85">
           <span className="text-white/30">{">"}</span>
@@ -73,8 +91,16 @@ function PromptScene() {
 
 function DocumentScene() {
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-4">
-      <motion.div variants={item} className="text-base font-semibold text-white">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-4"
+    >
+      <motion.div
+        variants={item}
+        className="text-base font-semibold text-white"
+      >
         Requirement impact
       </motion.div>
       <div className="space-y-2.5">
@@ -90,7 +116,10 @@ function DocumentScene() {
           ["REQ-009", "Admin review", "removed"],
           ["REQ-012", "Status timeline", "unchanged"],
         ].map(([key, title, state]) => (
-          <div key={key} className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70">
+          <div
+            key={key}
+            className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70"
+          >
             <span className="mr-2 font-mono text-white/35">{key}</span>
             {title}
             <span className="ml-2 text-white/35">{state}</span>
@@ -109,7 +138,12 @@ function TasksScene() {
     ["Keep status timeline", "No change"],
   ];
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-2.5">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-2.5"
+    >
       {tasks.map(([t, p]) => (
         <motion.div
           key={t}
@@ -134,13 +168,27 @@ function KanbanScene() {
     ["Done", ["Registration · REQ-001"]],
   ];
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="grid grid-cols-3 gap-3">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="grid grid-cols-3 gap-3"
+    >
       {cols.map(([title, cards]) => (
-        <motion.div key={title} variants={item} className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-white/40">{title}</div>
+        <motion.div
+          key={title}
+          variants={item}
+          className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5"
+        >
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-wide text-white/40">
+            {title}
+          </div>
           <div className="space-y-2">
             {cards.map((c) => (
-              <div key={c} className="rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-2 text-[11px] leading-tight text-white/75">
+              <div
+                key={c}
+                className="rounded-lg border border-white/10 bg-white/[0.05] px-2.5 py-2 text-[11px] leading-tight text-white/75"
+              >
                 {c}
               </div>
             ))}
@@ -159,10 +207,21 @@ function HistoryScene() {
     ["work.alignment · completed", "done"],
   ];
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-2">
+    <motion.div
+      variants={container}
+      initial="hidden"
+      animate="show"
+      className="space-y-2"
+    >
       {rows.map(([t, d], i) => (
-        <motion.div key={t} variants={item} className="flex items-center gap-3 font-mono text-xs">
-          <span className={`size-1.5 shrink-0 rounded-full ${i === rows.length - 1 ? "bg-white" : "bg-white/40"}`} />
+        <motion.div
+          key={t}
+          variants={item}
+          className="flex items-center gap-3 font-mono text-xs"
+        >
+          <span
+            className={`size-1.5 shrink-0 rounded-full ${i === rows.length - 1 ? "bg-white" : "bg-white/40"}`}
+          />
           <span className="flex-1 truncate text-white/65">{t}</span>
           <span className="shrink-0 text-white/35">{d}</span>
         </motion.div>
@@ -171,13 +230,22 @@ function HistoryScene() {
   );
 }
 
-const scenes = [PromptScene, DocumentScene, TasksScene, KanbanScene, HistoryScene];
+const scenes = [
+  PromptScene,
+  DocumentScene,
+  TasksScene,
+  KanbanScene,
+  HistoryScene,
+];
 
 export function WorkflowVisual() {
   const [step, setStep] = useState(0);
 
   useEffect(() => {
-    const id = window.setInterval(() => setStep((s) => (s + 1) % STEPS.length), STEP_MS);
+    const id = window.setInterval(
+      () => setStep((s) => (s + 1) % STEPS.length),
+      STEP_MS,
+    );
     return () => window.clearInterval(id);
   }, []);
 
@@ -195,7 +263,10 @@ export function WorkflowVisual() {
         transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
       >
         {/* top edge highlight */}
-        <div aria-hidden className="absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+        <div
+          aria-hidden
+          className="absolute inset-x-0 top-0 z-20 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent"
+        />
         {/* window chrome */}
         <div className="flex items-center gap-3 border-b border-white/10 bg-white/[0.02] px-4 py-3">
           <div className="flex gap-1.5">
@@ -203,7 +274,9 @@ export function WorkflowVisual() {
             <span className="size-2.5 rounded-full bg-white/15" />
             <span className="size-2.5 rounded-full bg-white/15" />
           </div>
-          <span className="font-mono text-[11px] uppercase tracking-wider text-white/40">nexus / workflow</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-white/40">
+            nexus / workflow
+          </span>
           <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] uppercase text-white/40">
             <motion.span
               className="size-1.5 rounded-full bg-white"
@@ -244,15 +317,36 @@ export function WorkflowVisual() {
           </AnimatePresence>
         </div>
 
-        {/* step dots */}
-        <div className="flex items-center justify-center gap-2 border-t border-white/10 py-3">
-          {STEPS.map((s, i) => (
-            <span
-              key={s}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                i === step ? "w-6 bg-white" : "w-1.5 bg-white/20"
+        {/* chapter rail */}
+        <div className="grid grid-cols-5 border-t border-white/10 bg-white/[0.015]">
+          {sceneMeta.map((meta, i) => (
+            <button
+              key={meta.chapter}
+              type="button"
+              onClick={() => setStep(i)}
+              className={`group relative px-2 py-3 text-left font-mono uppercase transition-colors duration-300 ${
+                i === step ? "text-white" : "text-white/30 hover:text-white/60"
               }`}
-            />
+              aria-current={i === step ? "step" : undefined}
+            >
+              <span className="block text-[9px] tracking-[0.24em] opacity-45">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="mt-1 block truncate text-[10px] tracking-[0.18em]">
+                {meta.chapter}
+              </span>
+              <span className="absolute inset-x-2 bottom-0 h-px overflow-hidden bg-white/10">
+                {i === step && (
+                  <motion.span
+                    key={step}
+                    className="block h-full bg-white"
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: STEP_MS / 1000, ease: "linear" }}
+                  />
+                )}
+              </span>
+            </button>
           ))}
         </div>
       </motion.div>

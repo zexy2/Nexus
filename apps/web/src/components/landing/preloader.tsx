@@ -104,12 +104,12 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
       },
     });
 
-    // 0.0 - 1.05s: Counter animates 0 -> 100 while boot lines scan in.
+    // 0.0 - 1.9s: Counter animates 0 -> 100 while boot lines remain readable.
     tl.to(
       counter,
       {
         value: 100,
-        duration: 1.05,
+        duration: 1.9,
         ease: "power2.inOut",
         onUpdate: () => {
           if (counterRef.current) {
@@ -124,7 +124,7 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
       progressRef.current,
       {
         scaleX: 1,
-        duration: 1.05,
+        duration: 1.9,
         ease: "power2.inOut",
       },
       0,
@@ -137,10 +137,10 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         opacity: 1,
         y: 0,
         filter: "blur(0px)",
-        duration: 0.34,
-        stagger: 0.13,
+        duration: 0.45,
+        stagger: 0.2,
       },
-      0.18,
+      0.22,
     );
 
     tl.to(
@@ -151,10 +151,10 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         stagger: 0.04,
         ease: "power2.in",
       },
-      0.92,
+      1.58,
     );
 
-    // 1.05s - 1.55s: Brief product graph appears: plan -> requirements -> task approval.
+    // 1.9s - 2.8s: Brief product graph appears: plan -> requirements -> task approval.
     tl.to(
       contentRef.current,
       {
@@ -163,10 +163,10 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         duration: 0.22,
         ease: "power2.out",
       },
-      1.03,
+      1.88,
     );
 
-    tl.set(graphRef.current, { display: "block" }, 1.08);
+    tl.set(graphRef.current, { display: "block" }, 1.98);
 
     tl.fromTo(
       graphLines,
@@ -174,11 +174,11 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
       {
         scaleX: 1,
         opacity: 0.32,
-        duration: 0.28,
-        stagger: 0.04,
+        duration: 0.38,
+        stagger: 0.08,
         ease: "power2.out",
       },
-      1.12,
+      2.04,
     );
 
     tl.fromTo(
@@ -189,10 +189,10 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         scale: 1,
         y: 0,
         filter: "blur(0px)",
-        duration: 0.34,
-        stagger: 0.06,
+        duration: 0.44,
+        stagger: 0.1,
       },
-      1.12,
+      2.04,
     );
 
     tl.to(
@@ -203,11 +203,11 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         duration: 0.22,
         ease: "power2.in",
       },
-      1.52,
+      2.78,
     );
 
-    // 1.62s: "NEXUS" text appears with blur-to-sharp and a light sweep.
-    tl.set(nexusRef.current, { display: "flex" }, 1.62);
+    // 3.0s: "NEXUS" text appears with blur-to-sharp and a light sweep.
+    tl.set(nexusRef.current, { display: "flex" }, 3.02);
 
     tl.fromTo(
       nexusLetters,
@@ -222,11 +222,11 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         y: 0,
         filter: "blur(0px)",
         letterSpacing: "0.3em",
-        duration: 0.58,
-        stagger: 0.045,
+        duration: 0.72,
+        stagger: 0.07,
         ease: "power4.out",
       },
-      1.62,
+      3.02,
     );
 
     if (nexusTagline) {
@@ -239,7 +239,7 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
           filter: "blur(0px)",
           duration: 0.34,
         },
-        1.92,
+        3.46,
       );
     }
 
@@ -250,14 +250,14 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         {
           xPercent: 130,
           opacity: 1,
-          duration: 0.72,
+          duration: 0.88,
           ease: "power3.inOut",
         },
-        1.86,
+        3.38,
       );
     }
 
-    // 2.25s: Cinematic split reveal into the hero.
+    // 4.35s: Cinematic split reveal into the hero after users have time to read.
     tl.to(
       nexusRef.current,
       {
@@ -266,17 +266,17 @@ export function Preloader({ onComplete }: { onComplete?: () => void }) {
         duration: 0.36,
         ease: "power2.in",
       },
-      2.24,
+      4.35,
     );
 
     tl.to(
       overlayRef.current,
       {
         clipPath: "inset(0 0 100% 0)",
-        duration: 0.82,
+        duration: 0.9,
         ease: "power4.inOut",
       },
-      2.32,
+      4.48,
     );
 
     return () => {
