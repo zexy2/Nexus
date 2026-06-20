@@ -17,9 +17,15 @@ const databaseUrl = process.env.DATABASE_URL;
 const authSecret = process.env.COLLAB_AUTH_SECRET;
 const collaborationUrl =
   process.env.COLLABORATION_SMOKE_URL || "ws://localhost:1234";
+const snapshotWaitMs = Number(
+  process.env.YJS_SMOKE_SNAPSHOT_WAIT_MS || "3200"
+);
 
 if (!databaseUrl || !authSecret) {
   throw new Error("DATABASE_URL and COLLAB_AUTH_SECRET are required");
+}
+if (!Number.isFinite(snapshotWaitMs) || snapshotWaitMs <= 0) {
+  throw new Error("YJS_SMOKE_SNAPSHOT_WAIT_MS must be a positive number");
 }
 
 const db = getDb(databaseUrl);
@@ -100,7 +106,7 @@ async function writeConcurrentUpdates() {
     ]);
     firstDoc.getText("smoke").insert(0, "A");
     secondDoc.getText("smoke").insert(0, "B");
-    await new Promise((resolve) => setTimeout(resolve, 3200));
+    await new Promise((resolve) => setTimeout(resolve, snapshotWaitMs));
 
     const firstValue = firstDoc.getText("smoke").toString();
     const secondValue = secondDoc.getText("smoke").toString();
