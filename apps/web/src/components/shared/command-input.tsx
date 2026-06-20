@@ -65,7 +65,37 @@ export function CommandInput({
   const [pendingCount, setPendingCount] = useState(0);
   const [selectedCommand, setSelectedCommand] = useState<OfflineCommand | null>(null);
   const [copied, setCopied] = useState(false);
+  const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState<string | null>(
+    workspaceId && workspaceId !== "default" ? workspaceId : null
+  );
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (workspaceId && workspaceId !== "default") {
+      setResolvedWorkspaceId(workspaceId);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/workspace");
+        if (!response.ok) return;
+        const data = await response.json() as { id?: unknown };
+        if (!cancelled && typeof data.id === "string") {
+          setResolvedWorkspaceId(data.id);
+        }
+      } catch {
+        // Commands can still be queued offline. The server treats "default"
+        // as the authenticated user's default workspace when synced later.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
 
   // Check online status
   useEffect(() => {
@@ -114,7 +144,7 @@ export function CommandInput({
     try {
       const command = await commandQueue.createCommand(
         input.trim(),
-        workspaceId,
+        resolvedWorkspaceId ?? workspaceId,
         userId
       );
       
@@ -130,7 +160,7 @@ export function CommandInput({
     } finally {
       setIsSubmitting(false);
     }
-  }, [input, isSubmitting, workspaceId, userId, isOnline, onCommandCreated]);
+  }, [input, isSubmitting, resolvedWorkspaceId, workspaceId, userId, isOnline, onCommandCreated]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -33,6 +33,13 @@ type CommandExecutionOutput = {
   duration: number;
 };
 
+function normalizeWorkspaceId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "default") return undefined;
+  return trimmed;
+}
+
 function commandStatusWhere(commandId: string, userId: string) {
   return and(
     sql`${agentExecutions.input}->>'commandId' = ${commandId}`,
@@ -97,7 +104,7 @@ export async function POST(request: NextRequest) {
 
     const access = await requireWorkspaceAccess(
       protection.user.id,
-      typeof workspaceId === "string" ? workspaceId : undefined
+      normalizeWorkspaceId(workspaceId)
     );
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
