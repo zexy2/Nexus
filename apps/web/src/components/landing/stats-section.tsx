@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import CountUp from "react-countup";
+import { useRef } from "react";
+import { useGSAP } from "@gsap/react";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
 
 if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger);
+  gsap.registerPlugin(ScrollTrigger, useGSAP);
 }
 
 interface Stat {
@@ -43,28 +43,94 @@ const stats: Stat[] = [
 
 export function StatsSection() {
   const sectionRef = useRef<HTMLElement>(null);
-  const hasTriggered = useRef(false);
 
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
+  useGSAP(
+    () => {
+      const section = sectionRef.current;
+      if (!section) return;
 
-    const trigger = ScrollTrigger.create({
-      trigger: section,
-      start: "top 70%",
-      onEnter: () => {
-        if (!hasTriggered.current) {
-          hasTriggered.current = true;
-          // Trigger count animation by updating state
-          section.classList.add("stats-visible");
-        }
-      },
-    });
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        gsap.set(
+          [
+            ".stat-rule-vertical",
+            ".stat-rule-horizontal",
+            ".stat-number",
+            ".stat-copy",
+            ".stat-accent",
+          ],
+          { clearProps: "all" }
+        );
+        return;
+      }
 
-    return () => {
-      trigger.kill();
-    };
-  }, []);
+      const timeline = gsap.timeline({
+        scrollTrigger: {
+          trigger: section,
+          start: "top 72%",
+          once: true,
+        },
+      });
+
+      timeline
+        .fromTo(
+          ".stat-rule-vertical",
+          { scaleY: 0 },
+          {
+            scaleY: 1,
+            duration: 0.8,
+            stagger: 0.07,
+            ease: "power3.out",
+          }
+        )
+        .fromTo(
+          ".stat-rule-horizontal",
+          { scaleX: 0 },
+          {
+            scaleX: 1,
+            duration: 0.8,
+            stagger: 0.07,
+            ease: "power3.out",
+          },
+          0
+        )
+        .fromTo(
+          ".stat-number",
+          { yPercent: 110 },
+          {
+            yPercent: 0,
+            duration: 0.85,
+            stagger: 0.08,
+            ease: "power4.out",
+          },
+          0.08
+        )
+        .fromTo(
+          ".stat-copy",
+          { y: 16, opacity: 0 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.6,
+            stagger: 0.08,
+            ease: "power3.out",
+          },
+          0.22
+        )
+        .fromTo(
+          ".stat-accent",
+          { scaleX: 0, opacity: 0 },
+          {
+            scaleX: 1,
+            opacity: 1,
+            duration: 0.55,
+            stagger: 0.08,
+            ease: "power3.out",
+          },
+          0.38
+        );
+    },
+    { scope: sectionRef }
+  );
 
   return (
     <section
@@ -89,36 +155,39 @@ export function StatsSection() {
           </h2>
         </ScrollReveal>
 
-        <div className="grid gap-px bg-white/10 md:grid-cols-4">
+        <div className="grid border-y border-white/10 md:grid-cols-4">
           {stats.map((stat, index) => (
-            <ScrollReveal
+            <article
               key={stat.label}
-              animation="fade-up"
-              delay={index * 0.1}
-              className="group bg-card p-6 md:p-8"
+              className="group relative flex min-h-72 flex-col px-1 py-8 md:min-h-80 md:px-8 md:py-10"
             >
-              <div className="relative">
-                <div className="mb-6 text-5xl font-semibold text-white md:text-6xl lg:text-7xl">
+              {index > 0 && (
+                <>
+                  <div className="stat-rule-horizontal absolute inset-x-0 top-0 h-px origin-left bg-white/10 md:hidden" />
+                  <div className="stat-rule-vertical absolute inset-y-0 left-0 hidden w-px origin-top bg-white/10 md:block" />
+                </>
+              )}
+
+              <div className="overflow-hidden pb-2">
+                <div className="stat-number text-5xl font-semibold text-white will-change-transform md:text-6xl lg:text-7xl">
                   <span className="text-neutral-300">{stat.prefix}</span>
-                  <CountUp
-                    end={stat.value}
-                    duration={2.5}
-                    decimals={stat.value % 1 !== 0 ? 1 : 0}
-                    enableScrollSpy
-                    scrollSpyOnce
-                  />
+                  {stat.value}
                   <span className="text-white/40">{stat.suffix}</span>
                 </div>
+              </div>
 
+              <div className="stat-copy mt-auto will-change-transform">
                 <h3 className="text-lg font-semibold text-white mb-1">
                   {stat.label}
                 </h3>
 
-                <p className="text-sm text-neutral-500">{stat.description}</p>
-
-                <div className="mt-8 h-px w-0 bg-white transition-all duration-500 group-hover:w-20" />
+                <p className="max-w-56 text-sm leading-relaxed text-neutral-500">
+                  {stat.description}
+                </p>
               </div>
-            </ScrollReveal>
+
+              <div className="stat-accent mt-7 h-px w-10 origin-left bg-white/30 transition-[width,background-color] duration-300 group-hover:w-16 group-hover:bg-white/60" />
+            </article>
           ))}
         </div>
       </div>
