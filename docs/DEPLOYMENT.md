@@ -21,31 +21,32 @@ PUBLIC_SIGNUP_ENABLED=false
 ADMIN_EMAILS=your-email@example.com
 DEMO_EMAIL=demo@your-domain.com
 DEMO_PASSWORD=change-this-demo-password
-DEMO_ACCESS_CODE=optional-short-code-for-public-demo
+DEMO_ACCESS_CODE=
 DEMO_SEED_TOKEN=generate-a-one-time-seed-token
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_EMAIL=demo@your-domain.com
+NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
 AI_ENABLED=true
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 TAVILY_API_KEY=
-AI_GLOBAL_DAILY_LIMIT=100
-AI_GLOBAL_PER_MINUTE_LIMIT=4
-AI_USER_DAILY_LIMIT=5
-AI_USER_PER_MINUTE_LIMIT=2
-AI_WORKFLOW_DAILY_LIMIT=3
-AI_CHAT_DAILY_LIMIT=10
-AI_DEMO_DAILY_LIMIT=25
-AI_DEMO_PER_MINUTE_LIMIT=4
-AI_DEMO_WORKFLOW_DAILY_LIMIT=20
-AI_DEMO_CHAT_DAILY_LIMIT=30
+AI_GLOBAL_DAILY_LIMIT=40
+AI_GLOBAL_PER_MINUTE_LIMIT=2
+AI_USER_DAILY_LIMIT=6
+AI_USER_PER_MINUTE_LIMIT=1
+AI_WORKFLOW_DAILY_LIMIT=2
+AI_CHAT_DAILY_LIMIT=4
+AI_DEMO_DAILY_LIMIT=12
+AI_DEMO_PER_MINUTE_LIMIT=1
+AI_DEMO_WORKFLOW_DAILY_LIMIT=4
+AI_DEMO_CHAT_DAILY_LIMIT=8
 AI_MAX_STEPS_PER_WORKFLOW=5
 ```
 
 `GEMINI_API_KEY` is required for AI chat and workflows. `OPENAI_API_KEY` is only required for embeddings/RAG search. `TAVILY_API_KEY` is optional; web research returns a clear not-configured response when it is absent.
 
-`DEMO_ACCESS_CODE` is optional. If set, `POST /api/demo/session` requires that code before creating the demo session; this is useful when a CV link is public but you want to reduce casual AI spend.
+`DEMO_ACCESS_CODE` is optional. For a recruiter-facing CV demo, keep it empty and rely on the `AI_DEMO_*` plus global limits. If abuse starts or you want a private demo link, set `DEMO_ACCESS_CODE` and also set `NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=true` so the login screen explains the code requirement up front.
 
 `pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis. The shared demo account uses the separate `AI_DEMO_*` limits so one recruiter does not exhaust the normal per-user quota for every later visitor. The global daily limit remains the hard budget ceiling.
 

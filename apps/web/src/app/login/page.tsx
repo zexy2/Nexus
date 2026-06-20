@@ -15,11 +15,15 @@ export default function LoginPage() {
   const router = useRouter();
   const { t } = useLocale();
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const demoAccessCodeRequired =
+    process.env.NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED === "true";
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [demoAccessCode, setDemoAccessCode] = useState("");
-  const [showDemoAccessCode, setShowDemoAccessCode] = useState(false);
+  const [showDemoAccessCode, setShowDemoAccessCode] = useState(
+    demoAccessCodeRequired
+  );
   const [error, setError] = useState("");
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -64,6 +68,8 @@ export default function LoginPage() {
       if (!response.ok) {
         if (result?.error === "DEMO_ACCESS_CODE_REQUIRED") {
           setShowDemoAccessCode(true);
+          setError(t("auth.demoAccessCodeInvalid"));
+          return;
         }
         setError(result?.message || t("auth.demoUnavailable"));
       } else {
@@ -137,7 +143,9 @@ export default function LoginPage() {
                     className="h-10"
                   />
                   <p className="text-xs text-muted-foreground">
-                    {t("auth.demoAccessCodeHint")}
+                    {demoAccessCodeRequired
+                      ? t("auth.demoAccessCodeHint")
+                      : t("auth.demoAccessCodeFallbackHint")}
                   </p>
                 </div>
               )}
