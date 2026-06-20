@@ -1,6 +1,11 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
-import { docs, workspaceMembers, workspaces } from "@nexus/database/schema";
+import {
+  docs,
+  documentYjsSnapshots,
+  workspaceMembers,
+  workspaces,
+} from "@nexus/database/schema";
 import { and, eq, or } from "drizzle-orm";
 
 // UUID validation regex
@@ -10,10 +15,28 @@ function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
+function extractMaterializedText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(extractMaterializedText).filter(Boolean).join("\n");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const ownText = typeof record.text === "string" ? record.text : "";
+    const nestedText = Object.entries(record)
+      .filter(([key]) => key !== "text")
+      .map(([, entry]) => extractMaterializedText(entry))
+      .filter(Boolean)
+      .join("\n");
+    return [ownText, nestedText].filter(Boolean).join("\n");
+  }
+  return "";
+}
+
 // Type for document updates - matches Drizzle schema
 interface DocUpdateData {
   title?: string;
-  content?: Record<string, unknown>;
+  content?: Record<string, unknown> | unknown[];
   iconEmoji?: string | null;
   isArchived?: number; // 0 or 1 - integer in DB for Zero Sync compatibility
 }
@@ -117,7 +140,12 @@ export async function PATCH(
 
     const updateData: DocUpdateData = {};
     if (body.title !== undefined) updateData.title = body.title;
-    if (body.content !== undefined) updateData.content = body.content as Record<string, unknown>;
+    if (body.content !== undefined) {
+      if (!Array.isArray(body.content) && (typeof body.content !== "object" || body.content === null)) {
+        return Response.json({ error: "Invalid document content" }, { status: 400 });
+      }
+      updateData.content = body.content as Record<string, unknown> | unknown[];
+    }
     if (body.iconEmoji !== undefined) updateData.iconEmoji = body.iconEmoji;
     if (body.isArchived !== undefined) updateData.isArchived = body.isArchived ? 1 : 0;
 
@@ -131,11 +159,26 @@ export async function PATCH(
       return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
+    if (body.content !== undefined && body.materializedOnly === true) {
+      await db
+        .update(documentYjsSnapshots)
+        .set({
+          materializedContent: updateData.content,
+          materializedText: extractMaterializedText(updateData.content),
+          updatedAt: new Date(),
+        })
+        .where(eq(documentYjsSnapshots.docId, id));
+    }
+
     // Trigger embedding generation in background when content is updated.
     // The embeddings endpoint requires authentication and a workspaceId, so we
     // forward the caller's session cookie and the document's workspace. Without
     // these the request would be rejected (401/400) and silently do nothing.
-    if (body.content !== undefined && process.env.OPENAI_API_KEY) {
+    if (
+      body.content !== undefined &&
+      body.materializedOnly !== true &&
+      process.env.OPENAI_API_KEY
+    ) {
       const cookie = req.headers.get("cookie");
       if (cookie) {
         // Fire and forget - don't block the response

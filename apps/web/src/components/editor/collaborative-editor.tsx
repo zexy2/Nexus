@@ -24,10 +24,12 @@ import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
+import * as decoding from "lib0/decoding";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Wifi, WifiOff, Users, Circle, Loader2 } from "lucide-react";
+import { useT } from "@/lib/i18n/provider";
 
 interface CollaborativeEditorProps {
   documentId: string;
@@ -75,6 +77,8 @@ function CollaborativeEditorInner({
   isConnected,
   isSynced,
   connectedUsers,
+  connectionError,
+  persistenceStatus,
 }: {
   provider: WebsocketProvider;
   fragment: Y.XmlFragment;
@@ -87,7 +91,10 @@ function CollaborativeEditorInner({
   isConnected: boolean;
   isSynced: boolean;
   connectedUsers: ConnectedUser[];
+  connectionError: boolean;
+  persistenceStatus: "saving" | "saved" | "error";
 }) {
+  const t = useT();
   const [contentLoaded, setContentLoaded] = useState(false);
   
   // Create BlockNote editor WITH provider ready
@@ -118,16 +125,6 @@ function CollaborativeEditorInner({
     }
   }, [isSynced, contentLoaded, initialContent, fragment, editor]);
 
-  // Save content before unmount
-  useEffect(() => {
-    return () => {
-      if (onChange && editor.document) {
-        console.log("[Collab] Saving content before unmount");
-        onChange(editor.document);
-      }
-    };
-  }, [editor, onChange]);
-
   const handleChange = useCallback(() => {
     if (onChange) {
       onChange(editor.document);
@@ -143,19 +140,32 @@ function CollaborativeEditorInner({
             {isConnected ? (
               <>
                 <Wifi className="size-3" />
-                <span>Connected</span>
+                <span>{t("docs.detail.collabConnected")}</span>
               </>
             ) : (
               <>
                 <WifiOff className="size-3" />
-                <span>Offline</span>
+                <span>{t("docs.detail.collabUnavailable")}</span>
               </>
             )}
           </Badge>
 
           {isConnected && (
-            <Badge variant={isSynced ? "outline" : "secondary"} className="gap-1">
-              {isSynced ? "Synced" : "Syncing..."}
+            <Badge
+              variant={
+                persistenceStatus === "error"
+                  ? "destructive"
+                  : isSynced && persistenceStatus === "saved"
+                    ? "outline"
+                    : "secondary"
+              }
+              className="gap-1"
+            >
+              {persistenceStatus === "error"
+                ? t("docs.detail.collabUnavailable")
+                : isSynced && persistenceStatus === "saved"
+                  ? t("docs.detail.collabSynced")
+                  : t("docs.detail.collabSyncing")}
             </Badge>
           )}
         </div>
@@ -166,7 +176,7 @@ function CollaborativeEditorInner({
             <div className="flex items-center gap-2">
               <Users className="size-4 text-muted-foreground" />
               <span className="text-sm font-medium text-muted-foreground">
-                {connectedUsers.length} online
+                {connectedUsers.length} {t("docs.detail.collabOnlineCount")}
               </span>
               <div className="flex -space-x-1 ml-1">
                 {connectedUsers.slice(0, 6).map((user) => (
@@ -209,7 +219,13 @@ function CollaborativeEditorInner({
                                 "text-gray-400"
                               }`}
                             />
-                            {user.status || "active"}
+                            {t(`docs.detail.collab${
+                              user.status === "idle"
+                                ? "Idle"
+                                : user.status === "away"
+                                  ? "Away"
+                                  : "Active"
+                            }`)}
                           </p>
                         </div>
                       </div>
@@ -226,7 +242,10 @@ function CollaborativeEditorInner({
                       </Avatar>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
-                      <p>{connectedUsers.length - 6} more users</p>
+                      <p>
+                        {connectedUsers.length - 6}{" "}
+                        {t("docs.detail.collabMoreUsers")}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -281,19 +300,30 @@ function CollaborativeEditorInner({
         `}</style>
         <BlockNoteView
           editor={editor}
-          editable={editable}
+          editable={
+            editable &&
+            isConnected &&
+            isSynced &&
+            !connectionError &&
+            persistenceStatus !== "error"
+          }
           onChange={handleChange}
           theme="dark"
           className="py-8"
         />
       </div>
 
-      {!isConnected && (
-        <div className="absolute bottom-4 right-4">
-          <Badge variant="destructive" className="gap-1 animate-pulse">
-            <WifiOff className="size-3" />
-            Working offline - changes will sync when connected
-          </Badge>
+      {(!isConnected || connectionError || persistenceStatus === "error") && (
+        <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <div className="flex items-start gap-2 text-sm text-destructive">
+            <WifiOff className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-medium">{t("docs.detail.collabUnavailable")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("docs.detail.collabUnavailableDesc")}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -310,10 +340,15 @@ export function CollaborativeEditor({
   onChange,
   editable = true,
 }: CollaborativeEditorProps) {
+  const t = useT();
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isSynced, setIsSynced] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
+  const [connectionError, setConnectionError] = useState(false);
+  const [persistenceStatus, setPersistenceStatus] = useState<
+    "saving" | "saved" | "error"
+  >("saved");
   
   const stableUserColor = useMemo(
     () => userColor || getStableUserColor(userId), 
@@ -331,6 +366,9 @@ export function CollaborativeEditor({
   useEffect(() => {
     const wsUrl = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
     let wsProvider: WebsocketProvider | null = null;
+    let handleDocumentUpdate:
+      | ((_update: Uint8Array, origin: unknown) => void)
+      | null = null;
     let cancelled = false;
 
     void (async () => {
@@ -341,18 +379,43 @@ export function CollaborativeEditor({
           token = (await res.json())?.token ?? null;
         } else {
           console.error("[Collab] Token request rejected:", res.status);
+          setConnectionError(true);
         }
       } catch (err) {
         console.error("[Collab] Token request failed:", err);
+        setConnectionError(true);
       }
 
-      if (cancelled || !token) return;
+      if (cancelled || !token) {
+        if (!cancelled) {
+          setConnectionError(true);
+        }
+        return;
+      }
 
       const provider = new WebsocketProvider(wsUrl, documentId, ydoc, {
         connect: true,
         params: { token },
       });
       wsProvider = provider;
+
+      provider.messageHandlers[4] = (_encoder, decoder) => {
+        const status = decoding.readVarString(decoder);
+        queueMicrotask(() => {
+          if (!cancelled) {
+            setPersistenceStatus(status === "saved" ? "saved" : "error");
+          }
+        });
+      };
+
+      handleDocumentUpdate = (_update: Uint8Array, origin: unknown) => {
+        if (origin !== provider) {
+          queueMicrotask(() => {
+            if (!cancelled) setPersistenceStatus("saving");
+          });
+        }
+      };
+      ydoc.on("update", handleDocumentUpdate);
 
       provider.awareness.setLocalStateField("user", {
         id: userId,
@@ -362,9 +425,14 @@ export function CollaborativeEditor({
 
       provider.on("status", (event: { status: string }) => {
         setIsConnected(event.status === "connected");
+        if (event.status === "connected") setConnectionError(false);
       });
 
-      provider.on("sync", (synced: boolean) => {
+      const onProviderEvent = provider.on.bind(provider) as (
+        event: string,
+        callback: (value: boolean) => void
+      ) => void;
+      onProviderEvent("synced", (synced: boolean) => {
         setIsSynced(synced);
       });
 
@@ -382,7 +450,9 @@ export function CollaborativeEditor({
             });
           }
         });
-        setConnectedUsers(users);
+        queueMicrotask(() => {
+          if (!cancelled) setConnectedUsers(users);
+        });
       };
 
       provider.awareness.on("change", handleAwarenessChange);
@@ -394,6 +464,9 @@ export function CollaborativeEditor({
     return () => {
       cancelled = true;
       if (wsProvider) {
+        if (handleDocumentUpdate) {
+          ydoc.off("update", handleDocumentUpdate);
+        }
         wsProvider.disconnect();
         wsProvider.destroy();
       }
@@ -407,7 +480,16 @@ export function CollaborativeEditor({
       <div className="min-h-[550px] rounded-lg border bg-muted/30 flex items-center justify-center">
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">Connecting to collaboration server...</span>
+          <span className="text-sm text-muted-foreground">
+            {connectionError
+              ? t("docs.detail.collabUnavailable")
+              : t("docs.detail.collabConnecting")}
+          </span>
+          {connectionError && (
+            <span className="max-w-md text-center text-xs text-destructive">
+              {t("docs.detail.collabUnavailableDesc")}
+            </span>
+          )}
         </div>
       </div>
     );
@@ -426,6 +508,8 @@ export function CollaborativeEditor({
       isConnected={isConnected}
       isSynced={isSynced}
       connectedUsers={connectedUsers}
+      connectionError={connectionError}
+      persistenceStatus={persistenceStatus}
     />
   );
 }

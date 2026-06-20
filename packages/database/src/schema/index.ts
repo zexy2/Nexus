@@ -11,6 +11,8 @@ import {
   boolean,
   customType,
   uniqueIndex,
+  bigint,
+  bigserial,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -37,6 +39,15 @@ export const vector = customType<{
     // Parse "[0.1,0.2,...]" format
     const cleaned = value.replace(/[\[\]]/g, "");
     return cleaned.split(",").map(Number);
+  },
+});
+
+export const bytea = customType<{
+  data: Buffer;
+  driverData: Buffer;
+}>({
+  dataType() {
+    return "bytea";
   },
 });
 
@@ -178,7 +189,7 @@ export const docs = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     parentId: uuid("parent_id"), // Hiyerarşik yapı için
     title: varchar("title", { length: 500 }).notNull().default("Untitled"),
-    content: jsonb("content").$type<Record<string, unknown>>(), // BlockNote JSON formatı
+    content: jsonb("content").$type<Record<string, unknown> | unknown[]>(), // BlockNote JSON formatı
     iconEmoji: varchar("icon_emoji", { length: 10 }),
     coverUrl: text("cover_url"),
     isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer (Zero Sync uyumluluğu)
@@ -198,6 +209,72 @@ export const docs = pgTable(
     index("docs_parent_idx").on(table.parentId),
     // Note: IVFFlat index should be created via SQL migration after data exists
     // CREATE INDEX docs_embedding_idx ON docs USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+  ]
+);
+
+// ==========================================
+// DOCUMENT REALTIME STATE (Yjs persistence)
+// ==========================================
+
+export const documentYjsSnapshots = pgTable(
+  "document_yjs_snapshots",
+  {
+    docId: uuid("doc_id")
+      .primaryKey()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    state: bytea("state").notNull(),
+    stateVector: bytea("state_vector").notNull(),
+    updateCount: integer("update_count").notNull().default(0),
+    lastSequence: bigint("last_sequence", { mode: "number" })
+      .notNull()
+      .default(0),
+    materializedContent: jsonb("materialized_content").$type<
+      Record<string, unknown> | unknown[]
+    >(),
+    materializedText: text("materialized_text"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("document_yjs_snapshots_workspace_idx").on(table.workspaceId),
+    index("document_yjs_snapshots_updated_idx").on(table.updatedAt),
+  ]
+);
+
+export const documentYjsUpdates = pgTable(
+  "document_yjs_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    docId: uuid("doc_id")
+      .notNull()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    update: bytea("update").notNull(),
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("document_yjs_updates_doc_sequence_idx").on(
+      table.docId,
+      table.sequence
+    ),
+    index("document_yjs_updates_workspace_idx").on(table.workspaceId),
+    index("document_yjs_updates_created_idx").on(table.createdAt),
   ]
 );
 

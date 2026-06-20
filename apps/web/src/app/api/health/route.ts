@@ -25,13 +25,50 @@ export async function GET() {
     try {
       const temporalStart = Date.now();
       const temporal = await import("@nexus/workflows/client");
-      await temporal.createTemporalClient();
+      await Promise.race([
+        temporal.createTemporalClient(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Temporal health check timed out")),
+            3000
+          )
+        ),
+      ]);
       temporalLatency = Date.now() - temporalStart;
     } catch {
       temporalStatus = "unhealthy";
     }
 
     const ai = getAiProviderStatus();
+    const collaborationHealthUrl =
+      process.env.COLLABORATION_HEALTH_URL || "http://localhost:1234";
+    let collaborationStatus: "healthy" | "unavailable" = "unavailable";
+    let collaborationPersistence:
+      | "postgres"
+      | "memory-only"
+      | "unavailable" = "unavailable";
+    let collaborationLatency = 0;
+
+    try {
+      const collaborationStart = Date.now();
+      const response = await fetch(collaborationHealthUrl, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(3000),
+      });
+      const payload = (await response.json()) as {
+        persistence?: "postgres" | "memory-only" | "unavailable";
+      };
+      collaborationLatency = Date.now() - collaborationStart;
+      collaborationPersistence = payload.persistence || "unavailable";
+      collaborationStatus =
+        response.ok && collaborationPersistence === "postgres"
+          ? "healthy"
+          : "unavailable";
+    } catch {
+      collaborationStatus = "unavailable";
+      collaborationPersistence = "unavailable";
+    }
+
     const heartbeatStaleAfterSeconds = Number(process.env.WORKER_HEARTBEAT_STALE_SECONDS || 90);
     let workerStatus: "healthy" | "stale" | "unknown" = "unknown";
     let lastHeartbeatAt: string | null = null;
@@ -64,7 +101,8 @@ export async function GET() {
     const overallStatus =
       dbStatus === "healthy" &&
       temporalStatus === "healthy" &&
-      workerStatus === "healthy"
+      workerStatus === "healthy" &&
+      collaborationStatus === "healthy"
         ? "healthy"
         : "degraded";
 
@@ -92,6 +130,11 @@ export async function GET() {
           lastHeartbeatAt,
           secondsSinceHeartbeat,
           staleAfterSeconds: heartbeatStaleAfterSeconds,
+        },
+        collaboration: {
+          status: collaborationStatus,
+          persistence: collaborationPersistence,
+          latency: collaborationLatency,
         },
         ai: {
           status: ai.aiEnabled && ai.geminiAvailable ? "configured" : "unavailable",

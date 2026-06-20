@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft,
   MoreHorizontal,
@@ -24,7 +23,6 @@ import {
   Copy,
   Star,
   FileText,
-  Users,
   Loader2,
   CheckCircle2,
 } from "lucide-react";
@@ -108,8 +106,9 @@ export default function DocDetailPage() {
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
-  const [collaborativeMode, setCollaborativeMode] = useState(false);
   const editorContentRef = useRef<BlockNoteContent>([]);
+  const materializeTimerRef = useRef<number | null>(null);
+  const documentId = String(params.id || "");
   const displayTitle = localizeGeneratedCopy(
     title === "Generated Document" ? t("docs.detail.generatedTitle") : title,
     locale
@@ -189,24 +188,76 @@ export default function DocDetailPage() {
     };
   }, [taskWorkflow, t]);
 
-  const handleContentChange = async (content: BlockNoteContent) => {
-    if (!doc) return;
-    
+  const persistMaterializedContent = useCallback(
+    async (content: BlockNoteContent, updateUi = true) => {
+      if (!documentId) return;
+      if (updateUi) setIsSaving(true);
+
+      try {
+        const response = await fetch(`/api/docs/${documentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, materializedOnly: true }),
+        });
+        if (!response.ok) {
+          throw new Error(`Materialized content save failed: ${response.status}`);
+        }
+
+        if (updateUi) {
+          setLastSaved(new Date());
+          setDoc((current) => (current ? { ...current, content } : current));
+        }
+      } catch (err) {
+        console.error("Failed to materialize collaborative content:", err);
+      } finally {
+        if (updateUi) setIsSaving(false);
+      }
+    },
+    [documentId]
+  );
+
+  const handleContentChange = useCallback((content: BlockNoteContent) => {
     editorContentRef.current = content;
     setIsSaving(true);
-    try {
-      await fetch(`/api/docs/${params.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      setLastSaved(new Date());
-    } catch (err) {
-      console.error("Failed to save:", err);
-    } finally {
-      setIsSaving(false);
+
+    if (materializeTimerRef.current) {
+      window.clearTimeout(materializeTimerRef.current);
     }
-  };
+    materializeTimerRef.current = window.setTimeout(() => {
+      materializeTimerRef.current = null;
+      void persistMaterializedContent(content);
+    }, 1500);
+  }, [persistMaterializedContent]);
+
+  const flushMaterializedContent = useCallback(async () => {
+    if (materializeTimerRef.current) {
+      window.clearTimeout(materializeTimerRef.current);
+      materializeTimerRef.current = null;
+    }
+    if (editorContentRef.current.length > 0) {
+      await persistMaterializedContent(editorContentRef.current);
+    }
+  }, [persistMaterializedContent]);
+
+  useEffect(() => {
+    return () => {
+      if (materializeTimerRef.current) {
+        window.clearTimeout(materializeTimerRef.current);
+        materializeTimerRef.current = null;
+        if (editorContentRef.current.length > 0 && documentId) {
+          void fetch(`/api/docs/${documentId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: editorContentRef.current,
+              materializedOnly: true,
+            }),
+            keepalive: true,
+          });
+        }
+      }
+    };
+  }, [documentId]);
 
   // Extract text from BlockNote content
   const extractTextFromContent = (content: BlockNoteContent): string => {
@@ -221,6 +272,7 @@ export default function DocDetailPage() {
 
   // AI Actions
   const handleAiAction = async (action: "summarize" | "expand" | "improve" | "tasks") => {
+    await flushMaterializedContent();
     const currentContent = editorContentRef.current.length > 0 
       ? editorContentRef.current 
       : doc?.content || [];
@@ -510,17 +562,6 @@ export default function DocDetailPage() {
             {t("docs.detail.share")}
           </Button>
 
-          {/* Collaboration Toggle */}
-          <div className="flex items-center gap-2 px-2 border-l ml-2">
-            <Users className="size-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">{t("docs.detail.collab")}</span>
-            <Switch
-              checked={collaborativeMode}
-              onCheckedChange={setCollaborativeMode}
-              aria-label={t("docs.detail.toggleCollab")}
-            />
-          </div>
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -550,7 +591,7 @@ export default function DocDetailPage() {
       <div className="flex-1 overflow-auto">
         <div className="grid min-h-full w-full lg:grid-cols-[minmax(0,1fr)_minmax(440px,28vw)] 2xl:grid-cols-[minmax(0,1fr)_minmax(520px,30vw)]">
           <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10 xl:px-14">
-            {collaborativeMode && session?.user ? (
+            {session?.user ? (
               <CollaborativeEditorWrapper
                 key={`collab-${doc.id}`}
                 documentId={doc.id}
@@ -562,10 +603,9 @@ export default function DocDetailPage() {
               />
             ) : (
               <EditorWrapper
-                key={`editor-${doc.id}-${collaborativeMode}`}
+                key={`editor-${doc.id}`}
                 initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
-                onChange={handleContentChange}
-                editable={true}
+                editable={false}
               />
             )}
           </div>

@@ -29,6 +29,13 @@
       "when": 1781452091908,
       "tag": "0003_cool_wong",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781981628400,
+      "tag": "0004_bouncy_captain_cross",
+      "breakpoints": true
     }
   ]
 }

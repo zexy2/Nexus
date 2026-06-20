@@ -123,7 +123,7 @@ pnpm build              # production build
 pnpm lint               # lint packages
 pnpm type-check         # TypeScript checks
 pnpm test               # test suite
-pnpm db:migrate         # production-safe migrations
+pnpm db:migrate         # production-safe migrations + guarded legacy baseline
 pnpm db:push            # local disposable DB only
 pnpm demo:seed-user     # create/update demo user
 pnpm smoke:prod         # Docker VPS smoke test

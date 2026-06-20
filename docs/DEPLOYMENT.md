@@ -60,6 +60,9 @@ SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
 Use migrations in production. `db:push` is local-development only and should not be part of a VPS deploy.
+`pnpm db:migrate` also performs a guarded one-time baseline when it detects an
+existing schema created before migration history was enabled. It refuses to
+baseline incomplete schemas.
 
 ## Reverse Proxy
 
