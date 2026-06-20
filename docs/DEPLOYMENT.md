@@ -80,8 +80,10 @@ location / {
   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 
-location /collab {
-  proxy_pass http://127.0.0.1:1234;
+location /collab/ {
+  # Both trailing slashes are required: /collab/<docId> becomes /<docId>
+  # before the collaboration server validates the signed document token.
+  proxy_pass http://127.0.0.1:1234/;
   proxy_http_version 1.1;
   proxy_set_header Upgrade $http_upgrade;
   proxy_set_header Connection "upgrade";
