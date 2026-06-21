@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
-import { tasks, workspaceMembers, workspaces } from "@nexus/database/schema";
-import { and, eq, or } from "drizzle-orm";
+import { agentJobs, tasks, workspaceMembers, workspaces } from "@nexus/database/schema";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   parseOptionalDueDate,
   parseOptionalTaskDescription,
@@ -9,18 +9,13 @@ import {
   parseTaskStatus,
   parseTaskTitle,
 } from "@/lib/task-validation";
-import { writeAuditLog } from "@/lib/production-guardrails";
+import { enforceMutationBudget, isDemoEmail, writeAuditLog } from "@/lib/production-guardrails";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidUUID(id: string): boolean {
   return UUID_REGEX.test(id);
-}
-
-async function getUserId() {
-  const session = await verifySession();
-  return session?.user.id;
 }
 
 async function findAuthorizedTask(id: string, userId: string) {
@@ -56,7 +51,8 @@ export async function GET(
       );
     }
     
-    const userId = await getUserId();
+    const session = await verifySession();
+    const userId = session?.user.id;
     if (!userId) {
       return Response.json(
         { error: "Unauthorized", message: "Authentication required" },
@@ -69,6 +65,11 @@ export async function GET(
     if (!task) {
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
+
+    const latestAgentJob = await db.query.agentJobs.findFirst({
+      where: eq(agentJobs.taskId, id),
+      orderBy: (rows, { desc }) => [desc(rows.createdAt)],
+    });
 
     return Response.json({
       id: task.id,
@@ -85,6 +86,8 @@ export async function GET(
       isArchived: task.isArchived === 1,
       createdAt: task.createdAt.toISOString(),
       updatedAt: task.updatedAt.toISOString(),
+      agentJob: latestAgentJob || null,
+      agentHandoffWritable: !isDemoEmail(session.user.email),
     });
   } catch (error) {
     console.error("Failed to fetch task:", error);
@@ -108,6 +111,21 @@ export async function PATCH(
       );
     }
     
+    const session = await verifySession();
+    if (!session) {
+      return Response.json(
+        { error: "Unauthorized", message: "Authentication required" },
+        { status: 401 }
+      );
+    }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "task",
+    });
+    if (mutationLimit) return mutationLimit;
+
     let body: Record<string, unknown>;
     try {
       body = await req.json();
@@ -115,14 +133,6 @@ export async function PATCH(
       return Response.json(
         { error: "Bad Request", message: "Invalid JSON body" },
         { status: 400 }
-      );
-    }
-
-    const userId = await getUserId();
-    if (!userId) {
-      return Response.json(
-        { error: "Unauthorized", message: "Authentication required" },
-        { status: 401 }
       );
     }
 
@@ -162,6 +172,26 @@ export async function PATCH(
           { error: "Bad Request", message: "Invalid task status" },
           { status: 400 }
         );
+      }
+      if (status === "in_review") {
+        return Response.json(
+          { error: "AGENT_SUBMISSION_REQUIRED", message: "Only a coding-agent submission can move a task into review." },
+          { status: 409 }
+        );
+      }
+      if (status === "done") {
+        const pendingAgentReview = await db.query.agentJobs.findFirst({
+          where: and(
+            eq(agentJobs.taskId, id),
+            inArray(agentJobs.status, ["submitted", "outdated"])
+          ),
+        });
+        if (pendingAgentReview) {
+          return Response.json(
+            { error: "AGENT_REVIEW_REQUIRED", message: "Review the submitted pull request before completing this task." },
+            { status: 409 }
+          );
+        }
       }
       updates.status = status;
       updates.completedAt = status === "done" ? new Date() : null;
@@ -246,13 +276,20 @@ export async function DELETE(
       );
     }
 
-    const userId = await getUserId();
-    if (!userId) {
+    const session = await verifySession();
+    if (!session) {
       return Response.json(
         { error: "Unauthorized", message: "Authentication required" },
         { status: 401 }
       );
     }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "task",
+    });
+    if (mutationLimit) return mutationLimit;
 
     const existing = await findAuthorizedTask(id, userId);
     if (!existing) {

@@ -11,11 +11,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import {
   chatMessages,
+  agentJobs,
   docs,
   tasks,
   workspaceMembers,
@@ -156,6 +157,21 @@ async function authorizeMutation(
   }
 
   const accessibleWorkspaceIds = await getAccessibleWorkspaceIds(userId);
+
+  if (table === "tasks" && data.status === "in_review") {
+    return { allowed: false, status: 409, reason: "Only a coding-agent submission can move a task into review" };
+  }
+  if (table === "tasks" && operation === "update" && data.status === "done" && typeof data.id === "string") {
+    const pendingReview = await db.query.agentJobs.findFirst({
+      where: and(
+        eq(agentJobs.taskId, data.id),
+        inArray(agentJobs.status, ["submitted", "outdated"])
+      ),
+    });
+    if (pendingReview) {
+      return { allowed: false, status: 409, reason: "Review the submitted pull request before completing this task" };
+    }
+  }
 
   if (table === "workspaces") {
     const id = data.id as string | undefined;

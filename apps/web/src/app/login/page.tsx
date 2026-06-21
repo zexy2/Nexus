@@ -162,8 +162,7 @@ export default function LoginPage() {
           )}
 
           {/* Social Login */}
-          {!demoMode && (
-            <div className="grid grid-cols-2 gap-3 mb-6">
+          <div className="grid grid-cols-2 gap-3 mb-6">
               <Button
                 variant="outline"
                 onClick={handleGithubLogin}
@@ -199,10 +198,9 @@ export default function LoginPage() {
                 </svg>
                 Google
               </Button>
-            </div>
-          )}
+          </div>
 
-          <div className={demoMode ? "relative mb-6 hidden" : "relative mb-6"}>
+          <div className="relative mb-6">
             <div className="absolute inset-0 flex items-center">
               <Separator />
             </div>

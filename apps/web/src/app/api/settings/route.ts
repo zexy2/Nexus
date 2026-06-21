@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
-import { userSettings, users } from "@nexus/database";
+import { userSettings, users, workspaceRepositories } from "@nexus/database";
 import { eq } from "drizzle-orm";
 import { getAiProviderStatus, getAiUsageLimits, getAiUsageRemaining, isAdminEmail, isDemoEmail } from "@/lib/production-guardrails";
+import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
 
 const SERVER_MANAGED_MODEL = "gemini-2.5-flash";
 
@@ -40,6 +41,10 @@ export async function GET() {
     const email = user?.email || session.user.email;
     const usageLimits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
     const usageRemaining = await getAiUsageRemaining(session.user.id, email);
+    const workspace = await ensureDefaultWorkspace(session.user.id);
+    const repository = await db.query.workspaceRepositories.findFirst({
+      where: eq(workspaceRepositories.workspaceId, workspace.id),
+    });
 
     return NextResponse.json({
       // Profile
@@ -67,6 +72,17 @@ export async function GET() {
           maxStepsPerWorkflow: usageLimits.maxStepsPerWorkflow,
         },
         usageRemaining,
+      },
+      agentHandoff: {
+        workspaceId: workspace.id,
+        tokenCreationEnabled: !isDemoEmail(email),
+        mcpEndpoint: "/api/mcp",
+        repository: repository ? {
+          url: repository.repositoryUrl,
+          owner: repository.repositoryOwner,
+          name: repository.repositoryName,
+          defaultBranch: repository.defaultBranch,
+        } : null,
       },
       // Notifications
       notifications: {

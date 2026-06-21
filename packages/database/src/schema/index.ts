@@ -58,6 +58,7 @@ export const bytea = customType<{
 export const taskStatusEnum = pgEnum("task_status", [
   "todo",
   "in_progress",
+  "in_review",
   "done",
 ]);
 
@@ -475,6 +476,155 @@ export const changeProposals = pgTable(
     index("change_proposals_workspace_idx").on(table.workspaceId),
     index("change_proposals_task_idx").on(table.taskId),
     index("change_proposals_status_idx").on(table.status),
+  ]
+);
+
+// ==========================================
+// EXTERNAL CODING AGENT HANDOFFS
+// ==========================================
+
+export const workspaceRepositories = pgTable(
+  "workspace_repositories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 30 }).notNull().default("github"),
+    repositoryUrl: text("repository_url").notNull(),
+    repositoryOwner: varchar("repository_owner", { length: 255 }).notNull(),
+    repositoryName: varchar("repository_name", { length: 255 }).notNull(),
+    defaultBranch: varchar("default_branch", { length: 255 }).notNull().default("main"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("workspace_repositories_workspace_idx").on(table.workspaceId),
+  ]
+);
+
+export const agentAccessTokens = pgTable(
+  "agent_access_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    tokenPrefix: varchar("token_prefix", { length: 24 }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_access_tokens_hash_idx").on(table.tokenHash),
+    index("agent_access_tokens_workspace_idx").on(table.workspaceId),
+    index("agent_access_tokens_user_idx").on(table.userId),
+  ]
+);
+
+export const agentJobs = pgTable(
+  "agent_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    planVersionId: uuid("plan_version_id").references(() => planVersions.id, {
+      onDelete: "set null",
+    }),
+    repositoryId: uuid("repository_id")
+      .notNull()
+      .references(() => workspaceRepositories.id, { onDelete: "restrict" }),
+    status: varchar("status", { length: 30 }).notNull().default("queued"),
+    contextVersion: integer("context_version").notNull().default(1),
+    contextHash: varchar("context_hash", { length: 64 }).notNull(),
+    contextSnapshot: jsonb("context_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    claimedByClient: varchar("claimed_by_client", { length: 120 }),
+    claimedByTokenId: uuid("claimed_by_token_id").references(() => agentAccessTokens.id, {
+      onDelete: "set null",
+    }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    index("agent_jobs_workspace_idx").on(table.workspaceId),
+    index("agent_jobs_task_idx").on(table.taskId),
+    index("agent_jobs_status_idx").on(table.status),
+  ]
+);
+
+export const agentJobEvents = pgTable(
+  "agent_job_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => agentJobs.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    type: varchar("type", { length: 50 }).notNull(),
+    message: text("message"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("agent_job_events_job_idx").on(table.jobId),
+    index("agent_job_events_workspace_idx").on(table.workspaceId),
+  ]
+);
+
+export const agentJobSubmissions = pgTable(
+  "agent_job_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => agentJobs.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull().default(1),
+    pullRequestUrl: text("pull_request_url").notNull(),
+    commitSha: varchar("commit_sha", { length: 64 }).notNull(),
+    summary: text("summary").notNull(),
+    tests: jsonb("tests").$type<Array<{ command: string; status: string; output?: string }>>().notNull(),
+    acceptanceEvidence: jsonb("acceptance_evidence")
+      .$type<Array<{ requirementKey: string; criterion: string; evidence: string }>>()
+      .notNull(),
+    reviewStatus: varchar("review_status", { length: 30 }).notNull().default("pending"),
+    reviewNote: text("review_note"),
+    reviewedBy: text("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("agent_job_submissions_revision_idx").on(table.jobId, table.revision),
+    index("agent_job_submissions_workspace_idx").on(table.workspaceId),
   ]
 );
 

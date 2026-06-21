@@ -37,6 +37,10 @@ const SNAPSHOT_INTERVAL_MS = Number.parseInt(
   process.env.YJS_SNAPSHOT_INTERVAL_MS || "30000",
   10
 );
+const MAX_WEBSOCKET_PAYLOAD_BYTES = Number.parseInt(
+  process.env.COLLAB_MAX_PAYLOAD_BYTES || String(1024 * 1024),
+  10
+);
 const DOC_CLEANUP_DELAY = 5 * 60 * 1000;
 const HYDRATE_ORIGIN = Symbol("postgres-hydration");
 
@@ -470,11 +474,23 @@ const httpServer = http.createServer((_req, res) => {
 
 const wss = new WebSocketServer({
   server: httpServer,
+  maxPayload: MAX_WEBSOCKET_PAYLOAD_BYTES,
   verifyClient: (info, callback) => {
     if (parseAuthorizedRequest(info.req.url, info.req.headers.host)) {
       callback(true);
     } else {
-      console.warn("[Collab] Rejected unauthorized connection:", info.req.url);
+      // Never log the query string: it contains the short-lived bearer token.
+      const pathname = (() => {
+        try {
+          return new URL(
+            info.req.url || "/",
+            `http://${info.req.headers.host || "localhost"}`
+          ).pathname;
+        } catch {
+          return "/invalid-request";
+        }
+      })();
+      console.warn("[Collab] Rejected unauthorized connection:", pathname);
       callback(false, 401, "Unauthorized");
     }
   },

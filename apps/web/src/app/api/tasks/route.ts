@@ -5,10 +5,11 @@ import {
   planVersions,
   requirements,
   requirementTaskLinks,
+  agentJobs,
   tasks,
 } from "@nexus/database/schema";
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { writeAuditLog } from "@/lib/production-guardrails";
+import { enforceMutationBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { ensureDefaultWorkspace, getAccessibleWorkspaceIds, requireWorkspaceAccess } from "@/lib/workspace-auth";
 import {
   parseOptionalTaskDescription,
@@ -70,6 +71,16 @@ export async function GET(req: Request) {
       current.push(link);
       requirementsByTask.set(link.taskId, current);
     }
+    const jobRows = taskIds.length > 0
+      ? await db.query.agentJobs.findMany({
+          where: inArray(agentJobs.taskId, taskIds),
+          orderBy: [desc(agentJobs.createdAt)],
+        })
+      : [];
+    const latestJobByTask = new Map<string, (typeof jobRows)[number]>();
+    for (const job of jobRows) {
+      if (!latestJobByTask.has(job.taskId)) latestJobByTask.set(job.taskId, job);
+    }
 
     return Response.json(
       taskList.map((t) => ({
@@ -86,6 +97,7 @@ export async function GET(req: Request) {
         alignmentStatus: t.alignmentStatus,
         alignmentUpdatedAt: t.alignmentUpdatedAt?.toISOString() || null,
         requirements: requirementsByTask.get(t.id) || [],
+        agentJob: latestJobByTask.get(t.id) || null,
         createdAt: t.createdAt.toISOString(),
         updatedAt: t.updatedAt.toISOString(),
       }))
@@ -99,6 +111,18 @@ export async function GET(req: Request) {
 // POST - Create new task
 export async function POST(req: Request) {
   try {
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
+    }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "task",
+    });
+    if (mutationLimit) return mutationLimit;
+
     // Parse JSON with error handling
     let body;
     try {
@@ -110,7 +134,7 @@ export async function POST(req: Request) {
       );
     }
     
-    const { title, description, priority, status, assignToAgent, workspaceId } = body;
+    const { title, description, priority, status, workspaceId } = body;
     
     const normalizedTitle = parseTaskTitle(title);
     if (!normalizedTitle) {
@@ -144,12 +168,6 @@ export async function POST(req: Request) {
       );
     }
     
-    const session = await verifySession();
-    if (!session) {
-      return unauthorized();
-    }
-    const userId = session.user.id;
-
     const workspaceAccess = workspaceId
       ? await requireWorkspaceAccess(userId, workspaceId)
       : { ok: true as const, workspaceId: (await ensureDefaultWorkspace(userId)).id, role: "owner" as const };
@@ -167,8 +185,8 @@ export async function POST(req: Request) {
         description: normalizedDescription,
         status: normalizedStatus,
         priority: normalizedPriority,
-        assigneeId: assignToAgent ? null : userId,
-        assigneeAgentType: assignToAgent ? "supervisor" : null,
+        assigneeId: userId,
+        assigneeAgentType: null,
         createdBy: userId,
       })
       .returning();

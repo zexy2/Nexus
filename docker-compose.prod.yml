@@ -93,7 +93,8 @@ services:
       AI_ADMIN_CHAT_DAILY_LIMIT: ${AI_ADMIN_CHAT_DAILY_LIMIT:-100}
       AI_MAX_STEPS_PER_WORKFLOW: ${AI_MAX_STEPS_PER_WORKFLOW:-5}
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      # The host reverse proxy is the only public entry point.
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
@@ -144,6 +145,7 @@ services:
       COLLABORATION_PORT: 1234
       YJS_SNAPSHOT_UPDATE_THRESHOLD: ${YJS_SNAPSHOT_UPDATE_THRESHOLD:-100}
       YJS_SNAPSHOT_INTERVAL_MS: ${YJS_SNAPSHOT_INTERVAL_MS:-30000}
+      COLLAB_MAX_PAYLOAD_BYTES: ${COLLAB_MAX_PAYLOAD_BYTES:-1048576}
       # Must match the web service so issued tokens verify. The server refuses
       # to start without it.
       COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}

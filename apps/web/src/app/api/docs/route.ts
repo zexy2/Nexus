@@ -3,7 +3,7 @@ import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
 import { docs, workspaces } from "@nexus/database/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
-import { writeAuditLog } from "@/lib/production-guardrails";
+import { enforceMutationBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 
 // GET - List all documents
@@ -43,6 +43,18 @@ export async function GET() {
 // POST - Create new document
 export async function POST(req: Request) {
   try {
+    const session = await verifySession();
+    if (!session) {
+      return unauthorized();
+    }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "document",
+    });
+    if (mutationLimit) return mutationLimit;
+
     // Parse JSON with error handling
     let body;
     try {
@@ -64,12 +76,6 @@ export async function POST(req: Request) {
       );
     }
     
-    const session = await verifySession();
-    if (!session) {
-      return unauthorized();
-    }
-    const userId = session.user.id;
-
     // Get or create workspace
     let workspace = await db.query.workspaces.findFirst({
       where: eq(workspaces.ownerId, userId),

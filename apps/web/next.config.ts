@@ -49,17 +49,19 @@ const nextConfig: NextConfig = {
   async headers() {
     // Content-Security-Policy. The app needs inline scripts/styles (Next.js,
     // Tailwind, BlockNote), the configured image/video CDNs, and a WebSocket
-    // connection to the collaboration server. Ships as Report-Only by default
-    // so it can't break the UI; set CSP_ENFORCE=true to enforce after reviewing
-    // violation reports.
+    // connection to the collaboration server. Production enforces the policy;
+    // development keeps report-only mode so local tooling remains usable.
+    const isProduction = process.env.NODE_ENV === "production";
     const collabWs = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
+    const scriptSources = ["'self'", "'unsafe-inline'"];
+    if (!isProduction) scriptSources.push("'unsafe-eval'");
     const csp = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      `script-src ${scriptSources.join(" ")}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://images.unsplash.com https://cdn.coverr.co https://*.pexels.com",
       "font-src 'self' data:",
-      `connect-src 'self' ${collabWs} ws: wss:`,
+      `connect-src 'self' ${collabWs}`,
       "media-src 'self' blob: https://cdn.coverr.co",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
@@ -67,8 +69,11 @@ const nextConfig: NextConfig = {
       "form-action 'self'",
       "object-src 'none'",
     ].join("; ");
+    const enforceCsp = process.env.CSP_ENFORCE
+      ? process.env.CSP_ENFORCE === "true"
+      : isProduction;
     const cspKey =
-      process.env.CSP_ENFORCE === "true"
+      enforceCsp
         ? "Content-Security-Policy"
         : "Content-Security-Policy-Report-Only";
 
@@ -81,7 +86,7 @@ const nextConfig: NextConfig = {
             value: "max-age=63072000; includeSubDomains; preload",
           },
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",

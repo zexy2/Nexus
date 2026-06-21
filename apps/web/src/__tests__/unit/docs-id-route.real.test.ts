@@ -14,6 +14,11 @@ vi.mock("@/lib/auth", () => ({
   auth: { api: { getSession: (...a: unknown[]) => getSession(...a) } },
 }));
 
+const enforceMutationBudget = vi.fn();
+vi.mock("@/lib/production-guardrails", () => ({
+  enforceMutationBudget: (...a: unknown[]) => enforceMutationBudget(...a),
+}));
+
 // db mock: select chain feeds `findAuthorizedDoc`; update chain serves PATCH
 // (.returning()) and DELETE (awaited directly).
 let selectResults: unknown[] = [];
@@ -80,6 +85,7 @@ beforeEach(() => {
   selectResults = [];
   selectIndex = 0;
   updateReturning = [];
+  enforceMutationBudget.mockResolvedValue(null);
   delete process.env.OPENAI_API_KEY; // keep background-embedding fetch off by default
 });
 

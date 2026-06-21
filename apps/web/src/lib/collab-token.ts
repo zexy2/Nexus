@@ -22,9 +22,9 @@ export interface CollabTokenPayload {
   e: number;
 }
 
-// Tokens are valid for two hours: long enough to survive websocket reconnects
-// during a working session, short enough to bound exposure if one leaks.
-export const COLLAB_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+// Tokens travel in the WebSocket URL, so keep their exposure window short.
+// The editor can transparently request a fresh token when reconnecting.
+export const COLLAB_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");

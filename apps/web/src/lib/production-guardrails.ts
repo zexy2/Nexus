@@ -174,6 +174,32 @@ export async function checkPersistentRateLimit(
   };
 }
 
+export async function enforceMutationBudget(options: {
+  userId: string;
+  email?: string | null;
+  resource: "document" | "task";
+}) {
+  const minuteLimit = await checkPersistentRateLimit(
+    options.userId,
+    `mutation:${options.resource}:minute`,
+    30,
+    60 * 1000
+  );
+  if (!minuteLimit.allowed) return rateLimitResponse(minuteLimit);
+
+  if (isDemoEmail(options.email)) {
+    const dailyLimit = await checkPersistentRateLimit(
+      options.userId,
+      `mutation:${options.resource}:demo:daily`,
+      100,
+      24 * 60 * 60 * 1000
+    );
+    if (!dailyLimit.allowed) return rateLimitResponse(dailyLimit);
+  }
+
+  return null;
+}
+
 export async function enforceAiBudget(options: {
   userId: string;
   email?: string | null;

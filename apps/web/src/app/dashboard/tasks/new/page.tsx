@@ -20,7 +20,7 @@ import { showToast } from "@/components/shared/toast-provider";
 import { useT } from "@/lib/i18n/provider";
 
 type TaskPriority = "low" | "medium" | "high" | "urgent";
-type TaskStatus = "todo" | "in_progress" | "done";
+type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
 
 export default function NewTaskPage() {
   const router = useRouter();

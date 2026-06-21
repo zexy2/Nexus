@@ -55,7 +55,7 @@ export interface Task {
   workspaceId: string;
   title: string;
   description?: string;
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "in_review" | "done";
   priority: "low" | "medium" | "high" | "urgent";
   assigneeId?: string;
   assigneeAgentType?: string;

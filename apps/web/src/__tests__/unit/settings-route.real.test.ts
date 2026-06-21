@@ -13,6 +13,7 @@ vi.mock("@/lib/api-middleware", () => ({
 
 const userSettingsFindFirst = vi.fn();
 const usersFindFirst = vi.fn();
+const repositoriesFindFirst = vi.fn();
 const insertReturning = vi.fn();
 const insertValues = vi.fn(() => ({ returning: insertReturning }));
 const updateWhere = vi.fn();
@@ -23,10 +24,16 @@ vi.mock("@/lib/db", () => ({
     query: {
       userSettings: { findFirst: (...a: unknown[]) => userSettingsFindFirst(...a) },
       users: { findFirst: (...a: unknown[]) => usersFindFirst(...a) },
+      workspaceRepositories: { findFirst: (...a: unknown[]) => repositoriesFindFirst(...a) },
     },
     insert: () => ({ values: (...a: unknown[]) => insertValues(...a) }),
     update: () => ({ set: (...a: unknown[]) => updateSet(...a) }),
   },
+}));
+
+const ensureDefaultWorkspace = vi.fn();
+vi.mock("@/lib/workspace-auth", () => ({
+  ensureDefaultWorkspace: (...a: unknown[]) => ensureDefaultWorkspace(...a),
 }));
 
 const getAiProviderStatus = vi.fn();
@@ -81,6 +88,8 @@ beforeEach(() => {
   getAiUsageRemaining.mockResolvedValue({ globalDaily: 100, userDaily: 5, workflowsDaily: 3, chatDaily: 10 });
   isAdminEmail.mockReturnValue(false);
   isDemoEmail.mockReturnValue(false);
+  ensureDefaultWorkspace.mockResolvedValue({ id: "ws-1", ownerId: "user-1", name: "Workspace" });
+  repositoriesFindFirst.mockResolvedValue(null);
 });
 
 describe("GET /api/settings (real handler)", () => {

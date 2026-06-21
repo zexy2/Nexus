@@ -37,6 +37,10 @@ import {
   Save,
   Upload,
   Languages,
+  GitBranch,
+  KeyRound,
+  Copy,
+  Trash2,
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
@@ -72,7 +76,22 @@ interface SettingsData {
     offlineMode: boolean;
     syncFrequency: string;
   };
+  agentHandoff: {
+    workspaceId: string;
+    tokenCreationEnabled: boolean;
+    mcpEndpoint: string;
+    repository: { url: string; owner: string; name: string; defaultBranch: string } | null;
+  };
 }
+
+type AgentTokenSummary = {
+  id: string;
+  name: string;
+  prefix: string;
+  expiresAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
 
 // Model definitions with provider info
 const AI_MODELS = [
@@ -108,6 +127,13 @@ function SettingsContent() {
   const [offlineMode, setOfflineMode] = useState(true);
   const [syncFrequency, setSyncFrequency] = useState("realtime");
   const [storageUsed, setStorageUsed] = useState(0);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [repositoryUrl, setRepositoryUrl] = useState("");
+  const [defaultBranchName, setDefaultBranchName] = useState("main");
+  const [tokenCreationEnabled, setTokenCreationEnabled] = useState(false);
+  const [agentTokens, setAgentTokens] = useState<AgentTokenSummary[]>([]);
+  const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
+  const [agentSaving, setAgentSaving] = useState(false);
   
   // Track original values for dirty checking
   const [originalSettings, setOriginalSettings] = useState<SettingsData | null>(null);
@@ -165,6 +191,12 @@ function SettingsContent() {
       setCompactMode(data.appearance.compactMode);
       setOfflineMode(data.sync.offlineMode);
       setSyncFrequency(data.sync.syncFrequency);
+      setWorkspaceId(data.agentHandoff.workspaceId);
+      setRepositoryUrl(data.agentHandoff.repository?.url || "");
+      setDefaultBranchName(data.agentHandoff.repository?.defaultBranch || "main");
+      setTokenCreationEnabled(data.agentHandoff.tokenCreationEnabled);
+      const tokenResponse = await fetch(`/api/agent-tokens?workspaceId=${data.agentHandoff.workspaceId}`);
+      if (tokenResponse.ok) setAgentTokens(await tokenResponse.json());
       
       // Store original settings for dirty checking
       setOriginalSettings(data);
@@ -265,6 +297,48 @@ function SettingsContent() {
     }
   };
 
+  const saveAgentRepository = async () => {
+    setAgentSaving(true);
+    try {
+      const response = await fetch("/api/agent-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, repositoryUrl, defaultBranch: defaultBranchName }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || body?.error || "Repository could not be saved");
+      setSaveSuccess(true);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Repository could not be saved");
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
+  const createAgentToken = async () => {
+    setAgentSaving(true);
+    try {
+      const response = await fetch("/api/agent-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId, name: "Local coding agent" }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || body?.error || "Token could not be created");
+      setNewAgentToken(body.token);
+      await fetchSettings();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Token could not be created");
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
+  const revokeAgentToken = async (id: string) => {
+    const response = await fetch(`/api/agent-tokens/${id}`, { method: "DELETE" });
+    if (response.ok) setAgentTokens((current) => current.map((token) => token.id === id ? { ...token, revokedAt: new Date().toISOString() } : token));
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-screen">
@@ -313,7 +387,7 @@ function SettingsContent() {
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-            <TabsList className="grid grid-cols-3 sm:grid-cols-5 w-full h-auto gap-1">
+            <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full h-auto gap-1">
               <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <User className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.profile")}</span>
@@ -321,6 +395,10 @@ function SettingsContent() {
               <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bot className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.ai")}</span>
+              </TabsTrigger>
+              <TabsTrigger value="agents" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+                <GitBranch className="size-3 md:size-4" />
+                <span className="hidden xs:inline">{locale === "tr" ? "Agentlar" : "Agents"}</span>
               </TabsTrigger>
               <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bell className="size-3 md:size-4" />
@@ -515,6 +593,115 @@ function SettingsContent() {
                         />
                       </div>
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="agents">
+              <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
+                <CardHeader>
+                  <CardTitle>{locale === "tr" ? "Coding agent bağlantısı" : "Coding agent connection"}</CardTitle>
+                  <CardDescription>
+                    {locale === "tr"
+                      ? "Codex, Claude Code veya Cursor'a sürümlenmiş görev bağlamını MCP ile teslim edin. Nexus kod çalıştırmaz veya GitHub anahtarı saklamaz."
+                      : "Hand versioned task context to Codex, Claude Code, or Cursor over MCP. Nexus does not execute code or store GitHub credentials."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-4 md:grid-cols-[1fr_180px]">
+                    <div className="space-y-2">
+                      <Label>GitHub repository</Label>
+                      <Input value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{locale === "tr" ? "Varsayılan branch" : "Default branch"}</Label>
+                      <Input value={defaultBranchName} onChange={(event) => setDefaultBranchName(event.target.value)} placeholder="main" />
+                    </div>
+                  </div>
+                  <Button onClick={saveAgentRepository} disabled={agentSaving || !tokenCreationEnabled || !repositoryUrl.trim()}>
+                    {agentSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+                    {locale === "tr" ? "Repo'yu kaydet" : "Save repository"}
+                  </Button>
+
+                  <Separator />
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="font-medium">MCP access token</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {locale === "tr" ? "Token yalnızca bir kez gösterilir ve 30 gün sonra sona erer." : "The token is shown once and expires after 30 days."}
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={createAgentToken} disabled={agentSaving || !tokenCreationEnabled || !repositoryUrl.trim()}>
+                      <KeyRound className="mr-2 size-4" />
+                      {locale === "tr" ? "Token oluştur" : "Create token"}
+                    </Button>
+                  </div>
+
+                  {!tokenCreationEnabled && (
+                    <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                      {locale === "tr" ? "Ortak demo hesabında token üretimi kapalıdır." : "Token creation is disabled for the shared demo account."}
+                    </p>
+                  )}
+
+                  {newAgentToken && (
+                    <div className="border border-emerald-400/20 bg-emerald-400/5 p-4">
+                      <p className="mb-2 text-sm font-medium text-emerald-200">
+                        {locale === "tr" ? "Bu tokenı şimdi kaydedin; tekrar gösterilmeyecek." : "Store this token now; it will not be shown again."}
+                      </p>
+                      <div className="flex gap-2">
+                        <Input readOnly value={newAgentToken} className="font-mono text-xs" />
+                        <Button size="icon" variant="outline" onClick={() => navigator.clipboard.writeText(newAgentToken)} title="Copy token">
+                          <Copy className="size-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    {agentTokens.map((token) => (
+                      <div key={token.id} className="flex items-center justify-between border border-border p-3 text-sm">
+                        <div>
+                          <p className="font-medium">{token.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {token.prefix}... · {token.revokedAt ? (locale === "tr" ? "iptal edildi" : "revoked") : new Date(token.expiresAt).toLocaleDateString(locale)}
+                          </p>
+                        </div>
+                        {!token.revokedAt && (
+                          <Button size="icon" variant="ghost" onClick={() => revokeAgentToken(token.id)} title="Revoke token">
+                            <Trash2 className="size-4" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <Separator />
+                  <div className="space-y-3">
+                    <h3 className="font-medium">{locale === "tr" ? "İstemci kurulumu" : "Client setup"}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {locale === "tr" ? "Önce NEXUS_AGENT_TOKEN ortam değişkenini oluşturduğunuz token ile ayarlayın." : "First set NEXUS_AGENT_TOKEN to the token you created."}
+                    </p>
+                    {["Codex", "Claude Code", "Cursor"].map((client) => {
+                      const endpoint = `${typeof window !== "undefined" ? window.location.origin : "https://your-nexus.example"}/api/mcp`;
+                      const command = client === "Codex"
+                        ? `codex mcp add nexus --url ${endpoint} --bearer-token-env-var NEXUS_AGENT_TOKEN`
+                        : client === "Claude Code"
+                          ? `claude mcp add --transport http nexus ${endpoint} --header "Authorization: Bearer $NEXUS_AGENT_TOKEN"`
+                          : `URL: ${endpoint} · Authorization: Bearer NEXUS_AGENT_TOKEN`;
+                      return (
+                        <div key={client} className="border border-border p-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-sm font-medium">{client}</span>
+                            <Button size="icon" variant="ghost" onClick={() => navigator.clipboard.writeText(command)} title="Copy setup">
+                              <Copy className="size-3.5" />
+                            </Button>
+                          </div>
+                          <code className="block overflow-x-auto whitespace-nowrap text-xs text-muted-foreground">{command}</code>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

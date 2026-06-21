@@ -16,6 +16,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const findMany = vi.fn();
+const agentJobsFindMany = vi.fn();
 const insertReturning = vi.fn();
 let selectResults: unknown[] = [];
 let selectIndex = 0;
@@ -32,7 +33,10 @@ function selectChain() {
 
 vi.mock("@/lib/db", () => ({
   db: {
-    query: { tasks: { findMany: (...a: unknown[]) => findMany(...a) } },
+    query: {
+      tasks: { findMany: (...a: unknown[]) => findMany(...a) },
+      agentJobs: { findMany: (...a: unknown[]) => agentJobsFindMany(...a) },
+    },
     select: () => selectChain(),
     insert: () => ({
       values: () => ({ returning: (...a: unknown[]) => insertReturning(...a) }),
@@ -50,8 +54,10 @@ vi.mock("@/lib/workspace-auth", () => ({
 }));
 
 const writeAuditLog = vi.fn();
+const enforceMutationBudget = vi.fn();
 vi.mock("@/lib/production-guardrails", () => ({
   writeAuditLog: (...a: unknown[]) => writeAuditLog(...a),
+  enforceMutationBudget: (...a: unknown[]) => enforceMutationBudget(...a),
 }));
 
 // Import the REAL handlers after the mocks are registered.
@@ -75,6 +81,8 @@ beforeEach(() => {
   selectResults = [];
   selectIndex = 0;
   writeAuditLog.mockResolvedValue(undefined);
+  enforceMutationBudget.mockResolvedValue(null);
+  agentJobsFindMany.mockResolvedValue([]);
 });
 
 describe("GET /api/tasks (real handler)", () => {
@@ -155,6 +163,17 @@ describe("POST /api/tasks (real handler)", () => {
     getSession.mockResolvedValue(null);
     const res = await POST(postRequest({ title: "Valid title" }));
     expect(res.status).toBe(401);
+    expect(insertReturning).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 when the mutation budget is exhausted", async () => {
+    getSession.mockResolvedValue(authed);
+    enforceMutationBudget.mockResolvedValue(
+      Response.json({ error: "RATE_LIMIT_EXCEEDED" }, { status: 429 })
+    );
+
+    const res = await POST(postRequest({ title: "Valid title" }));
+    expect(res.status).toBe(429);
     expect(insertReturning).not.toHaveBeenCalled();
   });
 

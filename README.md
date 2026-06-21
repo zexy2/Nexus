@@ -7,7 +7,7 @@ Nexus is a portfolio-demo AI workflow workspace that keeps project plans and del
 This is not positioned as a full Jira, Linear, or Notion replacement. It is a focused public demo that proves one workflow end to end:
 
 ```text
-Project idea -> Living Plan -> Requirements -> Kanban tasks -> Impact review -> Approved changes -> Workflow history
+Project idea -> Living Plan -> Requirements -> Kanban tasks -> Impact review -> Approved changes -> Coding-agent handoff -> Human review
 ```
 
 ## Why It Exists
@@ -34,6 +34,8 @@ Nexus treats the plan as a versioned delivery artifact, not a disposable chat re
 - Creates reviewable change proposals instead of mutating work automatically.
 - Applies only the proposals selected by the user.
 - Records workflow runs, audit events, failures, and approval history.
+- Hands approved, versioned task context to local Codex, Claude Code, or Cursor clients over MCP.
+- Requires a pull request, test results, and acceptance-criteria evidence before human approval.
 
 ## Core Demo Flow
 
@@ -47,6 +49,16 @@ For a reviewer, the intended 5-minute path is:
 6. Open the Kanban board and inspect linked tasks.
 7. Edit the plan and run impact analysis again.
 8. Review the workflow history to see running, completed, and failed executions.
+
+For the owner-only coding-agent flow:
+
+1. Configure one GitHub repository under **Settings -> Agents**.
+2. Create a scoped MCP token and connect a local Codex, Claude Code, or Cursor client.
+3. Open a task and choose **Send to agent**.
+4. Let the local agent claim the immutable brief, implement the change, run tests, and open a PR with the user's own `gh` session.
+5. Review the PR and submitted evidence in Nexus. Only explicit human approval moves the task to Done.
+
+The shared public demo cannot create MCP tokens or dispatch new coding-agent jobs. It remains read-only for this integration so visitors cannot access or corrupt a shared workspace.
 
 ## Current Demo Status
 
@@ -71,6 +83,7 @@ Do not commit real `.env.production`, API keys, demo passwords, or access codes.
 | Workflows        | Temporal worker and workflow history                  |
 | AI orchestration | LangGraph agents with server-managed Gemini           |
 | Collaboration    | Yjs / Hocuspocus                                      |
+| Agent handoff    | MCP over HTTPS, local Codex / Claude Code / Cursor    |
 | Deployment       | Docker Compose, Nginx reverse proxy, VPS smoke checks |
 
 ## Architecture Shape
@@ -81,7 +94,7 @@ apps/web
 
 packages/database
   Drizzle schema for docs, tasks, requirements, change sets,
-  audit logs, rate limits, workflow runs, and worker health
+  agent jobs, audit logs, rate limits, workflow runs, and worker health
 
 packages/workflows
   Temporal workflow definitions for document generation,
@@ -154,6 +167,7 @@ Nexus is useful only if it proves these things:
 - Tasks are linked to requirements and can become aligned, stale, or orphaned.
 - AI proposes changes, but the user approves what actually mutates the board.
 - Every workflow leaves an inspectable execution trail.
+- Coding agents receive a frozen plan/requirement contract; plan changes invalidate stale work before approval.
 
 If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The current product direction is intentionally built around avoiding that.
 
@@ -165,6 +179,7 @@ If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The curre
 - OpenAI embeddings/RAG are optional and return unavailable states when not configured.
 - Production Zero cache is deferred; v1 uses API-backed sync and offline queue behavior.
 - A real public CV link needs VPS ingress, HTTPS, and provider secrets configured.
+- Nexus does not host coding sandboxes or store GitHub credentials; coding agents run on the user's machine.
 
 ## Documentation
 

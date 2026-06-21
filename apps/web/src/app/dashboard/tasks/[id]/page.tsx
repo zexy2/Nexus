@@ -6,14 +6,19 @@ import { useParams, useRouter } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
+  Bot,
   Calendar,
   CheckCircle2,
   Circle,
   Clock,
+  ExternalLink,
   FileText,
+  GitPullRequest,
   Loader2,
+  RefreshCw,
   Save,
   Trash2,
+  XCircle,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -41,7 +46,7 @@ import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-type TaskStatus = "todo" | "in_progress" | "done";
+type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
 type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 type Task = {
@@ -59,11 +64,31 @@ type Task = {
   isArchived: boolean;
   createdAt: string;
   updatedAt: string;
+  agentJob: { id: string; status: string } | null;
+  agentHandoffWritable: boolean;
+};
+
+type AgentJobDetail = {
+  id: string;
+  status: string;
+  contextVersion: number;
+  claimedByClient: string | null;
+  events: Array<{ id: string; type: string; message: string | null; createdAt: string }>;
+  submissions: Array<{
+    id: string;
+    pullRequestUrl: string;
+    commitSha: string;
+    summary: string;
+    tests: Array<{ command: string; status: string }>;
+    acceptanceEvidence: Array<{ requirementKey: string; criterion: string; evidence: string }>;
+    reviewStatus: string;
+  }>;
 };
 
 const statusIcon = {
   todo: Circle,
   in_progress: Clock,
+  in_review: GitPullRequest,
   done: CheckCircle2,
 } satisfies Record<TaskStatus, typeof Circle>;
 
@@ -99,6 +124,8 @@ export default function TaskDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [agentJob, setAgentJob] = useState<AgentJobDetail | null>(null);
+  const [agentAction, setAgentAction] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -132,6 +159,19 @@ export default function TaskDetailPage() {
     if (taskId) void fetchTask();
   }, [router, taskId]);
 
+  useEffect(() => {
+    if (!task?.agentJob?.id) {
+      setAgentJob(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/agent-jobs/${task.agentJob.id}`, { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => { if (!cancelled) setAgentJob(data); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [task?.agentJob?.id]);
+
   const hasChanges = useMemo(() => {
     if (!task) return false;
     return (
@@ -146,7 +186,42 @@ export default function TaskDetailPage() {
   const statusLabel = (value: TaskStatus) => {
     if (value === "todo") return t("tasks.colTodo");
     if (value === "in_progress") return t("tasks.colInProgress");
+    if (value === "in_review") return t("tasks.colInReview");
     return t("tasks.colDone");
+  };
+
+  const refreshTaskAndJob = async () => {
+    const taskResponse = await fetch(`/api/tasks/${taskId}`, { cache: "no-store" });
+    if (!taskResponse.ok) return;
+    const nextTask = await taskResponse.json() as Task;
+    setTask(nextTask);
+    setStatus(nextTask.status);
+    if (nextTask.agentJob?.id) {
+      const jobResponse = await fetch(`/api/agent-jobs/${nextTask.agentJob.id}`, { cache: "no-store" });
+      if (jobResponse.ok) setAgentJob(await jobResponse.json());
+    } else {
+      setAgentJob(null);
+    }
+  };
+
+  const runAgentAction = async (url: string, body?: Record<string, unknown>) => {
+    if (agentAction) return;
+    setAgentAction(true);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {}),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.error || t("taskDetail.agentActionFailed"));
+      await refreshTaskAndJob();
+      showToast.success(t("taskDetail.agentActionComplete"));
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : t("taskDetail.agentActionFailed"));
+    } finally {
+      setAgentAction(false);
+    }
   };
 
   const priorityLabel = (value: TaskPriority) => {
@@ -317,6 +392,92 @@ export default function TaskDetailPage() {
 
         <aside className="space-y-5">
           <section className="border border-white/10 bg-white/[0.03] p-5">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">{t("taskDetail.agentHandoff")}</p>
+                <h2 className="mt-1 text-sm font-semibold text-white">
+                  {agentJob ? t("taskDetail.agentRun") : t("taskDetail.agentReady")}
+                </h2>
+              </div>
+              <Bot className="size-4 text-white/50" />
+            </div>
+
+            {!agentJob ? (
+              <>
+                <p className="text-xs leading-5 text-white/45">{t("taskDetail.agentReadyDesc")}</p>
+                <Button className="mt-4 w-full gap-2" disabled={agentAction || !task.agentHandoffWritable} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
+                  {agentAction ? <Loader2 className="size-4 animate-spin" /> : <Bot className="size-4" />}
+                  {t("taskDetail.sendToAgent")}
+                </Button>
+                {!task.agentHandoffWritable && <p className="mt-2 text-xs text-amber-200/70">{t("taskDetail.demoAgentReadOnly")}</p>}
+              </>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border-y border-white/10 py-3 text-xs">
+                  <span className="text-white/40">{t("taskDetail.agentStatus")}</span>
+                  <span className={cn(
+                    "font-medium uppercase",
+                    agentJob.status === "outdated" ? "text-amber-300" :
+                      agentJob.status === "submitted" ? "text-blue-300" :
+                        agentJob.status === "approved" ? "text-emerald-300" : "text-white/70"
+                  )}>{t(`taskDetail.agentStatuses.${agentJob.status}`)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-white/45">
+                  <span>{t("taskDetail.contextVersion")}</span>
+                  <span className="text-right text-white/70">v{agentJob.contextVersion}</span>
+                  <span>{t("taskDetail.agentClient")}</span>
+                  <span className="text-right text-white/70">{agentJob.claimedByClient || t("taskDetail.notClaimed")}</span>
+                </div>
+
+                {agentJob.submissions[0] && (
+                  <div className="border border-white/10 bg-black/20 p-3">
+                    <p className="line-clamp-3 text-xs leading-5 text-white/55">{agentJob.submissions[0].summary}</p>
+                    <Button asChild variant="outline" size="sm" className="mt-3 w-full gap-2">
+                      <a href={agentJob.submissions[0].pullRequestUrl} target="_blank" rel="noreferrer">
+                        <GitPullRequest className="size-3.5" />
+                        {t("taskDetail.openPullRequest")}
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </Button>
+                  </div>
+                )}
+
+                {agentJob.status === "submitted" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button size="sm" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/review`, { decision: "approve" })}>{t("taskDetail.approveResult")}</Button>
+                    <Button size="sm" variant="outline" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/review`, { decision: "reject" })}>{t("taskDetail.rejectResult")}</Button>
+                  </div>
+                )}
+                {agentJob.status === "outdated" && (
+                  <Button size="sm" className="w-full gap-2" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/refresh-context`)}>
+                    <RefreshCw className="size-3.5" />
+                    {t("taskDetail.refreshAgentContext")}
+                  </Button>
+                )}
+                {["queued", "claimed", "running", "outdated"].includes(agentJob.status) && (
+                  <Button size="sm" variant="ghost" className="w-full gap-2 text-white/45" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/cancel`)}>
+                    <XCircle className="size-3.5" />
+                    {t("taskDetail.cancelAgentJob")}
+                  </Button>
+                )}
+                {["rejected", "failed", "cancelled"].includes(agentJob.status) && (
+                  <Button className="w-full gap-2" size="sm" disabled={agentAction} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
+                    <Bot className="size-3.5" />
+                    {t("taskDetail.sendToAgentAgain")}
+                  </Button>
+                )}
+
+                {agentJob.events.length > 0 && (
+                  <div className="border-t border-white/10 pt-3">
+                    <p className="mb-2 text-xs text-white/35">{t("taskDetail.latestAgentEvent")}</p>
+                    <p className="text-xs leading-5 text-white/55">{agentJob.events[0].message || agentJob.events[0].type}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="border border-white/10 bg-white/[0.03] p-5">
             <h2 className="mb-5 text-sm font-semibold text-white">{t("taskDetail.properties")}</h2>
 
             <div className="space-y-5">
@@ -329,6 +490,7 @@ export default function TaskDetailPage() {
                   <SelectContent>
                     <SelectItem value="todo">{t("tasks.colTodo")}</SelectItem>
                     <SelectItem value="in_progress">{t("tasks.colInProgress")}</SelectItem>
+                    {status === "in_review" && <SelectItem value="in_review">{t("tasks.colInReview")}</SelectItem>}
                     <SelectItem value="done">{t("tasks.colDone")}</SelectItem>
                   </SelectContent>
                 </Select>

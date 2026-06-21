@@ -36,12 +36,12 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@temporalio/activity": "^1.11.7",
-    "@temporalio/client": "^1.11.7",
-    "@temporalio/worker": "^1.11.7",
-    "@temporalio/workflow": "^1.11.7",
     "@nexus/agents": "workspace:*",
-    "postgres": "^3.4.4",
+    "@temporalio/activity": "^1.18.1",
+    "@temporalio/client": "^1.18.1",
+    "@temporalio/worker": "^1.18.1",
+    "@temporalio/workflow": "^1.18.1",
+    "postgres": "^3.4.9",
     "zod": "^3.24.0"
   },
   "devDependencies": {

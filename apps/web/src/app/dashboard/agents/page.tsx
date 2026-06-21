@@ -61,6 +61,15 @@ type DocumentOption = {
   title: string;
 };
 
+type CodingAgentJob = {
+  id: string;
+  status: string;
+  contextVersion: number;
+  claimedByClient: string | null;
+  createdAt: string;
+  task: { id: string; title: string } | null;
+};
+
 type LaunchMode = "plan" | "research" | "impact" | null;
 
 const runStatus = {
@@ -109,6 +118,7 @@ export default function WorkflowCenterPage() {
   const router = useRouter();
   const [runs, setRuns] = useState<Run[]>([]);
   const [documents, setDocuments] = useState<DocumentOption[]>([]);
+  const [codingJobs, setCodingJobs] = useState<CodingAgentJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [launchMode, setLaunchMode] = useState<LaunchMode>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -134,20 +144,26 @@ export default function WorkflowCenterPage() {
     setDocuments(await response.json());
   }, []);
 
+  const fetchCodingJobs = useCallback(async () => {
+    const response = await fetch("/api/agent-jobs", { cache: "no-store" });
+    if (response.ok) setCodingJobs(await response.json());
+  }, []);
+
   useEffect(() => {
-    void Promise.all([fetchRuns(), fetchDocuments()])
+    void Promise.all([fetchRuns(), fetchDocuments(), fetchCodingJobs()])
       .catch((error) =>
         showToast.error(error instanceof Error ? error.message : t("agents.center.centerLoadError"))
       )
       .finally(() => setLoading(false));
-  }, [fetchDocuments, fetchRuns, t]);
+  }, [fetchCodingJobs, fetchDocuments, fetchRuns, t]);
 
-  const hasRunning = runs.some((run) => run.status === "running" || run.status === "pending");
+  const hasRunning = runs.some((run) => run.status === "running" || run.status === "pending") ||
+    codingJobs.some((job) => ["queued", "claimed", "running", "submitted"].includes(job.status));
   useEffect(() => {
     if (!hasRunning) return;
-    const timer = window.setInterval(() => void fetchRuns(), 5000);
+    const timer = window.setInterval(() => void Promise.all([fetchRuns(), fetchCodingJobs()]), 5000);
     return () => window.clearInterval(timer);
-  }, [fetchRuns, hasRunning]);
+  }, [fetchCodingJobs, fetchRuns, hasRunning]);
 
   const metrics = useMemo(() => ({
     running: runs.filter((run) => run.status === "running" || run.status === "pending").length,
@@ -294,6 +310,45 @@ export default function WorkflowCenterPage() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="mb-12">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-white">Coding Agent Runs</h2>
+            <p className="mt-1 text-xs text-white/40">
+              {locale === "tr"
+                ? "Yerel Codex, Claude Code ve Cursor istemcilerine teslim edilen sürümlenmiş işler."
+                : "Versioned work handed to local Codex, Claude Code, and Cursor clients."}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void fetchCodingJobs()}>{t("common.refresh")}</Button>
+        </div>
+        {codingJobs.length === 0 ? (
+          <div className="flex min-h-36 items-center justify-center border-y border-white/10 text-sm text-white/35">
+            {locale === "tr" ? "Henüz coding agent çalışması yok." : "No coding-agent runs yet."}
+          </div>
+        ) : (
+          <div className="divide-y divide-white/10 border-y border-white/10">
+            {codingJobs.map((job) => (
+              <Link key={job.id} href={`/dashboard/tasks/${job.task?.id || ""}`} className="grid gap-3 py-4 transition-colors hover:bg-white/[0.02] md:grid-cols-[140px_minmax(0,1fr)_180px]">
+                <div>
+                  <Badge variant="outline" className={cn(
+                    "uppercase",
+                    job.status === "outdated" ? "border-amber-400/25 text-amber-200" :
+                      job.status === "submitted" ? "border-blue-400/25 text-blue-200" :
+                        job.status === "approved" ? "border-emerald-400/25 text-emerald-200" : "border-white/10 text-white/55"
+                  )}>{job.status}</Badge>
+                </div>
+                <div>
+                  <p className="font-medium text-white">{job.task?.title || job.id}</p>
+                  <p className="mt-1 text-xs text-white/35">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
+                </div>
+                <div className="text-xs text-white/35 md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

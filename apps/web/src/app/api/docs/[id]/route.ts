@@ -7,6 +7,7 @@ import {
   workspaces,
 } from "@nexus/database/schema";
 import { and, eq, or } from "drizzle-orm";
+import { enforceMutationBudget } from "@/lib/production-guardrails";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -124,14 +125,21 @@ export async function PATCH(
       );
     }
     
-    const body = await req.json();
-    const userId = await getUserId();
-    if (!userId) {
+    const session = await verifySession();
+    if (!session) {
       return Response.json(
         { error: "Unauthorized", message: "Authentication required" },
         { status: 401 }
       );
     }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "document",
+    });
+    if (mutationLimit) return mutationLimit;
+    const body = await req.json();
 
     const existing = await findAuthorizedDoc(id, userId);
     if (!existing) {
@@ -234,13 +242,20 @@ export async function DELETE(
       );
     }
 
-    const userId = await getUserId();
-    if (!userId) {
+    const session = await verifySession();
+    if (!session) {
       return Response.json(
         { error: "Unauthorized", message: "Authentication required" },
         { status: 401 }
       );
     }
+    const userId = session.user.id;
+    const mutationLimit = await enforceMutationBudget({
+      userId,
+      email: session.user.email,
+      resource: "document",
+    });
+    if (mutationLimit) return mutationLimit;
 
     const existing = await findAuthorizedDoc(id, userId);
     if (!existing) {

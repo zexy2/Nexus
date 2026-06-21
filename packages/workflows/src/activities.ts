@@ -1479,6 +1479,29 @@ export async function applyPlanChangeSet(
             )
           `;
 
+      const outdatedJobs = await tx<Array<{ id: string }>>`
+        UPDATE agent_jobs
+        SET status = 'outdated', updated_at = now()
+        WHERE workspace_id = ${changeSet.workspace_id}
+          AND status IN ('queued', 'claimed', 'running', 'submitted')
+          AND task_id IN (
+            SELECT id FROM tasks WHERE doc_id = ${changeSet.doc_id}
+          )
+        RETURNING id
+      `;
+      for (const job of outdatedJobs) {
+        await tx`
+          INSERT INTO agent_job_events (job_id, workspace_id, type, message, metadata)
+          VALUES (
+            ${job.id},
+            ${changeSet.workspace_id},
+            ${"outdated"},
+            ${"The approved plan changed. Refresh the agent brief before review."},
+            ${JSON.stringify({ changeSetId })}::jsonb
+          )
+        `;
+      }
+
       return { applied, rejected, createdTaskIds };
     });
   } finally {

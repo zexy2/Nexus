@@ -89,7 +89,7 @@ import { formatRelativeDate } from "@/lib/format";
 import { useT, useLocale } from "@/lib/i18n/provider";
 
 // Types
-type TaskStatus = "todo" | "in_progress" | "done";
+type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
 type TaskPriority = "low" | "medium" | "high" | "urgent";
 
 interface Task {
@@ -100,6 +100,7 @@ interface Task {
   priority: TaskPriority;
   assigneeId: string | null;
   assigneeAgentType: string | null;
+  agentJob?: { id: string; status: string; claimedByClient?: string | null } | null;
   dueDate?: Date;
   tags?: string[];
   alignmentStatus: "aligned" | "needs_review" | "orphaned";
@@ -153,6 +154,7 @@ function fromSyncTask(t: SyncTask): Task {
 const columns: { id: TaskStatus; title: string; color: string; icon: typeof Circle }[] = [
   { id: "todo", title: "Yapılacak", color: "neutral", icon: Circle },
   { id: "in_progress", title: "Devam Ediyor", color: "amber", icon: Clock },
+  { id: "in_review", title: "İncelemede", color: "blue", icon: GitPullRequestArrow },
   { id: "done", title: "Tamamlandı", color: "emerald", icon: CheckCircle2 },
 ];
 
@@ -171,9 +173,10 @@ function getDragTargetStatus(overId: string | number | null | undefined, taskLis
 
   const id = String(overId);
   const overTask = taskList.find((task) => task.id === id);
-  if (overTask) return overTask.status;
+  if (overTask) return overTask.status === "in_review" ? null : overTask.status;
 
-  return columns.find((column) => column.id === id)?.id ?? null;
+  const column = columns.find((item) => item.id === id)?.id ?? null;
+  return column === "in_review" ? null : column;
 }
 
 // Priority config
@@ -208,7 +211,7 @@ function SortableTaskCard({
     transition,
   };
 
-  const isAI = !!task.assigneeAgentType;
+  const isAI = !!task.agentJob;
   const priority = priorityConfig[task.priority];
   const t = useT();
   const { locale } = useLocale();
@@ -347,7 +350,7 @@ function SortableTaskCard({
                     <TooltipTrigger asChild>
                       <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
                         <Sparkles className="w-3 h-3" />
-                        AI
+                        Agent
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{t('tasks.aiAssigned')}</TooltipContent>
@@ -397,7 +400,7 @@ function SortableTaskCard({
 // Static Task Card for drag overlay
 function TaskCardOverlay({ task }: { task: Task }) {
   const priority = priorityConfig[task.priority];
-  const isAI = !!task.assigneeAgentType;
+  const isAI = !!task.agentJob;
   const t = useT();
 
   return (
@@ -431,7 +434,7 @@ function TaskCardOverlay({ task }: { task: Task }) {
             {isAI && (
               <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
                 <Sparkles className="w-3 h-3" />
-                AI
+                Agent
               </span>
             )}
           </div>
@@ -459,6 +462,7 @@ function KanbanColumn({
   // Add droppable to enable dropping tasks on the column itself
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
+    disabled: column.id === "in_review",
   });
 
   const colorClasses = {
@@ -473,6 +477,12 @@ function KanbanColumn({
       border: "border-white/10",
       icon: "text-amber-400",
       badge: "bg-amber-500/20 text-amber-300",
+    },
+    blue: {
+      bg: "bg-white/[0.02]",
+      border: "border-white/10",
+      icon: "text-blue-400",
+      badge: "bg-blue-500/20 text-blue-300",
     },
     emerald: {
       bg: "bg-white/[0.02]",
@@ -492,7 +502,9 @@ function KanbanColumn({
           <div className={cn("p-2 rounded-xl", colors.bg, colors.border, "border")}>
             <Icon className={cn("w-4 h-4", colors.icon)} />
           </div>
-          <h3 className="font-semibold text-sm md:text-base">{t(`tasks.col${column.id === 'todo' ? 'Todo' : column.id === 'in_progress' ? 'InProgress' : 'Done'}`)}</h3>
+          <h3 className="font-semibold text-sm md:text-base">
+            {t(`tasks.col${column.id === "todo" ? "Todo" : column.id === "in_progress" ? "InProgress" : column.id === "in_review" ? "InReview" : "Done"}`)}
+          </h3>
           <span
             className={cn(
               "px-2 py-0.5 rounded-full text-xs font-medium",
@@ -585,7 +597,6 @@ export default function TasksPage() {
     title: "",
     description: "",
     priority: "medium" as TaskPriority,
-    assignToAgent: false,
   });
 
   // DnD sensors
@@ -696,7 +707,7 @@ export default function TasksPage() {
     todo: tasks.filter((t) => t.status === "todo").length,
     inProgress: tasks.filter((t) => t.status === "in_progress").length,
     done: tasks.filter((t) => t.status === "done").length,
-    aiTasks: tasks.filter((t) => !!t.assigneeAgentType).length,
+    aiTasks: tasks.filter((t) => !!t.agentJob).length,
   }), [tasks]);
 
   // DnD handlers
@@ -713,6 +724,7 @@ export default function TasksPage() {
 
     const activeTask = tasks.find((t) => t.id === active.id);
     if (!activeTask) return;
+    if (activeTask.status === "in_review") return;
 
     const targetStatus = getDragTargetStatus(over.id, tasks);
     dragTargetStatusRef.current = targetStatus;
@@ -732,6 +744,11 @@ export default function TasksPage() {
     const { active, over } = event;
 
     const movedTask = tasks.find((task) => task.id === active.id);
+    if (movedTask?.status === "in_review") {
+      activeIdRef.current = null;
+      dragTargetStatusRef.current = null;
+      return;
+    }
     const targetStatus =
       getDragTargetStatus(over?.id, tasks) ||
       dragTargetStatusRef.current ||
@@ -797,7 +814,7 @@ export default function TasksPage() {
 
   // CRUD handlers
   const resetNewTask = useCallback(() => {
-    setNewTask({ title: "", description: "", priority: "medium", assignToAgent: false });
+    setNewTask({ title: "", description: "", priority: "medium" });
     setIsCreateOpen(false);
   }, []);
 
@@ -818,8 +835,7 @@ export default function TasksPage() {
         description: newTask.description,
         status: "todo",
         priority: newTask.priority,
-        assigneeId: newTask.assignToAgent ? undefined : userId,
-        assigneeAgentType: newTask.assignToAgent ? "supervisor" : undefined,
+        assigneeId: userId,
         createdBy: userId,
         position: 0,
         createdAt: now,
@@ -839,7 +855,6 @@ export default function TasksPage() {
           title: newTask.title,
           description: newTask.description,
           priority: newTask.priority,
-          assignToAgent: newTask.assignToAgent,
         }),
       });
 
@@ -1044,7 +1059,7 @@ export default function TasksPage() {
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
-            <div className="grid min-h-0 grid-cols-1 items-start gap-4 md:h-[calc(100vh-21rem)] md:min-h-[34rem] md:max-h-[44rem] md:grid-cols-3 md:items-stretch md:gap-6">
+            <div className="grid min-h-0 grid-cols-1 items-start gap-4 md:h-[calc(100vh-21rem)] md:min-h-[34rem] md:max-h-[44rem] md:grid-cols-2 md:items-stretch md:gap-5 xl:grid-cols-4">
               {columns.map((column) => (
                 <KanbanColumn
                   key={column.id}
@@ -1139,27 +1154,6 @@ export default function TasksPage() {
               </Select>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <input
-                type="checkbox"
-                id="assignToAgent"
-                checked={newTask.assignToAgent}
-                onChange={(e) =>
-                  setNewTask((prev) => ({
-                    ...prev,
-                    assignToAgent: e.target.checked,
-                  }))
-                }
-                className="rounded border-neutral-300"
-              />
-              <Label
-                htmlFor="assignToAgent"
-                className="text-sm flex items-center gap-2 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-white/70" />
-                {t('tasks.assignToAgent')}
-              </Label>
-            </div>
           </div>
 
           <DialogFooter>
