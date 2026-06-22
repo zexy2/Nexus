@@ -456,15 +456,33 @@ export async function indexDocument(
  */
 export async function callResearchAgent(
   query: string,
-  sources: string[]
-): Promise<AgentStepResult> {
+  sources: string[],
+  suppliedContext = ""
+): Promise<AgentStepResult & { sources: Array<{ title: string; url?: string; snippet: string; relevance: number }> }> {
   const startTime = Date.now();
-  
-  const systemPrompt = `You are a Research Agent. Gather comprehensive information about the topic.
-Sources to consider: ${sources.join(", ")}
-Provide well-organized findings with key insights.`;
+  const wantsWeb = sources.some((source) => source === "web" || source === "both");
+  const webResult = wantsWeb && process.env.TAVILY_API_KEY
+    ? await searchWeb(query, { maxResults: 5, searchDepth: "advanced" })
+    : null;
+  const webSources = webResult?.results.map((result) => ({
+    title: result.title,
+    url: result.url,
+    snippet: result.content.slice(0, 320),
+    relevance: result.score,
+  })) ?? [];
+  const sourceContext = [
+    suppliedContext,
+    webResult?.answer,
+    ...webSources.map((source) => `${source.title}\n${source.snippet}\nURL: ${source.url}`),
+  ].filter(Boolean).join("\n\n---\n\n");
 
-  const output = await callGemini(systemPrompt, query);
+  const systemPrompt = sourceContext
+    ? `You are a research synthesizer. Use only the supplied material for factual claims. Distinguish facts from inference, state uncertainty, and cite supplied URLs. Never invent a source.`
+    : `You are an analysis assistant. No external or workspace sources were supplied. Provide a planning analysis, explicitly disclose that it is model-generated, and do not describe it as verified research.`;
+  const output = await callGemini(
+    systemPrompt,
+    `${query}\n\n${sourceContext ? `SUPPLIED MATERIAL:\n${sourceContext}` : "No source material is available."}`
+  );
   
   return {
     agentName: "research",
@@ -473,6 +491,7 @@ Provide well-organized findings with key insights.`;
     success: true,
     duration: Date.now() - startTime,
     tokensUsed: Math.round(output.length / 4),
+    sources: webSources,
   };
 }
 
@@ -1700,14 +1719,52 @@ export async function searchDocuments(
   workspaceId: string,
   query: string,
   limit: number = 5
-): Promise<Array<{ id: string; title: string; similarity: number }>> {
-  const results = await searchVectors(query, { limit, workspaceId });
-  
-  return results.map(r => ({
-    id: r.id,
-    title: (r.metadata?.title as string) || "Untitled",
-    similarity: r.similarity,
-  }));
+): Promise<Array<{ id: string; title: string; content: string; similarity: number }>> {
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const results = await searchVectors(query, { limit, workspaceId });
+      return results.map((result) => ({
+        id: (result.metadata?.docId as string) || result.id,
+        title: (result.metadata?.title as string) || "Untitled",
+        content: result.content,
+        similarity: result.similarity,
+      }));
+    } catch (error) {
+      console.warn("[Activity] Vector search failed; using workspace keyword search:", error);
+    }
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl);
+  try {
+    const rows = await sql<Array<{ id: string; title: string; content: unknown }>>`
+      SELECT id, title, content
+      FROM docs
+      WHERE workspace_id = ${workspaceId}
+      ORDER BY updated_at DESC
+      LIMIT 30
+    `;
+    const terms = query.toLowerCase().split(/\s+/).filter((term) => term.length > 2);
+    return rows
+      .map((row) => {
+        const content = textFromDocumentContent(row.content);
+        const haystack = `${row.title} ${content}`.toLowerCase();
+        const matches = terms.filter((term) => haystack.includes(term)).length;
+        return {
+          id: row.id,
+          title: row.title,
+          content: content.slice(0, 1600),
+          similarity: terms.length > 0 ? matches / terms.length : 0,
+        };
+      })
+      .filter((row) => row.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit);
+  } finally {
+    await sql.end();
+  }
 }
 
 // Helper function

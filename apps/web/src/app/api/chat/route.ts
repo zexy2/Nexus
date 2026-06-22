@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Chat API Route — multi-agent orchestration.
+ * Ask Nexus API route.
  *
  * Auto mode runs an autonomous tool-calling agent (lib/ai/agent): the model
- * decides which tools to call and chains them. Direct mode runs a single named
- * persona (lib/ai/chat-agents). Model selection, RAG and persistence live in
- * their own lib/ai modules.
+ * decides which tools to call and chains them. Legacy direct-mode values map to
+ * focused capabilities, not separately running agent personas.
  */
 import { generateText } from "ai";
 import { auth } from "@/lib/auth";
@@ -15,7 +14,7 @@ import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { isAiQuotaError, aiQuotaResponse } from "@/lib/ai/quota";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { getRAGContext } from "@/lib/ai/chat-rag";
-import { AGENTS, type AgentType } from "@/lib/ai/chat-agents";
+import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
@@ -140,12 +139,17 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
   }
 
   // ==========================================
-  // MULTI-AGENT ORCHESTRATION
+  // FOCUSED CAPABILITY MODE (legacy wire value)
   // ==========================================
 
-  // If specific agent mode selected, use that agent directly
-  if (agentMode && agentMode !== "auto" && AGENTS[agentMode as AgentType]) {
-    const agent = AGENTS[agentMode as AgentType];
+  // Older clients may still request a focused mode. It uses the same provider,
+  // quota and workspace boundary as Ask Nexus.
+  if (
+    agentMode &&
+    agentMode !== "auto" &&
+    CHAT_CAPABILITIES[agentMode as ChatCapability]
+  ) {
+    const capability = CHAT_CAPABILITIES[agentMode as ChatCapability];
 
     const workspaceId = (await ensureDefaultWorkspace(userId)).id;
     const agentRagContext = await getRAGContext(userMessage, workspaceId);
@@ -175,7 +179,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       contextParts.push(`🌐 GÜNCEL WEB BİLGİSİ:\n${webContext}`);
     }
 
-    const enhancedSystem = agent.systemPrompt + (contextParts.length > 0
+    const enhancedSystem = capability.systemPrompt + (contextParts.length > 0
       ? `\n\n---\n${contextParts.join("\n\n---\n")}`
       : "");
 

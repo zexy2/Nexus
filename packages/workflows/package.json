@@ -36,7 +36,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@nexus/agents": "workspace:*",
     "@temporalio/activity": "^1.18.1",
     "@temporalio/client": "^1.18.1",
     "@temporalio/worker": "^1.18.1",

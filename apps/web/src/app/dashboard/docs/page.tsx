@@ -19,7 +19,6 @@ import {
   Star,
   StarOff,
   Eye,
-  Edit3,
   SortAsc,
   Calendar,
   User,
@@ -224,10 +223,10 @@ function DocumentCard({
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link
-                      href={`/dashboard/docs/${doc.id}/edit`}
+                      href={`/dashboard/docs/${doc.id}`}
                       className="flex items-center gap-2"
                     >
-                      <Edit3 className="w-4 h-4" />
+                      <FileText className="w-4 h-4" />
                       {t('common.edit')}
                     </Link>
                   </DropdownMenuItem>

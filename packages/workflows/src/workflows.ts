@@ -178,7 +178,7 @@ export async function documentGenerationWorkflow(
   // Step 1: Research phase
   await sendNotification(input.userId, "Starting document research...", "info");
   
-  const researchResult = await callResearchAgent(input.prompt, ["documents", "web"]);
+  const researchResult = await callResearchAgent(input.prompt, ["web"]);
   steps.push(researchResult);
   
   // Step 2: Writing phase
@@ -233,7 +233,7 @@ export async function researchWorkflow(
   for (const doc of docResults) {
     sources.push({
       title: doc.title,
-      snippet: `Document match with ${(doc.similarity * 100).toFixed(0)}% relevance`,
+      snippet: doc.content.slice(0, 320),
       relevance: doc.similarity,
     });
   }
@@ -241,9 +241,11 @@ export async function researchWorkflow(
   // Step 2: Research agent for synthesis
   const researchResult = await callResearchAgent(
     input.query,
-    input.sources || ["both"]
+    input.sources || ["both"],
+    docResults.map((doc) => `${doc.title}\n${doc.content}`).join("\n\n---\n\n")
   );
   steps.push(researchResult);
+  sources.push(...researchResult.sources);
   
   // Step 3: Deep research if requested
   if (input.depth === "deep") {

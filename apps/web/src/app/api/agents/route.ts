@@ -1,29 +1,48 @@
+/**
+ * Deprecated compatibility endpoint for older Nexus clients.
+ *
+ * The current UI uses /api/chat. This route keeps the former SSE/JSON wire
+ * format without maintaining a second provider stack or hard-coded model list.
+ */
+import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { enforceAiBudget } from "@/lib/production-guardrails";
-import { requireWorkspaceAccess } from "@/lib/workspace-auth";
-import {
-  startAgentTrace,
-  addAgentStep,
-  completeAgentTrace,
-  failAgentTrace
-} from "@/lib/observability";
+import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
+import { runAgent } from "@/lib/ai/agent";
+import { getRAGContext } from "@/lib/ai/chat-rag";
+import { getUserModelConfig } from "@/lib/ai/model-config";
+import { aiQuotaResponse, isAiQuotaError } from "@/lib/ai/quota";
 import { searchWeb } from "@/lib/ai/tavily";
-import { correctiveRAG } from "@/lib/ai/crag";
-import { buildWorkspaceSearchContext, searchWorkspaceContent } from "@/lib/workspace-search";
-import { isEmbeddingsAvailable, semanticSearch, buildSemanticContext } from "@/lib/ai/embeddings";
+import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Shared auth + AI budget gate. This endpoint calls paid LLM/search providers,
-// so it must never run for anonymous callers or beyond the per-user quota.
-async function authorizeAgentRequest():
-  Promise<
-    | { ok: true; userId: string }
-    | { ok: false; response: NextResponse }
-  > {
+type CompatibilityMode = "auto" | ChatCapability;
+
+interface CompatibilityRequest {
+  message?: string;
+  context?: { workspaceId?: string };
+  mode?: CompatibilityMode;
+}
+
+interface AuthorizedRequest {
+  userId: string;
+  email?: string | null;
+}
+
+interface PreparedRequest extends AuthorizedRequest {
+  message: string;
+  mode: CompatibilityMode;
+  workspaceId: string;
+  modelConfig: Awaited<ReturnType<typeof getUserModelConfig>>;
+}
+
+async function authenticateRequest(): Promise<
+  { ok: true; value: AuthorizedRequest } | { ok: false; response: Response }
+> {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {
     return {
@@ -32,641 +51,237 @@ async function authorizeAgentRequest():
     };
   }
 
+  return {
+    ok: true,
+    value: { userId: session.user.id, email: session.user.email },
+  };
+}
+
+function normalizeMode(value: unknown): CompatibilityMode {
+  return value === "research" ||
+    value === "writer" ||
+    value === "coder" ||
+    value === "task"
+    ? value
+    : "auto";
+}
+
+async function prepareRequest(request: NextRequest): Promise<
+  { ok: true; value: PreparedRequest } | { ok: false; response: Response }
+> {
+  const authorized = await authenticateRequest();
+  if (!authorized.ok) return authorized;
+
+  let body: CompatibilityRequest;
+  try {
+    body = await request.json();
+  } catch {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Invalid JSON body" }, { status: 400 }),
+    };
+  }
+
+  const message = body.message?.trim();
+  if (!message) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: "Message is required" }, { status: 400 }),
+    };
+  }
+
   const budget = await enforceAiBudget({
-    userId: session.user.id,
-    email: session.user.email,
+    userId: authorized.value.userId,
+    email: authorized.value.email,
     kind: "chat",
   });
-  if (!budget.ok) {
-    return { ok: false, response: budget.response };
+  if (!budget.ok) return { ok: false, response: budget.response };
+
+  const access = await requireWorkspaceAccess(
+    authorized.value.userId,
+    body.context?.workspaceId
+  );
+  if (!access.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json({ error: access.error }, { status: access.status }),
+    };
   }
 
-  return { ok: true, userId: session.user.id };
-}
-
-interface AgentRequest {
-  message: string;
-  context?: {
-    workspaceId?: string;
-    userId?: string;
-  };
-  mode?: "auto" | "research" | "writer" | "coder" | "task";
-  useCRAG?: boolean; // Enable Corrective RAG
-}
-
-// Gemini-powered agent response - supports both Flash and Pro models
-async function getGeminiResponse(
-  message: string, 
-  systemPrompt: string, 
-  model: "gemini-2.5-flash" | "gemini-2.5-pro" = "gemini-2.5-flash"
-): Promise<{ content: string; tokens: number }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
-  
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts: [{ text: message }] }],
-      generationConfig: {
-        temperature: model === "gemini-2.5-pro" ? 0.5 : 0.7,
-        maxOutputTokens: model === "gemini-2.5-pro" ? 8192 : 4096,
+  try {
+    const modelConfig = await getUserModelConfig(authorized.value.userId);
+    return {
+      ok: true,
+      value: {
+        ...authorized.value,
+        message,
+        mode: normalizeMode(body.mode),
+        workspaceId: access.workspaceId,
+        modelConfig,
       },
-    }),
-  });
-  
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Gemini API error: ${response.status} - ${error}`);
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: "AI_PROVIDER_UNAVAILABLE",
+          message:
+            error instanceof Error
+              ? error.message
+              : "No server-managed AI provider is configured",
+          retryable: false,
+        },
+        { status: 503 }
+      ),
+    };
   }
-  
-  const data = await response.json();
-  return {
-    content: data.candidates?.[0]?.content?.parts?.[0]?.text || "",
-    tokens: data.usageMetadata?.totalTokenCount || 0,
-  };
 }
 
-// RAG context retrieval: semantic (pgvector) first, keyword fallback.
-async function getRAGContext(query: string, workspaceId?: string): Promise<string> {
-  if (!workspaceId) return "";
-
-  try {
-    if (isEmbeddingsAvailable()) {
-      const hits = await semanticSearch(query, workspaceId, { limit: 3, minSimilarity: 0.2 });
-      if (hits.length > 0) {
-        return await buildSemanticContext(hits);
-      }
-    }
-    const results = await searchWorkspaceContent(query, workspaceId, { limit: 3 });
-    return buildWorkspaceSearchContext(results);
-  } catch (err) {
-    console.error("RAG context retrieval failed:", err);
+async function buildCapabilityContext(input: PreparedRequest): Promise<string> {
+  const contextParts: string[] = [];
+  const workspaceContext = await getRAGContext(input.message, input.workspaceId);
+  if (workspaceContext) {
+    contextParts.push(`WORKSPACE CONTEXT:\n${workspaceContext}`);
   }
-  return "";
-}
 
-// Web search using Tavily
-async function getWebSearchContext(query: string): Promise<string> {
-  try {
-    const result = await searchWeb(query, { maxResults: 3, includeAnswer: true });
-    
-    if (result.answer) {
+  if (input.mode === "research") {
+    try {
+      const result = await searchWeb(input.message, { maxResults: 5, includeAnswer: true });
       const sources = result.results
-        .slice(0, 3)
-        .map(r => `- [${r.title}](${r.url})`)
+        .slice(0, 5)
+        .map((item) => `- ${item.title}: ${item.url}`)
         .join("\n");
-      
-      return `**Web Search Results:**\n${result.answer}\n\n**Sources:**\n${sources}`;
+      contextParts.push(
+        `WEB RESEARCH:\n${result.answer || ""}${sources ? `\n\nSources:\n${sources}` : ""}`
+      );
+    } catch {
+      contextParts.push("WEB RESEARCH: Tavily is not configured or is temporarily unavailable.");
     }
-    
-    return result.results
-      .map(r => `**${r.title}**\n${r.content.slice(0, 200)}...\nSource: ${r.url}`)
-      .join("\n\n");
-  } catch (err) {
-    console.error("Web search failed:", err);
-    return "";
   }
+
+  return contextParts.join("\n\n---\n\n");
 }
 
-const SYSTEM_PROMPTS: Record<string, string> = {
-  supervisor: `Sen Gemini tarafından desteklenen bir yapay zeka asistanısın.
+async function executeRequest(input: PreparedRequest) {
+  const { model, modelName, provider } = input.modelConfig;
+  let message: string;
+  let toolsUsed: string[] = [];
 
-Görevin kullanıcıya yardımcı olmak. Doğal, samimi ve profesyonel bir dil kullan.
-Yanıtlarını Markdown formatında yaz ama aşırı formatlama yapma.
-Türkçe yanıt ver.`,
+  if (input.mode === "auto") {
+    const result = await runAgent({
+      model,
+      messages: [{ role: "user", content: input.message }],
+      context: { userId: input.userId, workspaceId: input.workspaceId },
+      maxSteps: 6,
+    });
+    message = result.text;
+    toolsUsed = result.toolsUsed;
+  } else {
+    const capability = CHAT_CAPABILITIES[input.mode];
+    const context = await buildCapabilityContext(input);
+    const result = await generateText({
+      model,
+      system: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
+      prompt: input.message,
+    });
+    message = result.text;
+  }
 
-  research: `Sen Gemini 2.5 Pro tarafından desteklenen üst düzey bir araştırma asistanısın.
+  await writeAuditLog({
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    event: "ai.compatibility_chat",
+    metadata: { mode: input.mode, provider, modelName, toolsUsed },
+  });
 
-GÖREV:
-Kullanıcının sorularına derinlemesine, kapsamlı ve bilgilendirici yanıtlar vermek.
-
-ARAŞTIRMA YAKLAŞIMIN:
-1. Konuyu farklı açılardan analiz et
-2. Tarihsel bağlamı, güncel durumu ve gelecek perspektifini ele al
-3. Karşıt görüşleri ve farklı perspektifleri değerlendir
-4. Somut örnekler, veriler ve kanıtlar sun
-5. Belirsiz veya tartışmalı konuları açıkça belirt
-
-YAZI STİLİ:
-- Doğal, akıcı ve profesyonel bir dil kullan
-- Konuyu derinlemesine ele al, yüzeysel geçme
-- Açıklayıcı paragraflar tercih et
-- Gerektiğinde alt başlıklar kullan
-- Gereksiz emoji veya aşırı formatlama yapma
-- Markdown kullanabilirsin ama sade tut
-- Kapsamlı yanıtlar ver - minimum 500 kelime hedefle
-
-Türkçe yanıt ver. Akademik kalitede ama okunabilir ol.`,
-
-  writer: `Sen Gemini tarafından desteklenen bir içerik yazma asistanısın.
-
-Görevin:
-- İyi yapılandırılmış, okunabilir içerikler oluşturmak
-- Net ve akıcı bir dil kullanmak
-
-Yanıt stili:
-- Doğal, insani bir dil kullan
-- Markdown ile temiz formatlama yap
-- Gereksiz emoji kullanma
-
-Türkçe yaz.`,
-
-  coder: `Sen Gemini tarafından desteklenen bir yazılım geliştirme asistanısın.
-
-Görevin:
-- Temiz, okunabilir ve çalışan kod yazmak
-- Hata ayıklamak ve çözümler önermek
-- Teknik kavramları açıklamak
-
-Yanıt stili:
-- Kod bloklarını uygun syntax highlighting ile ver
-- Kısa açıklamalar ekle
-- Gereksiz emoji kullanma
-
-Açıklamaları Türkçe, kod İngilizce olabilir.`,
-
-  task: `Sen Gemini tarafından desteklenen bir proje yönetim asistanısın.
-
-Görevin:
-- Projeleri yönetilebilir görevlere bölmek
-- Öncelik ve zaman tahminleri yapmak
-- Net görev listeleri oluşturmak
-
-Yanıt stili:
-- Görevleri maddeler halinde listele
-- Her görev için kısa açıklama ekle
-- Öncelik belirt
-- Gereksiz emoji kullanma
-
-Türkçe yaz.`,
-};
+  return { message, toolsUsed, modelName };
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    const authorized = await authorizeAgentRequest();
-    if (!authorized.ok) return authorized.response;
+  const prepared = await prepareRequest(request);
+  if (!prepared.ok) return prepared.response;
 
-    const body: AgentRequest = await request.json();
-
-    if (!body.message) {
-      return NextResponse.json(
-        { error: "Message is required" },
-        { status: 400 }
-      );
-    }
-
-    // Trust the session, not the client-supplied identifiers. The workspaceId
-    // feeds RAG retrieval, so an unvalidated client value would let a user pull
-    // another workspace's documents into the agent's context (cross-tenant
-    // leak). Resolve it to a workspace the caller actually has access to.
-    const access = await requireWorkspaceAccess(authorized.userId, body.context?.workspaceId);
-    if (!access.ok) {
-      return NextResponse.json({ error: access.error }, { status: access.status });
-    }
-    body.context = {
-      ...body.context,
-      userId: authorized.userId,
-      workspaceId: access.workspaceId,
-    };
-
-    const mode = body.mode || "auto";
-    const agentType = mode === "auto" ? "supervisor" : mode;
-    const encoder = new TextEncoder();
-    console.log("[Agent] Request received - mode:", mode, "agentType:", agentType);
-    
-    // Start tracing
-    const trace = startAgentTrace(
-      `agent-${agentType}`,
-      agentType,
-      body.message,
-      { workspaceId: body.context?.workspaceId, userId: body.context?.userId }
-    );
-    
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          // Send initial thinking status
-          addAgentStep(trace.traceId, {
-            name: "thinking",
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
             type: "thinking",
-            content: "Analyzing request",
-          });
-          
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({
-              type: "thinking",
-              agent: agentType,
-              message: "Analyzing your request...",
-              traceId: trace.traceId,
-            })}\n\n`)
-          );
+            agent: "nexus",
+            message: "Processing request...",
+          })}\n\n`
+        )
+      );
 
-          // Get RAG context for relevant modes
-          let ragContext = "";
-          let cragResult = null;
-          const webSources: Array<{title: string; url: string; content: string}> = [];
-          
-          if (mode === "auto" || mode === "research") {
-            // Use CRAG if enabled, otherwise standard RAG
-            if (body.useCRAG) {
-              addAgentStep(trace.traceId, {
-                name: "crag_search",
-                type: "tool_call",
-                content: "Using Corrective RAG for enhanced retrieval",
-              });
-              
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  type: "crag",
-                  message: "Using Corrective RAG for self-correcting retrieval...",
-                })}\n\n`)
-              );
-              
-              cragResult = await correctiveRAG(body.message, body.context?.workspaceId, {
-                maxCorrections: 2,
-                includeWebSearch: mode === "research",
-                useGeminiForEval: true
-              });
-              
-              if (cragResult.corrections > 0) {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({
-                    type: "crag_correction",
-                    message: `Applied ${cragResult.corrections} query refinements for better results.`,
-                    corrections: cragResult.corrections,
-                  })}\n\n`)
-                );
-              }
-              
-              ragContext = cragResult.relevantDocuments
-                .filter(d => d.isRelevant)
-                .map(d => d.content)
-                .join("\n\n");
-            } else {
-              addAgentStep(trace.traceId, {
-                name: "rag_search",
-                type: "tool_call",
-                content: "Searching workspace documents",
-              });
-              
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  type: "rag",
-                  message: "Searching workspace for relevant context...",
-                })}\n\n`)
-              );
-              
-              ragContext = await getRAGContext(body.message, body.context?.workspaceId);
-            }
-          }
-
-          // Web search for research mode (if not already done via CRAG)
-          let webContext = "";
-          
-          if (mode === "research" && !body.useCRAG) {
-            console.log("[Agent] Research mode - starting comprehensive research...");
-            
-            // PHASE 1: Initial Analysis
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "phase",
-                phase: "analyzing",
-                message: "📊 Aşama 1/5: Konu analiz ediliyor...",
-                detail: "Gemini 2.5 Pro sorunuzu inceliyor"
-              })}\n\n`)
-            );
-            
-            addAgentStep(trace.traceId, {
-              name: "topic_analysis",
-              type: "thinking",
-              content: "Analyzing topic for research",
-            });
-
-            // Generate sub-queries for better research
-            const subQueryPrompt = `Şu konuyu araştırmak için 4-5 farklı arama sorgusu oluştur: "${body.message}"
-            
-Her sorgu farklı bir açıyı ele alsın (tanım, tarihçe, mekanizma, örnekler, güncel durum).
-JSON array olarak döndür: ["sorgu1", "sorgu2", ...]`;
-
-            let searchQueries = [body.message];
-            try {
-              const { content: queryResponse } = await getGeminiResponse(subQueryPrompt, "Arama sorgusu oluşturma uzmanısın. JSON formatında yanıt ver.", "gemini-2.5-flash");
-              const match = queryResponse.match(/\[[\s\S]*?\]/);
-              if (match) {
-                const parsed = JSON.parse(match[0]);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  searchQueries = [body.message, ...parsed.slice(0, 4)];
-                }
-              }
-            } catch {
-              searchQueries = [body.message];
-            }
-
-            // PHASE 2: Web Search
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "phase",
-                phase: "searching",
-                message: "🔍 Aşama 2/5: Web'de arama yapılıyor...",
-                detail: `${searchQueries.length} farklı sorgu aranacak`
-              })}\n\n`)
-            );
-
-            addAgentStep(trace.traceId, {
-              name: "web_search",
-              type: "tool_call",
-              content: `Searching web with ${searchQueries.length} queries`,
-            });
-
-            const allAnswers: string[] = [];
-            
-            for (let i = 0; i < searchQueries.length; i++) {
-              const query = searchQueries[i];
-              
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify({
-                  type: "search_progress",
-                  current: i + 1,
-                  total: searchQueries.length,
-                  query: query
-                })}\n\n`)
-              );
-
-              try {
-                const result = await searchWeb(query, { maxResults: 5, includeAnswer: true });
-                
-                if (result.answer) {
-                  allAnswers.push(`[${query}]: ${result.answer}`);
-                }
-                
-                if (result.results) {
-                  for (const r of result.results) {
-                    if (!webSources.find(s => s.url === r.url)) {
-                      webSources.push({ title: r.title, url: r.url, content: r.content });
-                    }
-                  }
-                }
-              } catch (err) {
-                console.error("[Agent] Search error:", err);
-              }
-              
-              // Rate limiting
-              await new Promise(r => setTimeout(r, 400));
-            }
-
-            console.log("[Agent] Found", webSources.length, "unique sources");
-
-            // PHASE 3: Deep Analysis
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "phase",
-                phase: "analyzing_deep",
-                message: "🧠 Aşama 3/5: Derinlemesine analiz yapılıyor...",
-                detail: `${webSources.length} kaynak analiz ediliyor`
-              })}\n\n`)
-            );
-
-            addAgentStep(trace.traceId, {
-              name: "deep_analysis",
-              type: "execution",
-              content: `Analyzing ${webSources.length} sources`,
-            });
-
-            // Build context from sources
-            const sourceContext = webSources.slice(0, 10).map((s, i) => 
-              `[Kaynak ${i + 1}] ${s.title}\n${s.content}`
-            ).join("\n\n---\n\n");
-
-            const answerContext = allAnswers.join("\n\n");
-
-            webContext = `**Web Araştırması Sonuçları:**\n\n${answerContext}\n\n**Detaylı Kaynaklar:**\n${sourceContext}`;
-
-            // PHASE 4: Synthesizing
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "phase",
-                phase: "synthesizing",
-                message: "✍️ Aşama 4/5: Bilgiler sentezleniyor...",
-                detail: "Gemini 2.5 Pro kapsamlı yanıt oluşturuyor"
-              })}\n\n`)
-            );
-
-            addAgentStep(trace.traceId, {
-              name: "synthesizing",
-              type: "execution",
-              content: "Synthesizing research findings",
-            });
-            
-            // Small delay for UX
-            await new Promise(r => setTimeout(r, 500));
-
-            if (webContext) {
-              addAgentStep(trace.traceId, {
-                name: "web_results",
-                type: "execution",
-                content: `Found ${webSources.length} sources from web search`,
-              });
-            }
-          }
-
-          // Build the full prompt with context
-          let fullPrompt = body.message;
-          const contextParts: string[] = [];
-          
-          if (ragContext) {
-            contextParts.push(`**Workspace Documents:**\n${ragContext}`);
-          }
-          if (webContext) {
-            contextParts.push(webContext);
-          }
-          
-          if (contextParts.length > 0) {
-            fullPrompt = `${contextParts.join("\n\n---\n\n")}\n\n---\n\nUser Request: ${body.message}`;
-            
-            addAgentStep(trace.traceId, {
-              name: "context_found",
-              type: "execution",
-              content: `Combined context: RAG=${ragContext.length}, Web=${webContext.length}`,
-            });
-            
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "context",
-                message: "Found relevant context from workspace and web.",
-              })}\n\n`)
-            );
-          }
-
-          // Select the appropriate system prompt
-          const systemPrompt = SYSTEM_PROMPTS[agentType] || SYSTEM_PROMPTS.supervisor;
-          
-          // Use Gemini 2.5 Pro for research mode, Flash for others
-          const modelToUse = agentType === "research" ? "gemini-2.5-pro" : "gemini-2.5-flash";
-
-          // Get response from Gemini
-          addAgentStep(trace.traceId, {
-            name: "llm_call",
-            type: "execution",
-            content: `Calling Gemini API (${modelToUse})`,
-          });
-          
-          // Show final phase for research mode
-          if (mode === "research") {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "phase",
-                phase: "generating",
-                message: "📝 Aşama 5/5: Kapsamlı yanıt oluşturuluyor...",
-                detail: "Gemini 2.5 Pro tüm bilgileri birleştiriyor"
-              })}\n\n`)
-            );
-          } else {
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({
-                type: "agent_start",
-                agent: agentType,
-                message: "Yanıt oluşturuluyor...",
-              })}\n\n`)
-            );
-          }
-
-          const { content: response, tokens } = await getGeminiResponse(fullPrompt, systemPrompt, modelToUse);
-
-          // Complete the trace
-          addAgentStep(trace.traceId, {
-            name: "response_generated",
-            type: "response",
-            content: response.slice(0, 200),
-          });
-          completeAgentTrace(trace.traceId, response, tokens);
-
-          // Send final response with sources for research mode
-          const finalData: Record<string, unknown> = {
-            type: "final",
-            agent: agentType,
-            message: response,
-            hasContext: !!ragContext,
-            traceId: trace.traceId,
-            tokens,
-          };
-
-          // Add sources for research mode
-          if (mode === "research" && webSources && webSources.length > 0) {
-            finalData.sources = webSources.slice(0, 10).map((s, i) => ({
-              number: i + 1,
-              title: s.title,
-              url: s.url
-            }));
-          }
-
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(finalData)}\n\n`)
-          );
-          
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
-          
-        } catch (error) {
-          console.error("Agent stream error:", error);
-          failAgentTrace(trace.traceId, error instanceof Error ? error.message : "Unknown error");
-          
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({
+      try {
+        const result = await executeRequest(prepared.value);
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
+              type: "final",
+              agent: "nexus",
+              message: result.message,
+              model: result.modelName,
+              toolsUsed: result.toolsUsed,
+            })}\n\n`
+          )
+        );
+      } catch (error) {
+        const quota = isAiQuotaError(error);
+        if (!quota) console.error("Compatibility AI request failed", error);
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({
               type: "error",
-              message: error instanceof Error ? error.message : "An error occurred",
-              traceId: trace.traceId,
-            })}\n\n`)
-          );
-          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
-          controller.close();
-        }
-      },
-    });
+              error: quota ? "AI_PROVIDER_RATE_LIMITED" : "AI_REQUEST_FAILED",
+              message: quota
+                ? "AI provider quota was reached. Please try again later."
+                : "AI request failed. Please try again later.",
+            })}\n\n`
+          )
+        );
+      } finally {
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      }
+    },
+  });
 
-    return new Response(stream, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-      },
-    });
-  } catch (error) {
-    console.error("Agent API error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      Deprecation: "true",
+      Link: '</api/chat>; rel="successor-version"',
+    },
+  });
 }
 
-// Non-streaming endpoint for simpler use cases
 export async function PUT(request: NextRequest) {
+  const prepared = await prepareRequest(request);
+  if (!prepared.ok) return prepared.response;
+
   try {
-    const authorized = await authorizeAgentRequest();
-    if (!authorized.ok) return authorized.response;
-
-    const body: AgentRequest = await request.json();
-
-    if (!body.message) {
-      return NextResponse.json(
-        { error: "Message is required" },
-        { status: 400 }
-      );
-    }
-
-    const mode = body.mode || "auto";
-    
-    // Get RAG context
-    let ragContext = "";
-    if (mode === "auto" || mode === "research") {
-      ragContext = await getRAGContext(body.message);
-    }
-
-    // Get web search context for research mode
-    let webContext = "";
-    if (mode === "research") {
-      webContext = await getWebSearchContext(body.message);
-    }
-
-    // Build full prompt with context
-    let fullPrompt = body.message;
-    const contextParts: string[] = [];
-    
-    if (ragContext) {
-      contextParts.push(`**Workspace Documents:**\n${ragContext}`);
-    }
-    if (webContext) {
-      contextParts.push(webContext);
-    }
-    
-    if (contextParts.length > 0) {
-      fullPrompt = `${contextParts.join("\n\n---\n\n")}\n\n---\n\nUser Request: ${body.message}`;
-    }
-
-    const agentType = mode === "auto" ? "supervisor" : mode;
-    const systemPrompt = SYSTEM_PROMPTS[agentType] || SYSTEM_PROMPTS.supervisor;
-    const modelToUse = agentType === "research" ? "gemini-2.5-pro" : "gemini-2.5-flash";
-    const { content } = await getGeminiResponse(fullPrompt, systemPrompt, modelToUse);
-
+    const result = await executeRequest(prepared.value);
     return NextResponse.json({
-      message: content,
-      agent: agentType,
-      model: modelToUse,
-      hasContext: !!(ragContext || webContext),
-      hasWebSearch: !!webContext,
+      message: result.message,
+      agent: "nexus",
+      mode: prepared.value.mode,
+      model: result.modelName,
+      toolsUsed: result.toolsUsed,
     });
   } catch (error) {
-    console.error("Agent API error:", error);
+    if (isAiQuotaError(error)) return aiQuotaResponse();
+    console.error("Compatibility AI request failed", error);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      {
+        error: "AI_REQUEST_FAILED",
+        message: "AI request failed. Please try again later.",
+      },
+      { status: 502 }
     );
   }
 }

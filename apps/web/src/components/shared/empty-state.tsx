@@ -54,7 +54,7 @@ const defaultConfig: Record<EmptyStateType, { icon: React.ReactNode; title: stri
   chat: {
     icon: <MessageSquare className="h-12 w-12" />,
     title: 'Start a conversation',
-    description: 'Send a message to begin chatting with your AI agents.',
+    description: 'Ask Nexus about your plans, work, or a new research question.',
   },
   search: {
     icon: <Search className="h-12 w-12" />,

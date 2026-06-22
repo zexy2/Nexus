@@ -35,8 +35,6 @@ export async function searchWeb(
 ): Promise<TavilySearchResponse> {
   const apiKey = process.env.TAVILY_API_KEY;
   console.log("[Tavily] Search started for query:", query);
-  console.log("[Tavily] API Key present:", !!apiKey);
-
   if (!apiKey) {
     throw new Error("TAVILY_NOT_CONFIGURED");
   }

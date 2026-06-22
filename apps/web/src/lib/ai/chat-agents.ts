@@ -1,12 +1,13 @@
 /**
- * Chat agent definitions and single-agent execution.
+ * Capability-specific prompts for Ask Nexus.
  *
- * Specialist personas used by the chat route's direct agent mode (the user
- * picks a specific agent). Auto mode uses the tool-calling agent in agent.ts.
+ * The wire values remain stable for older clients, but these are not separate
+ * autonomous agents. They are focused response modes backed by the same model
+ * configuration and quota controls.
  */
-export const AGENTS = {
+export const CHAT_CAPABILITIES = {
   research: {
-    name: "Araştırmacı",
+    name: "Araştırma",
     emoji: "🔍",
     description: "Expert at finding information, data analysis, and research",
     systemPrompt: `Sen Gemini 2.5 Pro tabanlı bir araştırma asistanısın.
@@ -26,7 +27,7 @@ YANIT STİLİ:
 Türkçe yanıt ver. Samimi ama profesyonel ol.`,
   },
   writer: {
-    name: "Yazar",
+    name: "Taslak oluşturma",
     emoji: "✍️",
     description: "Expert at creating documents, reports, and written content",
     systemPrompt: `Sen Gemini 2.5 Flash tabanlı bir içerik yazma asistanısın.
@@ -45,7 +46,7 @@ YANIT STİLİ:
 Türkçe yanıt ver.`,
   },
   coder: {
-    name: "Yazılımcı",
+    name: "Teknik destek",
     emoji: "💻",
     description: "Expert at writing code, debugging, and technical tasks",
     systemPrompt: `Sen Gemini 2.5 Flash tabanlı bir yazılım geliştirme asistanısın.
@@ -65,7 +66,7 @@ TypeScript, JavaScript, Python, React, Node.js konularında uzmansın.
 Açıklamaları Türkçe, kod İngilizce olabilir.`,
   },
   task: {
-    name: "Görev Yöneticisi",
+    name: "İş kırılımı",
     emoji: "📋",
     description: "Expert at creating tasks, organizing workflows, and project planning",
     systemPrompt: `Sen Gemini 2.5 Flash tabanlı bir proje yönetim asistanısın.
@@ -85,4 +86,4 @@ Türkçe yanıt ver.`,
   },
 } as const;
 
-export type AgentType = keyof typeof AGENTS;
+export type ChatCapability = keyof typeof CHAT_CAPABILITIES;

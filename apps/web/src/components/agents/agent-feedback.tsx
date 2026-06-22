@@ -40,27 +40,27 @@ const agentConfig: Record<
 > = {
   supervisor: {
     icon: Bot,
-    label: "Supervisor",
+    label: "Nexus",
     color: "text-purple-500 bg-purple-500/10 border-purple-500/20",
   },
   researcher: {
     icon: Search,
-    label: "Araştırmacı",
+    label: "Araştırma",
     color: "text-blue-500 bg-blue-500/10 border-blue-500/20",
   },
   writer: {
     icon: FileText,
-    label: "Yazar",
+    label: "Taslak oluşturma",
     color: "text-green-500 bg-green-500/10 border-green-500/20",
   },
   coder: {
     icon: Code,
-    label: "Geliştirici",
+    label: "Teknik çalışma",
     color: "text-orange-500 bg-orange-500/10 border-orange-500/20",
   },
   task: {
     icon: CheckSquare,
-    label: "Görev Yöneticisi",
+    label: "İş kırılımı",
     color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
   },
 };
@@ -184,7 +184,7 @@ function AgentStepItem({
 
 /**
  * Agent Execution Feedback Component
- * Shows real-time progress of multi-agent pipeline
+ * Shows real-time progress of a workflow pipeline.
  */
 export function AgentExecutionFeedback({
   steps,

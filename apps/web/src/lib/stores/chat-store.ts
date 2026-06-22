@@ -61,46 +61,46 @@ export interface AgentDefinition {
 }
 
 // ==========================================
-// AGENT DEFINITIONS
+// ASK NEXUS CAPABILITY DEFINITIONS
 // ==========================================
 
 export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
   auto: {
     id: 'auto',
-    label: 'Auto',
-    description: 'Automatically selects the best agent',
+    label: 'Nexus',
+    description: 'Chooses the required workspace tools automatically',
     icon: Sparkles,
     color: 'text-violet-400',
     gradient: 'from-violet-500 to-purple-600',
   },
   research: {
     id: 'research',
-    label: 'Researcher',
-    description: 'Web search and document analysis',
+    label: 'Research',
+    description: 'Workspace analysis and optional web search',
     icon: Search,
     color: 'text-blue-400',
     gradient: 'from-blue-500 to-cyan-500',
   },
   writer: {
     id: 'writer',
-    label: 'Writer',
-    description: 'Content creation and editing',
+    label: 'Drafting',
+    description: 'Structured document drafting and editing',
     icon: FileText,
     color: 'text-emerald-400',
     gradient: 'from-emerald-500 to-teal-500',
   },
   coder: {
     id: 'coder',
-    label: 'Coder',
-    description: 'Code generation and debugging',
+    label: 'Technical help',
+    description: 'Code explanation and technical problem solving',
     icon: Code,
     color: 'text-orange-400',
     gradient: 'from-orange-500 to-amber-500',
   },
   task: {
     id: 'task',
-    label: 'Task Manager',
-    description: 'Task creation and organization',
+    label: 'Work breakdown',
+    description: 'Turns scope into structured delivery tasks',
     icon: ListTodo,
     color: 'text-rose-400',
     gradient: 'from-rose-500 to-pink-500',

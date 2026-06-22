@@ -591,7 +591,7 @@ export const messages = {
         workflowStarted: "Workflow başlatıldı",
       },
       desc: {
-        supervisor: "Görevleri düzenler ve uzman ajanlara dağıtır",
+        supervisor: "İsteği uygun araçlara ve workflow adımlarına yönlendirir",
         researcher: "Web'de ve dahili dokümanlarda bilgi arar",
         writer: "Doküman, rapor ve içerik oluşturur ve düzenler",
         coder: "Kod yazar, inceler ve açıklar",
@@ -627,7 +627,7 @@ export const messages = {
         execution: "Yürütme",
       },
       wf: {
-        document: { desc: "AI ajanlarıyla kapsamlı dökümanlar oluşturun", topic: "Konu", format: "Biçim", context: "Ek Bağlam" },
+        document: { desc: "AI destekli, sürümlenebilir proje planları oluşturun", topic: "Konu", format: "Biçim", context: "Ek Bağlam" },
         research: { desc: "Herhangi bir konuda derinlemesine araştırma yapın", query: "Araştırma Sorgusu", depth: "Araştırma Derinliği", sources: "Tercih Edilen Kaynaklar" },
         task: { desc: "Karmaşık projeleri uygulanabilir görevlere bölün", goal: "Proje Hedefi", timeline: "Zaman Çizelgesi", requirements: "Gereksinimler" },
         code: { desc: "En iyi pratiklerle üretime hazır kod üretin", task: "Görev Açıklaması", language: "Dil", context: "Kod Bağlamı" },
@@ -704,7 +704,7 @@ export const messages = {
       startChat: "AI Sohbeti Başlat",
       newDocDesc: "Yeni bir doküman oluştur",
       newTaskDesc: "Yeni bir görev oluştur",
-      startChatDesc: "AI ajanlarıyla sohbet et",
+      startChatDesc: "Planlarınız ve işleriniz hakkında Nexus'a sorun",
     },
   },
   en: {
@@ -1291,7 +1291,7 @@ export const messages = {
         workflowStarted: "Workflow started",
       },
       desc: {
-        supervisor: "Orchestrates and delegates tasks to specialized agents",
+        supervisor: "Routes the request to the required tools and workflow steps",
         researcher: "Searches the web and internal documents for information",
         writer: "Creates and edits documents, reports, and content",
         coder: "Writes, reviews, and explains code",
@@ -1327,7 +1327,7 @@ export const messages = {
         execution: "Execution",
       },
       wf: {
-        document: { desc: "Generate comprehensive documents using AI agents", topic: "Topic", format: "Format", context: "Additional Context" },
+        document: { desc: "Generate AI-assisted, versioned project plans", topic: "Topic", format: "Format", context: "Additional Context" },
         research: { desc: "Conduct thorough research on any topic", query: "Research Query", depth: "Research Depth", sources: "Preferred Sources" },
         task: { desc: "Break down complex projects into actionable tasks", goal: "Project Goal", timeline: "Timeline", requirements: "Requirements" },
         code: { desc: "Generate production-ready code with best practices", task: "Task Description", language: "Language", context: "Code Context" },
@@ -1404,7 +1404,7 @@ export const messages = {
       startChat: "Start AI Chat",
       newDocDesc: "Create a new document",
       newTaskDesc: "Create a new task",
-      startChatDesc: "Chat with AI agents",
+      startChatDesc: "Ask Nexus about your plans and work",
     },
   },
 } as const;

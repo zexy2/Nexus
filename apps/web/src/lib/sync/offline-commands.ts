@@ -6,7 +6,7 @@
  * Implements the offline-first command pattern:
  * 1. User writes a natural language command (even offline)
  * 2. Command is stored in IndexedDB with "pending" status
- * 3. When online, commands are synced and processed by Supervisor Agent
+ * 3. When online, commands are synced and processed by Nexus
  * 4. Results are synced back via Zero Sync
  */
 
@@ -17,7 +17,7 @@
 export type CommandStatus = 
   | "pending"           // Waiting for sync (offline)
   | "syncing"           // Being uploaded to server
-  | "processing"        // Supervisor is working on it
+  | "processing"        // Nexus is processing it
   | "completed"         // Successfully processed
   | "failed";           // Error occurred
 
@@ -32,7 +32,7 @@ export interface OfflineCommand {
   priority: CommandPriority;
   createdAt: number;                  // Timestamp when created
   syncedAt?: number;                  // When synced to server
-  processedAt?: number;               // When Supervisor finished
+  processedAt?: number;               // When processing finished
   result?: CommandResult;
   error?: string;
   retryCount: number;

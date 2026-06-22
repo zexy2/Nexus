@@ -3,27 +3,15 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import {
-  aiUnavailableResponse,
   enforceAiBudget,
-  getAiProviderStatus,
   writeAuditLog,
 } from "@/lib/production-guardrails";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { agentExecutions } from "@nexus/database/schema";
+import { getUserModelConfig } from "@/lib/ai/model-config";
+import { runAgent } from "@/lib/ai/agent";
 
 export const runtime = "nodejs";
-
-interface AgentCommandResult {
-  output?: string;
-  documentId?: string;
-  taskIds?: string[];
-}
-
-interface SupervisorCommandResult {
-  completed?: string[];
-  finalOutput?: string;
-  agentResults?: Record<string, AgentCommandResult>;
-}
 
 type CommandExecutionOutput = {
   agentsUsed: string[];
@@ -48,7 +36,7 @@ function toWireStatus(status: string): "processing" | "completed" | "failed" {
 
 /**
  * POST /api/commands/process
- * Process a natural language command via the Supervisor Agent.
+ * Process a natural language command through Ask Nexus.
  */
 export async function POST(request: NextRequest) {
   const protection = await protectRoute(request, {
@@ -58,11 +46,6 @@ export async function POST(request: NextRequest) {
   if (!protection.success) return protection.response;
   if (!protection.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const providerStatus = getAiProviderStatus();
-  if (!providerStatus.geminiAvailable) {
-    return aiUnavailableResponse("Command processing requires Gemini to be configured on this server.");
   }
 
   const aiBudget = await enforceAiBudget({
@@ -242,56 +225,19 @@ async function processCommandAsync(input: {
   const startTime = Date.now();
 
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not configured");
-    }
-
-    const agentsModule = await import("@nexus/agents");
-    const messagesModule = await import("@langchain/core/messages");
-
-    const supervisor = agentsModule.createSupervisor({
-      provider: "gemini",
-      model: "gemini-2.5-flash",
-      apiKey,
+    const { model } = await getUserModelConfig(input.userId);
+    const result = await runAgent({
+      model,
+      messages: [{ role: "user", content: input.command }],
+      context: { userId: input.userId, workspaceId: input.workspaceId },
+      maxSteps: 6,
     });
 
-    const initialState = {
-      messages: [new messagesModule.HumanMessage(input.command)],
-      currentAgent: null,
-      agentResults: {},
-      plan: [],
-      completed: [],
-      context: {
-        workspaceId: input.workspaceId,
-        userId: input.userId,
-        sessionId: `cmd-${input.commandId}`,
-      },
-      finalOutput: undefined,
-    };
-
-    const result = await supervisor.invoke(initialState) as SupervisorCommandResult;
-    const documentsCreated: string[] = [];
-    const tasksCreated: string[] = [];
-
-    if (result.agentResults) {
-      for (const agentResult of Object.values(result.agentResults)) {
-        if (agentResult.documentId) documentsCreated.push(agentResult.documentId);
-        if (agentResult.taskIds) tasksCreated.push(...agentResult.taskIds);
-      }
-    }
-
     const output: CommandExecutionOutput = {
-      agentsUsed: result.completed || [],
-      documentsCreated,
-      tasksCreated,
-      output:
-        result.finalOutput ||
-        Object.values(result.agentResults || {})
-          .map((agentResult) => agentResult.output)
-          .filter(Boolean)
-          .join("\n\n") ||
-        "Command processed successfully.",
+      agentsUsed: result.toolsUsed,
+      documentsCreated: result.createdDocs.map((document) => document.id),
+      tasksCreated: result.createdTasks.map((task) => task.id),
+      output: result.text || "Command processed successfully.",
       duration: Date.now() - startTime,
     };
 
