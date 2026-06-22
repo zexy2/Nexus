@@ -55,10 +55,8 @@ export DEMO_MODE="${DEMO_MODE:-true}"
 export NEXT_PUBLIC_DEMO_MODE="${NEXT_PUBLIC_DEMO_MODE:-true}"
 export PUBLIC_SIGNUP_ENABLED="${PUBLIC_SIGNUP_ENABLED:-false}"
 export NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED="${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}"
-export DEMO_EMAIL="${DEMO_EMAIL:-demo@nexus.local}"
-export NEXT_PUBLIC_DEMO_EMAIL="${NEXT_PUBLIC_DEMO_EMAIL:-$DEMO_EMAIL}"
-export DEMO_PASSWORD="${DEMO_PASSWORD:-Demo123456!}"
-export DEMO_SEED_TOKEN="${DEMO_SEED_TOKEN:-local-seed-token}"
+export DEMO_SESSION_TTL_MINUTES="${DEMO_SESSION_TTL_MINUTES:-60}"
+export DEMO_MAX_ACTIVE_SESSIONS="${DEMO_MAX_ACTIVE_SESSIONS:-25}"
 
 export AI_ENABLED="${AI_ENABLED:-true}"
 export AI_GLOBAL_DAILY_LIMIT="${AI_GLOBAL_DAILY_LIMIT:-100}"
@@ -372,9 +370,6 @@ if ! curl -fsS "${NEXT_PUBLIC_APP_URL}/login" >/dev/null 2>&1; then
   echo "Web app did not become ready at ${NEXT_PUBLIC_APP_URL}"
   exit 1
 fi
-
-echo "Seeding demo user..."
-pnpm demo:seed-user || true
 
 cat <<EOF
 

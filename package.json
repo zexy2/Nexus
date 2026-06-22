@@ -13,7 +13,6 @@
     "db:push": "pnpm --filter @nexus/database db:push",
     "db:migrate": "node scripts/baseline-drizzle-migrations.mjs && pnpm db:migrate:raw",
     "db:migrate:raw": "pnpm --filter @nexus/database db:migrate",
-    "demo:seed-user": "node scripts/seed-demo-user.mjs",
     "backup:postgres": "bash scripts/backup-postgres.sh",
     "smoke:prod": "bash scripts/smoke-prod.sh",
     "db:studio": "pnpm --filter @nexus/database db:studio",

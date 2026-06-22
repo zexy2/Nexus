@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (isDemoEmail(session.user.email)) {
     return NextResponse.json(
-      { error: "DEMO_TOKEN_DISABLED", message: "Agent tokens are disabled for the shared demo account." },
+      { error: "DEMO_TOKEN_DISABLED", message: "Agent tokens are disabled for temporary demo sessions." },
       { status: 403 }
     );
   }

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "./auth";
 import { headers } from "next/headers";
 import { checkPersistentRateLimit } from "./production-guardrails";
+import { getTrustedProxyClientIP } from "./request-ip";
 
 // ===========================================
 // TYPES
@@ -45,20 +46,7 @@ interface RateLimitConfig {
  * Get client IP from request
  */
 export function getClientIP(request: NextRequest): string {
-  // Check forwarded headers first (for proxies/load balancers)
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const firstIp = forwarded.split(",")[0];
-    return firstIp?.trim() || "unknown";
-  }
-  
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) {
-    return realIp.trim();
-  }
-  
-  // Fallback to unknown (localhost in development)
-  return "127.0.0.1";
+  return getTrustedProxyClientIP(request.headers);
 }
 
 // ===========================================

@@ -641,7 +641,7 @@ function SettingsContent() {
 
                   {!tokenCreationEnabled && (
                     <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
-                      {locale === "tr" ? "Ortak demo hesabında token üretimi kapalıdır." : "Token creation is disabled for the shared demo account."}
+                      {locale === "tr" ? "Geçici demo oturumlarında token üretimi kapalıdır." : "Token creation is disabled for temporary demo sessions."}
                     </p>
                   )}
 

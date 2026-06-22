@@ -81,15 +81,23 @@ export const agentTypeEnum = pgEnum("agent_type", [
 // BETTER AUTH TABLES
 // ==========================================
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  image: text("image"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: boolean("email_verified").notNull().default(false),
+    image: text("image"),
+    isDemo: boolean("is_demo").notNull().default(false),
+    demoExpiresAt: timestamp("demo_expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("users_demo_expiry_idx").on(table.isDemo, table.demoExpiresAt),
+  ]
+);
 
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),

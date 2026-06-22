@@ -13,10 +13,11 @@ fi
 
 BASE_URL="${SMOKE_BASE_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}"
 COOKIE_JAR="$(mktemp)"
+ISOLATION_COOKIE_JAR="$(mktemp)"
 WORKFLOW_STATUS_FILE="$(mktemp)"
 CHANGE_SET_STATUS_FILE="$(mktemp)"
 cleanup() {
-  rm -f "$COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE"
+  rm -f "$COOKIE_JAR" "$ISOLATION_COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE"
 }
 trap cleanup EXIT
 
@@ -132,7 +133,38 @@ if ! printf '%s' "$demo_login_body" | grep -q '"ok":true'; then
 fi
 
 echo "==> Authenticated settings"
-curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/settings" | grep -q '"byokEnabled":false'
+settings_body="$(curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/settings")"
+printf '%s' "$settings_body" | grep -q '"byokEnabled":false'
+
+if [[ "${SMOKE_VERIFY_DEMO_ISOLATION:-true}" == "true" ]]; then
+  echo "==> Isolated demo session"
+  curl -fsS \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -H "x-demo-access-code: ${DEMO_ACCESS_CODE:-}" \
+    -c "$ISOLATION_COOKIE_JAR" \
+    "$BASE_URL/api/demo/session" >/dev/null
+
+  isolated_settings_body="$(curl -fsS -b "$ISOLATION_COOKIE_JAR" "$BASE_URL/api/settings")"
+  first_user_id="$(printf '%s' "$settings_body" | json_get profile.id)"
+  second_user_id="$(printf '%s' "$isolated_settings_body" | json_get profile.id)"
+  if [[ "$first_user_id" == "$second_user_id" ]]; then
+    echo "Public demo sessions unexpectedly share the same user identity." >&2
+    exit 1
+  fi
+
+  first_docs_body="$(curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/docs")"
+  first_doc_id="$(printf '%s' "$first_docs_body" | json_first_array_id)"
+  cross_access_status="$(
+    curl -sS -o /dev/null -w '%{http_code}' \
+      -b "$ISOLATION_COOKIE_JAR" \
+      "$BASE_URL/api/docs/$first_doc_id"
+  )"
+  if [[ "$cross_access_status" != "404" ]]; then
+    echo "Cross-demo document access returned HTTP $cross_access_status instead of 404." >&2
+    exit 1
+  fi
+fi
 
 if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
   echo "==> Onboarding bootstrap"

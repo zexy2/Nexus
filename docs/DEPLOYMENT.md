@@ -19,13 +19,11 @@ TEMPORAL_NAMESPACE=default
 DEMO_MODE=true
 PUBLIC_SIGNUP_ENABLED=false
 ADMIN_EMAILS=your-email@example.com
-DEMO_EMAIL=demo@your-domain.com
-DEMO_PASSWORD=change-this-demo-password
 DEMO_ACCESS_CODE=
-DEMO_SEED_TOKEN=generate-a-one-time-seed-token
+DEMO_SESSION_TTL_MINUTES=60
+DEMO_MAX_ACTIVE_SESSIONS=25
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
-NEXT_PUBLIC_DEMO_EMAIL=demo@your-domain.com
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
 AI_ENABLED=true
 GEMINI_API_KEY=
@@ -48,14 +46,15 @@ AI_MAX_STEPS_PER_WORKFLOW=5
 
 `DEMO_ACCESS_CODE` is optional. For a recruiter-facing CV demo, keep it empty and rely on the `AI_DEMO_*` plus global limits. If abuse starts or you want a private demo link, set `DEMO_ACCESS_CODE` and also set `NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=true` so the login screen explains the code requirement up front.
 
-`pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis. The shared demo account uses the separate `AI_DEMO_*` limits so one recruiter does not exhaust the normal per-user quota for every later visitor. The global daily limit remains the hard budget ceiling.
+Each public demo login gets its own temporary user and workspace. `DEMO_SESSION_TTL_MINUTES` controls expiry, `DEMO_MAX_ACTIVE_SESSIONS` bounds concurrent storage, and expired users are removed in bounded batches during later demo logins. `AI_DEMO_*` limits apply per temporary visitor while the global daily limit remains the hard budget ceiling.
+
+`pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis.
 
 ## Start
 
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
-docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm demo:seed-user
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
@@ -96,7 +95,7 @@ location /collab/ {
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
-Optional browser smoke after the demo user and Gemini key are ready:
+Optional browser smoke after the Gemini key is ready:
 
 ```bash
 DEMO_E2E=true pnpm --filter @nexus/web exec playwright test e2e/demo-production.spec.ts --project=chromium
@@ -109,7 +108,8 @@ Expected:
 - Worker connects to Temporal namespace `default` and `/api/health` reports `services.worker.status`.
 - AI provider status is `configured` when `GEMINI_API_KEY` is set.
 - Collaboration service listens on port 1234.
-- Demo login works through `POST /api/demo/session`; the password is never exposed to the client bundle.
+- Demo login works through `POST /api/demo/session`; each browser receives an isolated, expiring workspace and no credential is exposed to the client bundle.
+- The production smoke test creates two demo sessions and verifies that cross-session document access returns `404`.
 - `pnpm smoke:prod` starts and completes one real AI document workflow.
 - `pnpm smoke:prod` starts and completes one real task breakdown workflow from the generated document and verifies at least one task.
 - `pnpm smoke:prod` starts one Living Plan impact workflow, waits for a pending change set, applies selected proposals, and verifies the change set resolves as `applied` or `partially_applied`.

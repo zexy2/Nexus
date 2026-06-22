@@ -47,13 +47,14 @@ cp .env.example apps/web/.env.local
 pnpm dev:local
 ```
 
-`pnpm dev:local` starts the web app, Temporal worker, collaboration server, database, and local demo seed path.
+`pnpm dev:local` starts the web app, Temporal worker, collaboration server, and database. Public demo entry creates an isolated, expiring workspace per browser session.
 
 ## Environment Notes
 
 - `GEMINI_API_KEY` is required for AI workflows.
 - `AI_ENABLED=false` or a missing provider key should produce a controlled unavailable state.
 - `PUBLIC_SIGNUP_ENABLED=false` is the expected public demo setting.
+- `DEMO_SESSION_TTL_MINUTES` and `DEMO_MAX_ACTIVE_SESSIONS` bound temporary demo data and concurrent capacity.
 - Normal users should not see BYOK/API-key fields.
 - `OPENAI_API_KEY` is optional for embeddings/RAG.
 - `TAVILY_API_KEY` is optional for web research.

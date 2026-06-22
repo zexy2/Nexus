@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { auditLogs, rateLimitBuckets } from "@nexus/database/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getOllamaConfig, hasAnyLlmProvider, isLocalOnly } from "@/lib/ai/providers";
+import { isEphemeralDemoEmail } from "@/lib/demo-sessions";
+import { getTrustedProxyClientIP } from "@/lib/request-ip";
 
 export type PersistentLimitResult = {
   allowed: boolean;
@@ -12,9 +14,7 @@ export type PersistentLimitResult = {
 };
 
 function getRequestIP(request: NextRequest) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown";
-  return request.headers.get("x-real-ip")?.trim() || "127.0.0.1";
+  return getTrustedProxyClientIP(request.headers);
 }
 
 function boolEnv(name: string, defaultValue: boolean) {
@@ -51,7 +51,10 @@ export function isAdminEmail(email?: string | null) {
 
 export function isDemoEmail(email?: string | null) {
   if (!email || !isDemoMode()) return false;
-  return email.toLowerCase() === (process.env.DEMO_EMAIL || "").trim().toLowerCase();
+  return (
+    isEphemeralDemoEmail(email) ||
+    email.toLowerCase() === (process.env.DEMO_EMAIL || "").trim().toLowerCase()
+  );
 }
 
 export function getAiUsageLimits(isAdmin = false, isDemo = false) {

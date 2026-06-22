@@ -138,7 +138,6 @@ pnpm type-check         # TypeScript checks
 pnpm test               # test suite
 pnpm db:migrate         # production-safe migrations + guarded legacy baseline
 pnpm db:push            # local disposable DB only
-pnpm demo:seed-user     # create/update demo user
 pnpm smoke:prod         # Docker VPS smoke test
 pnpm backup:postgres    # write a Postgres backup
 ```
@@ -150,7 +149,6 @@ The production target is a single-team Docker VPS demo:
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
-docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm demo:seed-user
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 

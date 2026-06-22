@@ -27,7 +27,7 @@ export async function PUT(request: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (isDemoEmail(session.user.email)) {
     return NextResponse.json(
-      { error: "DEMO_AGENT_SETTINGS_READ_ONLY", message: "Agent settings are read-only for the shared demo account." },
+      { error: "DEMO_AGENT_SETTINGS_READ_ONLY", message: "Agent settings are read-only for temporary demo sessions." },
       { status: 403 }
     );
   }
