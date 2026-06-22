@@ -31,13 +31,14 @@ export default function PrivacyPolicyPage() {
         
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6">
           <p className="text-muted-foreground">
-            Last updated: January 18, 2026
+            Last updated: June 22, 2026
           </p>
 
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 my-6">
             <p className="text-sm font-medium">
-              🔒 Nexus is built with a local-first architecture. This means your data 
-              is stored in the application database for authenticated workspace features, with limited local caching for responsiveness.
+              Nexus is a portfolio demo, not a production data vault. Authenticated
+              workspace data is stored in the application database, with limited browser
+              caching for responsiveness and queued commands.
             </p>
           </div>
 
@@ -70,10 +71,9 @@ export default function PrivacyPolicyPage() {
             <p>We use the information we collect to:</p>
             <ul className="list-disc list-inside space-y-2 ml-4">
               <li>Provide, maintain, and improve our services</li>
-              <li>Process transactions and send related information</li>
               <li>Send technical notices and support messages</li>
               <li>Respond to your comments and questions</li>
-              <li>Power AI agents to assist with your tasks (with your explicit consent)</li>
+              <li>Run AI features that you explicitly start</li>
             </ul>
           </section>
 
@@ -83,10 +83,10 @@ export default function PrivacyPolicyPage() {
               When you use AI features in Nexus:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>AI agents only access content you explicitly share with them</li>
-              <li>We use industry-standard AI providers (OpenAI, Anthropic)</li>
-              <li>Your data is not used to train external AI models</li>
-              <li>You can disable AI features at any time in settings</li>
+              <li>Your prompt and relevant workspace context may be sent to the server-configured AI provider</li>
+              <li>The public demo uses Gemini by default; deployments may configure another supported provider</li>
+              <li>Provider processing is governed by that provider&apos;s terms and data policies</li>
+              <li>Do not submit secrets, confidential source code, personal data, or other sensitive information</li>
             </ul>
           </section>
 
@@ -97,20 +97,19 @@ export default function PrivacyPolicyPage() {
               <li><strong>Service Providers:</strong> Third parties that help us operate the service</li>
               <li><strong>AI Providers:</strong> When you use AI features (with your consent)</li>
               <li><strong>Legal Requirements:</strong> When required by law or to protect rights</li>
-              <li><strong>Business Transfers:</strong> In connection with a merger or acquisition</li>
             </ul>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">6. Data Security</h2>
             <p>
-              We implement appropriate security measures to protect your information:
+              The demo uses practical application-security controls, including:
             </p>
             <ul className="list-disc list-inside space-y-2 ml-4">
-              <li>End-to-end encryption for data in transit</li>
-              <li>Encryption at rest for stored data</li>
-              <li>Regular security audits and penetration testing</li>
-              <li>Access controls and authentication requirements</li>
+              <li>HTTPS for the public deployment</li>
+              <li>Hashed passwords and hashed/revocable MCP access tokens</li>
+              <li>Workspace-scoped authorization and server-side API credentials</li>
+              <li>Rate limits, audit events, and human approval for sensitive workflow changes</li>
             </ul>
           </section>
 
@@ -159,8 +158,9 @@ export default function PrivacyPolicyPage() {
               If you have any questions about this Privacy Policy, please contact us at:
             </p>
             <ul className="list-none space-y-1 ml-4">
-              <li>📧 Email: privacy@nexus.app</li>
-              <li>🌐 Website: https://nexus.app/contact</li>
+              <li>
+                GitHub: <a href="https://github.com/zexy2/Nexus">github.com/zexy2/Nexus</a>
+              </li>
             </ul>
           </section>
         </div>

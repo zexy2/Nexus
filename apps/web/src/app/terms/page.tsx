@@ -28,7 +28,7 @@ export default function TermsOfServicePage() {
         
         <div className="prose prose-neutral dark:prose-invert max-w-none space-y-6">
           <p className="text-muted-foreground">
-            Last updated: January 18, 2026
+            Last updated: June 22, 2026
           </p>
 
           <section className="space-y-4">
@@ -43,10 +43,10 @@ export default function TermsOfServicePage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">2. Description of Service</h2>
             <p>
-              Nexus is an AI-powered collaboration platform that provides users with 
-              multi-agent AI automation, local-first data synchronization, and real-time 
-              collaboration features. The service includes document editing, task management, 
-              and AI agent interactions.
+              Nexus is a public portfolio demo for versioned project plans, plan-impact
+              review, task alignment, realtime document collaboration, and coding-agent
+              handoff. It is not presented as a commercial SaaS service or a replacement
+              for a production project-management platform.
             </p>
           </section>
 
@@ -73,37 +73,35 @@ export default function TermsOfServicePage() {
               <li>Infringe on the rights of others</li>
               <li>Distribute malware or harmful code</li>
               <li>Attempt to gain unauthorized access to our systems</li>
-              <li>Use the AI agents for generating harmful or misleading content</li>
+              <li>Use AI features to generate harmful or deliberately misleading content</li>
             </ul>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">5. Intellectual Property</h2>
             <p>
-              The service and its original content, features, and functionality are owned 
-              by Nexus and are protected by international copyright, trademark, and other 
-              intellectual property laws. Your content remains yours, and you grant us a 
-              license to use it solely for providing the service.
+              The Nexus source code is distributed under the license published in its
+              GitHub repository. You remain responsible for content you submit to the demo
+              and must have the right to use that content.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">6. Data and Privacy</h2>
             <p>
-              Your use of the service is also governed by our Privacy Policy. We use 
-              local-first architecture, meaning your data is stored primarily on your 
-              device and synced securely when online. Please review our Privacy Policy 
-              to understand how we handle your information.
+              Your use of the service is also governed by the Privacy Policy. Authenticated
+              workspace data is stored in the server database. Limited browser caching and
+              an offline command queue do not provide a full offline-first guarantee.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">7. AI-Generated Content</h2>
             <p>
-              Nexus uses AI agents to assist with various tasks. While we strive for 
-              accuracy, AI-generated content may contain errors or inaccuracies. You are 
-              responsible for reviewing and verifying any AI-generated content before 
-              relying on it.
+              Nexus uses server-configured AI providers for plan generation, analysis,
+              research, and suggestions. AI-generated content may be wrong, incomplete, or
+              outdated. Human review is required before applying proposed work changes or
+              relying on generated output.
             </p>
           </section>
 
@@ -119,18 +117,16 @@ export default function TermsOfServicePage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">9. Changes to Terms</h2>
             <p>
-              We reserve the right to modify these terms at any time. We will notify 
-              users of any material changes via email or through the service. Your 
-              continued use of the service after such modifications constitutes acceptance 
-              of the updated terms.
+              These terms may change as the portfolio demo evolves. Material changes will
+              be reflected on this page by updating the revision date.
             </p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold">10. Contact</h2>
             <p>
-              If you have any questions about these Terms of Service, please contact us 
-              at support@nexus.app.
+              Questions and issues can be submitted through the
+              {" "}<a href="https://github.com/zexy2/Nexus">Nexus GitHub repository</a>.
             </p>
           </section>
         </div>

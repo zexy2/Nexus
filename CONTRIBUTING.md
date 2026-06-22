@@ -13,13 +13,10 @@ cd nexus
 pnpm install
 
 # Copy environment file and configure
-cp .env.example .env.local
+cp .env.example apps/web/.env.local
 
-# Start infrastructure
-docker-compose up -d
-
-# Start development server
-pnpm dev
+# Start Postgres, Temporal, worker, collaboration and web
+pnpm dev:local
 ```
 
 ## Branch Naming
@@ -44,7 +41,7 @@ refactor: simplify agent routing logic
 
 1. Create a feature branch from `main`
 2. Make your changes with appropriate tests
-3. Run `pnpm lint` and `pnpm test`
+3. Run `pnpm lint`, `pnpm type-check`, `pnpm test`, and `pnpm build`
 4. Submit a PR with a clear description
 
 ## Code Style
@@ -61,7 +58,7 @@ refactor: simplify agent routing logic
 pnpm test
 
 # E2E tests
-pnpm test:e2e
+DEMO_E2E=true pnpm --filter @nexus/web test:e2e -- --project=chromium
 
 # Type checking
 pnpm type-check

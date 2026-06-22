@@ -91,4 +91,4 @@ export async function documentGenerationWorkflow(input: DocumentInput) {
 
 ## Related Decisions
 - ADR-001: Local-First Architecture
-- ADR-002: Multi-Agent AI with LangGraph
+- ADR-002: AI orchestration and coding-agent boundary

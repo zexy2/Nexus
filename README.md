@@ -41,7 +41,7 @@ Nexus treats the plan as a versioned delivery artifact, not a disposable chat re
 
 For a reviewer, the intended 5-minute path is:
 
-1. Sign in with the configured demo account.
+1. Start an isolated public demo session from the login page.
 2. Create or open a project plan.
 3. Run the first Living Plan analysis.
 4. Review extracted requirements and generated work proposals.
@@ -58,7 +58,7 @@ For the owner-only coding-agent flow:
 4. Let the local agent claim the immutable brief, implement the change, run tests, and open a PR with the user's own `gh` session.
 5. Review the PR and submitted evidence in Nexus. Only explicit human approval moves the task to Done.
 
-The shared public demo cannot create MCP tokens or dispatch new coding-agent jobs. It remains read-only for this integration so visitors cannot access or corrupt a shared workspace.
+Temporary public demo sessions cannot create MCP tokens or dispatch new coding-agent jobs. Each session receives an isolated workspace and a read-only completed Codex run backed by a real merged pull request.
 
 ## Current Demo Status
 
@@ -69,7 +69,7 @@ Nexus is built for a controlled public demo on a Docker VPS.
 - AI uses a server-managed Gemini key with daily quotas and rate limits.
 - If AI is disabled or the provider key is missing, endpoints return clear `503` unavailable states instead of mock output.
 - If quota is exceeded, endpoints return `429 RATE_LIMIT_EXCEEDED`.
-- The current deployment target is Oracle Free Tier VPS. Public access still requires cloud ingress rules, a domain/HTTPS setup, and a configured `GEMINI_API_KEY`.
+- The current deployment runs on an Oracle Free Tier VPS at [nexus.129-154-244-110.sslip.io](https://nexus.129-154-244-110.sslip.io).
 
 Do not commit real `.env.production`, API keys, demo passwords, or access codes.
 
@@ -81,8 +81,8 @@ Do not commit real `.env.production`, API keys, demo passwords, or access codes.
 | Auth             | Better Auth                                           |
 | Database         | PostgreSQL, pgvector, Drizzle ORM                     |
 | Workflows        | Temporal worker and workflow history                  |
-| AI orchestration | LangGraph agents with server-managed Gemini           |
-| Collaboration    | Yjs / Hocuspocus                                      |
+| AI orchestration | Vercel AI SDK, Gemini, optional Tavily web sources     |
+| Collaboration    | Yjs, custom WebSocket server, PostgreSQL snapshots     |
 | Agent handoff    | MCP over HTTPS, local Codex / Claude Code / Cursor    |
 | Deployment       | Docker Compose, Nginx reverse proxy, VPS smoke checks |
 
@@ -100,8 +100,8 @@ packages/workflows
   Temporal workflow definitions for document generation,
   task breakdown, and Living Plan impact analysis
 
-packages/agents
-  LangGraph agent and AI helper code
+scripts
+  Local startup, backup, migration baseline, and production smoke checks
 ```
 
 ## Local Development
@@ -174,9 +174,10 @@ If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The curre
 - This is a portfolio demo, not a full multi-tenant SaaS.
 - Server-managed AI requires budget controls; public demo quotas should stay low.
 - BYOK is intentionally deferred until the Living Plan value is proven.
-- OpenAI embeddings/RAG are optional and return unavailable states when not configured.
+- OpenAI embeddings are optional; workspace retrieval falls back to scoped keyword search.
+- Web research requires Tavily. Without it, explicit web-research requests return `503 TAVILY_NOT_CONFIGURED` rather than fabricated sources.
 - Production Zero cache is deferred; v1 uses API-backed sync and offline queue behavior.
-- A real public CV link needs VPS ingress, HTTPS, and provider secrets configured.
+- The public CV demo is intentionally quota-limited and uses isolated, expiring sessions.
 - Nexus does not host coding sandboxes or store GitHub credentials; coding agents run on the user's machine.
 
 ## Documentation

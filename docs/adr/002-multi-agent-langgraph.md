@@ -1,93 +1,22 @@
-# ADR-002: Multi-Agent AI with LangGraph
+# ADR-002: AI orchestration and coding-agent boundary
 
 ## Status
-**Accepted** - 18 Ocak 2026
 
-## Context
+**Superseded.** The experimental LangGraph supervisor package was removed in June 2026.
 
-Yapay zeka entegrasyonu için seçenekler değerlendirildi:
+## Current decision
 
-1. **Tek LLM çağrısı**: Basit ama sınırlı
-2. **LangChain Chains**: DAG tabanlı, döngü yok
-3. **CrewAI**: Agent takımları, ama az kontrol
-4. **LangGraph**: State machine, döngüler, tam kontrol
-
-## Decision
-
-**LangGraph** ile Supervisor Pattern kullanarak çoklu ajan sistemi kuruyoruz.
+- Interactive chat and command processing use the Vercel AI SDK tool-calling loop.
+- Durable plan generation, task extraction, and impact review use Temporal workflows.
+- External coding agents are not hosted by Nexus. Codex, Claude Code, or Cursor claim immutable briefs over MCP and work in the user's local repository.
+- Task mutation and coding-agent acceptance require explicit human review.
 
 ## Rationale
 
-### Neden LangGraph?
-
-1. **Döngüsel Akışlar**: Agent hata yapınca geri dönüp düzeltebilir
-2. **State Machine**: Her adım takip edilebilir
-3. **Human-in-the-Loop**: Kritik işlemlerde insan onayı
-4. **Conditional Routing**: Göreve göre doğru agent'a yönlendirme
-
-### Supervisor Pattern
-
-```
-                    ┌─────────────┐
-                    │  SUPERVISOR │
-                    │   (Router)  │
-                    └──────┬──────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-         ▼                 ▼                 ▼
-    ┌────────┐       ┌────────┐       ┌────────┐
-    │Research│       │ Writer │       │ Coder  │
-    │ Agent  │       │ Agent  │       │ Agent  │
-    └────┬───┘       └────┬───┘       └────┬───┘
-         │                 │                 │
-         └─────────────────┼─────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  SUPERVISOR │
-                    │ (Synthesize)│
-                    └─────────────┘
-```
-
-## Implementation
-
-```typescript
-// packages/agents/src/supervisor.ts
-import { StateGraph, Annotation } from "@langchain/langgraph";
-
-export const SupervisorState = Annotation.Root({
-  messages: Annotation<any[]>({ reducer: (a, b) => [...a, ...b] }),
-  currentAgent: Annotation<string | null>(),
-  plan: Annotation<string[]>(),
-  agentResults: Annotation<Record<string, AgentResult>>(),
-});
-
-const graph = new StateGraph(SupervisorState)
-  .addNode("supervisor", supervisorNode)
-  .addNode("research", researchNode)
-  .addNode("writer", writerNode)
-  .addNode("coder", coderNode)
-  .addConditionalEdges("supervisor", routeNext)
-  .addConditionalEdges("research", routeNext) // Döngü
-  .addConditionalEdges("writer", routeNext)
-  .compile();
-```
-
-## Trade-offs
-
-| Avantaj                      | Dezavantaj               |
-| ---------------------------- | ------------------------ |
-| Karmaşık görevleri bölebilir | LangGraph öğrenme eğrisi |
-| Self-correction mümkün       | Debug daha zor           |
-| Human-in-loop desteği        | Token maliyeti artabilir |
+The original named-agent graph added dependencies and visual complexity without improving the core Living Plan guarantee. The current architecture separates three concerns: model tool use, durable business workflows, and external code execution.
 
 ## Consequences
 
-### Pozitif
-- "Araştır ve rapor yaz" gibi çok adımlı görevler çalışıyor
-- Agent hata yapınca tekrar deneyebiliyor
-- İzlenebilirlik (tracing) kolay
-
-### Negatif
-- LLM çağrı sayısı arttı
-- State yönetimi karmaşıklaştı
+- UI copy describes outcomes and evidence rather than simulated agent personalities.
+- Web research is reported only when Tavily supplied real sources.
+- Coding-agent submissions cannot mark work done automatically.

@@ -14,11 +14,12 @@
 | Kanban work alignment | Implemented                     | Tasks expose requirement links and alignment/orphaned states.        |
 | Workflow history      | Implemented                     | Temporal-backed runs are persisted and reconciled.                   |
 | Audit trail           | Implemented                     | Critical workflow and change events are logged.                      |
-| Demo auth             | Implemented                     | Server-side demo login; public signup disabled in demo mode.         |
+| Demo auth             | Implemented                     | Isolated expiring sessions; public signup disabled in demo mode.     |
 | AI provider           | Implemented with env dependency | Gemini is server-managed; missing keys return controlled 503 states. |
-| Rate limits           | Implemented                     | Postgres-backed quota/rate-limit controls for demo safety.           |
-| Collaboration         | Implemented                     | Yjs/Hocuspocus collaboration path exists.                            |
-| Embeddings/RAG        | Optional                        | OpenAI key required; otherwise unavailable state is returned.        |
+| Rate limits           | Implemented                     | Atomic Postgres-backed global, user, and action quotas.               |
+| Collaboration         | Implemented                     | Yjs updates and snapshots persist through a custom WebSocket service.|
+| Embeddings/RAG        | Optional                        | pgvector when configured; scoped keyword fallback otherwise.         |
+| Coding-agent handoff  | Implemented                     | MCP brief, PR/test evidence, stale-context guard, human review.       |
 | Zero production cache | Deferred                        | v1 uses API-backed sync/offline queue behavior.                      |
 
 ## Demo Readiness
@@ -32,7 +33,8 @@ Public demo is considered ready only when all of these are true:
 - `GEMINI_API_KEY` is set.
 - `/api/health` reports healthy database, Temporal, worker heartbeat, and configured AI provider.
 - `pnpm smoke:prod` completes document generation, task breakdown, and Living Plan impact analysis.
-- Demo login works without exposing the password to the client bundle.
+- Demo login creates a separate expiring identity and workspace without exposing a password.
+- The workflow center shows a read-only completed Codex run backed by a merged PR.
 
 ## Main User Flow
 
@@ -61,6 +63,6 @@ Demo login
 See [ADR documentation](adr/) for detailed decisions. ADR-001 is historical context; the current demo uses API-backed sync/offline queue behavior while production Zero cache remains deferred.
 
 - [001 - Local-First Architecture](adr/001-local-first-architecture.md)
-- [002 - Multi-Agent System](adr/002-multi-agent-langgraph.md)
+- [002 - AI Orchestration Boundary (Superseded)](adr/002-multi-agent-langgraph.md)
 - [003 - Durable Execution](adr/003-durable-execution-temporal.md)
 - [004 - Observability](adr/004-observability-opentelemetry.md)

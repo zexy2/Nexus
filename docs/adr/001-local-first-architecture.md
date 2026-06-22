@@ -1,72 +1,22 @@
-# ADR-001: Local-First Architecture with Zero Sync
+# ADR-001: Local-first data boundaries
 
 ## Status
-**Deferred / superseded for v1** - 18 Ocak 2026 kararının kapsamı daraltıldı. Mevcut public demo API-backed sync/offline queue davranışı kullanır; production Zero cache iddiası ertelendi.
 
-## Context
+**Superseded for v1.** The original January 2026 Zero Sync decision was not implemented as a production Zero deployment.
 
-Modern web uygulamaları için veri yönetimi konusunda kritik bir karar vermemiz gerekiyordu:
+## Current decision
 
-1. **Geleneksel REST API yaklaşımı**: Manuel endpoint'ler, loading state'leri, error handling
-2. **GraphQL**: Overfetching çözümü, ama hala sunucu-bağımlı
-3. **Local-First (Zero Sync)**: Offline-first, optimistic updates, CRDT-based sync
-
-## Decision
-
-İlk karar Zero Sync ile tam local-first mimari uygulamaktı. Mevcut v1 demo için bu karar daraltıldı: API-backed sync/offline queue davranışı korunur, production Zero cache uyumluluğu daha sonraya bırakılır.
+- Lists and metadata use an IndexedDB cache plus authenticated REST pull/push endpoints.
+- PostgreSQL `LISTEN/NOTIFY` emits invalidation signals so clients can pull earlier than the polling fallback.
+- Document bodies use Yjs CRDT updates and PostgreSQL snapshots.
+- Tasks, approvals, change proposals, and agent reviews remain server transactions with audit records.
 
 ## Rationale
 
-### Neden Zero Sync?
-
-1. **0ms Gecikme**: Veri yerel IndexedDB'den okunuyor, UI anında güncelleniyor
-2. **Offline Çalışma**: İnternet olmadan tam fonksiyonellik
-3. **Optimistic Updates**: Sunucu cevabı beklenmeden UI güncelleniyor
-4. **CRDT Tabanlı Sync**: Çakışmalar otomatik çözülüyor
-5. **API Eliminasyonu**: Manuel endpoint yazmaya gerek yok
-
-### Trade-offs
-
-| Avantaj                       | Dezavantaj                    |
-| ----------------------------- | ----------------------------- |
-| Instant UI response           | Öğrenme eğrisi                |
-| Offline support               | Zero Sync'e bağımlılık        |
-| No loading spinners           | Daha karmaşık debug           |
-| Automatic conflict resolution | Server-side validation farklı |
+CRDT merging is appropriate for concurrent document text, but not for operations that must preserve business invariants such as approving a task change or accepting a coding-agent submission. This boundary keeps offline responsiveness without pretending that the whole product is conflict-free.
 
 ## Consequences
 
-### Pozitif
-- Kullanıcı deneyimi dramatik şekilde iyileşti
-- Network kodu %80 azaldı
-- Real-time collaboration doğal olarak geldi
-
-### Negatif
-- Takımın Zero API'yi öğrenmesi gerekti
-- Bazı edge-case'ler için custom sync logic yazdık
-
-## Implementation
-
-```typescript
-// packages/zero-schema/src/index.ts
-import { createSchema, createTableSchema } from "@rocicorp/zero";
-
-export const schema = createSchema({
-  version: 1,
-  tables: {
-    docs: docSchema,
-    tasks: taskSchema,
-    // ...
-  },
-});
-
-// apps/web/src/lib/zero.tsx
-export function ZeroProvider({ children }) {
-  const engine = useMemo(() => new SyncEngine(serverUrl), [serverUrl]);
-  // ...
-}
-```
-
-## Related Decisions
-- ADR-002: Multi-Agent AI with LangGraph
-- ADR-003: Durable Execution with Temporal
+- The product must not claim full Zero Sync or fully offline operation.
+- Offline mutations can be retried, but the server remains authoritative.
+- A collaboration outage makes document editing read-only instead of silently overwriting newer content.
