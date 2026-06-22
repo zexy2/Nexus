@@ -206,6 +206,22 @@ export async function POST(request: NextRequest) {
   if (workflow.publicType === "plan_impact" && typeof body.input.docId !== "string") {
     return NextResponse.json({ error: "docId is required for plan impact analysis" }, { status: 400 });
   }
+  if (workflow.publicType === "research") {
+    const requestedSources = Array.isArray(body.input.sources)
+      ? body.input.sources
+      : ["documents", "web"];
+    const wantsWeb = requestedSources.some((source) => source === "web" || source === "both");
+    if (wantsWeb && !process.env.TAVILY_API_KEY) {
+      return NextResponse.json(
+        {
+          error: "TAVILY_NOT_CONFIGURED",
+          message: "Web research is not configured on this server. Select workspace documents only.",
+          retryable: false,
+        },
+        { status: 503 }
+      );
+    }
+  }
 
   const workspaceAccess = await requireWorkspaceAccess(
     userId,

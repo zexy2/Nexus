@@ -13,6 +13,20 @@ export type PersistentLimitResult = {
   resetAt: number;
 };
 
+type PersistentLimitRequest = {
+  key: string;
+  bucket: string;
+  limit: number;
+  windowMs: number;
+  scope: string;
+};
+
+type PersistentLimitBatchResult = PersistentLimitResult & {
+  key: string;
+  bucket: string;
+  scope: string;
+};
+
 function getRequestIP(request: NextRequest) {
   return getTrustedProxyClientIP(request.headers);
 }
@@ -177,6 +191,92 @@ export async function checkPersistentRateLimit(
   };
 }
 
+async function consumePersistentRateLimits(
+  requests: PersistentLimitRequest[]
+): Promise<PersistentLimitBatchResult[]> {
+  return db.transaction(async (tx) => {
+    // All AI budgets share one short transaction lock. This makes checking and
+    // consuming the global/user/kind buckets one atomic operation: a rejected
+    // request cannot consume a different bucket on its way out.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('nexus-ai-budget'))`);
+
+    const now = new Date();
+    const current = await Promise.all(
+      requests.map(async (request) => {
+        const [row] = await tx
+          .select()
+          .from(rateLimitBuckets)
+          .where(
+            and(
+              eq(rateLimitBuckets.key, request.key),
+              eq(rateLimitBuckets.bucket, request.bucket)
+            )
+          )
+          .limit(1);
+
+        const active = row && row.resetAt.getTime() > now.getTime();
+        return {
+          request,
+          count: active ? row.count : 0,
+          resetAt: active
+            ? row.resetAt
+            : new Date(now.getTime() + request.windowMs),
+        };
+      })
+    );
+
+    const blocked = current.find(({ request, count }) => count >= request.limit);
+    if (blocked) {
+      return current.map(({ request, count, resetAt }) => ({
+        key: request.key,
+        bucket: request.bucket,
+        scope: request.scope,
+        allowed: count < request.limit,
+        limit: request.limit,
+        remaining: Math.max(0, request.limit - count),
+        resetAt: resetAt.getTime(),
+      }));
+    }
+
+    const consumed: PersistentLimitBatchResult[] = [];
+    for (const { request, resetAt } of current) {
+      const resetAtIso = resetAt.toISOString();
+      const [row] = await tx
+        .insert(rateLimitBuckets)
+        .values({
+          key: request.key,
+          bucket: request.bucket,
+          count: 1,
+          limit: request.limit,
+          resetAt,
+        })
+        .onConflictDoUpdate({
+          target: [rateLimitBuckets.key, rateLimitBuckets.bucket],
+          set: {
+            count: sql<number>`case when ${rateLimitBuckets.resetAt} < now() then 1 else ${rateLimitBuckets.count} + 1 end`,
+            limit: request.limit,
+            resetAt: sql<Date>`case when ${rateLimitBuckets.resetAt} < now() then ${resetAtIso}::timestamptz else ${rateLimitBuckets.resetAt} end`,
+            updatedAt: now,
+          },
+        })
+        .returning();
+
+      const count = row?.count ?? request.limit;
+      consumed.push({
+        key: request.key,
+        bucket: request.bucket,
+        scope: request.scope,
+        allowed: count <= request.limit,
+        limit: request.limit,
+        remaining: Math.max(0, request.limit - count),
+        resetAt: row?.resetAt.getTime() ?? resetAt.getTime(),
+      });
+    }
+
+    return consumed;
+  });
+}
+
 export async function enforceMutationBudget(options: {
   userId: string;
   email?: string | null;
@@ -229,30 +329,6 @@ export async function enforceAiBudget(options: {
   const oneDay = 24 * 60 * 60 * 1000;
   const oneMinute = 60 * 1000;
 
-  const globalMinuteResult = await checkPersistentRateLimit("global", "ai:minute", limits.globalMinute, oneMinute);
-  if (!globalMinuteResult.allowed) {
-    await writeAuditLog({ userId: options.userId, event: "ai.limit_exceeded", status: "blocked", metadata: { scope: "global_minute", kind: options.kind } });
-    return { ok: false as const, response: rateLimitResponse(globalMinuteResult) };
-  }
-
-  const userMinuteResult = await checkPersistentRateLimit(options.userId, "ai:user:minute", limits.userMinute, oneMinute);
-  if (!userMinuteResult.allowed) {
-    await writeAuditLog({ userId: options.userId, event: "ai.limit_exceeded", status: "blocked", metadata: { scope: "user_minute", kind: options.kind } });
-    return { ok: false as const, response: rateLimitResponse(userMinuteResult) };
-  }
-
-  const globalResult = await checkPersistentRateLimit("global", "ai:daily", limits.globalDaily, oneDay);
-  if (!globalResult.allowed) {
-    await writeAuditLog({ userId: options.userId, event: "ai.limit_exceeded", status: "blocked", metadata: { scope: "global", kind: options.kind } });
-    return { ok: false as const, response: rateLimitResponse(globalResult) };
-  }
-
-  const userResult = await checkPersistentRateLimit(options.userId, "ai:user:daily", limits.userDaily, oneDay);
-  if (!userResult.allowed) {
-    await writeAuditLog({ userId: options.userId, event: "ai.limit_exceeded", status: "blocked", metadata: { scope: "user", kind: options.kind } });
-    return { ok: false as const, response: rateLimitResponse(userResult) };
-  }
-
   const kindLimit =
     options.kind === "workflow"
       ? limits.workflowDaily
@@ -260,11 +336,29 @@ export async function enforceAiBudget(options: {
         ? limits.chatDaily
         : limits.userDaily;
 
-  const kindResult = await checkPersistentRateLimit(options.userId, `ai:${options.kind}:daily`, kindLimit, oneDay);
-  if (!kindResult.allowed) {
-    await writeAuditLog({ userId: options.userId, event: "ai.limit_exceeded", status: "blocked", metadata: { scope: options.kind, kind: options.kind } });
-    return { ok: false as const, response: rateLimitResponse(kindResult) };
+  const results = await consumePersistentRateLimits([
+    { key: options.userId, bucket: `ai:${options.kind}:daily`, limit: kindLimit, windowMs: oneDay, scope: options.kind },
+    { key: options.userId, bucket: "ai:user:minute", limit: limits.userMinute, windowMs: oneMinute, scope: "user_minute" },
+    { key: options.userId, bucket: "ai:user:daily", limit: limits.userDaily, windowMs: oneDay, scope: "user" },
+    { key: "global", bucket: "ai:minute", limit: limits.globalMinute, windowMs: oneMinute, scope: "global_minute" },
+    { key: "global", bucket: "ai:daily", limit: limits.globalDaily, windowMs: oneDay, scope: "global" },
+  ]);
+  const blocked = results.find((result) => !result.allowed);
+  if (blocked) {
+    await writeAuditLog({
+      userId: options.userId,
+      event: "ai.limit_exceeded",
+      status: "blocked",
+      metadata: { scope: blocked.scope, kind: options.kind },
+    });
+    return { ok: false as const, response: rateLimitResponse(blocked) };
   }
+
+  const resultFor = (key: string, bucket: string) =>
+    results.find((result) => result.key === key && result.bucket === bucket)!;
+  const globalResult = resultFor("global", "ai:daily");
+  const userResult = resultFor(options.userId, "ai:user:daily");
+  const kindResult = resultFor(options.userId, `ai:${options.kind}:daily`);
 
   return {
     ok: true as const,

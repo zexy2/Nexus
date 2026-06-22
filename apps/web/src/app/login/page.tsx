@@ -10,10 +10,13 @@ import { Separator } from "@/components/ui/separator";
 import { signIn } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n/provider";
 import { Github, Sparkles } from "lucide-react";
+import { useAuthProviders } from "@/lib/use-auth-providers";
 
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useLocale();
+  const authProviders = useAuthProviders();
+  const hasSocialProvider = authProviders.github || authProviders.google;
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const demoAccessCodeRequired =
     process.env.NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED === "true";
@@ -151,6 +154,7 @@ export default function LoginPage() {
               )}
               <Button
                 type="button"
+                data-testid="public-demo-login"
                 variant="secondary"
                 className="w-full h-10"
                 onClick={handleDemoLogin}
@@ -161,8 +165,10 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Social Login */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
+          {hasSocialProvider && (
+          <>
+          <div className={`grid gap-3 mb-6 ${authProviders.github && authProviders.google ? "grid-cols-2" : "grid-cols-1"}`}>
+            {authProviders.github && (
               <Button
                 variant="outline"
                 onClick={handleGithubLogin}
@@ -172,6 +178,8 @@ export default function LoginPage() {
                 <Github className="size-4 mr-2" />
                 GitHub
               </Button>
+            )}
+            {authProviders.google && (
               <Button
                 variant="outline"
                 onClick={handleGoogleLogin}
@@ -198,6 +206,7 @@ export default function LoginPage() {
                 </svg>
                 Google
               </Button>
+            )}
           </div>
 
           <div className="relative mb-6">
@@ -210,6 +219,8 @@ export default function LoginPage() {
               </span>
             </div>
           </div>
+          </>
+          )}
 
           {/* Email Login Form */}
           <form onSubmit={handleEmailLogin} className="space-y-4">

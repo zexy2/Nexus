@@ -7,7 +7,6 @@ RUN corepack enable
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY apps/web/package.json apps/web/package.json
-COPY packages/agents/package.json packages/agents/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/workflows/package.json packages/workflows/package.json
 COPY packages/typescript-config/package.json packages/typescript-config/package.json
@@ -21,16 +20,16 @@ ARG NEXT_PUBLIC_DEMO_MODE="true"
 ARG NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED="false"
 ARG NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED="false"
 # Next.js evaluates auth-dependent routes while collecting build metadata.
-# This value exists only in the discarded builder stage; production runtime
-# still requires BETTER_AUTH_SECRET from .env.production.
-ENV BETTER_AUTH_SECRET="nexus-build-only-secret-not-used-at-runtime"
-ENV BETTER_AUTH_URL="http://localhost:3000"
-ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
-ENV NEXT_PUBLIC_COLLABORATION_URL=$NEXT_PUBLIC_COLLABORATION_URL
-ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
-ENV NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=$NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED
-ENV NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=$NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED
-RUN pnpm build
+# The dummy auth values are scoped to this build command only and are not
+# persisted in the runtime image. Real secrets must be supplied by compose/env.
+RUN BETTER_AUTH_SECRET="nexus-build-only-secret-not-used-at-runtime" \
+    BETTER_AUTH_URL="http://localhost:3000" \
+    NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_COLLABORATION_URL=$NEXT_PUBLIC_COLLABORATION_URL \
+    NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE \
+    NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=$NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED \
+    NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=$NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED \
+    pnpm build
 
 FROM base AS runner
 ENV NODE_ENV=production

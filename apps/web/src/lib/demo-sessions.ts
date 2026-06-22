@@ -1,14 +1,18 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { and, asc, count, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   accounts,
+  agentJobEvents,
+  agentJobs,
+  agentJobSubmissions,
   docs,
   rateLimitBuckets,
   sessions,
   tasks,
   users,
+  workspaceRepositories,
   workspaces,
 } from "@nexus/database/schema";
 
@@ -163,7 +167,7 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       throw new Error("Failed to create isolated demo document");
     }
 
-    await tx.insert(tasks).values([
+    const seededTasks = await tx.insert(tasks).values([
       {
         workspaceId: workspace.id,
         docId: starterDoc.id,
@@ -186,7 +190,130 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
         createdBy: userId,
         assigneeId: userId,
       },
+      {
+        workspaceId: workspace.id,
+        docId: starterDoc.id,
+        title: "Polish the landing workflow story",
+        description: "Completed coding-agent proof backed by a real merged Nexus pull request.",
+        priority: "medium",
+        status: "done",
+        position: 0,
+        createdBy: userId,
+        assigneeId: userId,
+      },
+    ]).returning({ id: tasks.id, title: tasks.title });
+
+    const proofTask = seededTasks.find((task) => task.title === "Polish the landing workflow story");
+    if (!proofTask) {
+      throw new Error("Failed to create coding-agent proof task");
+    }
+
+    const [repository] = await tx.insert(workspaceRepositories).values({
+      workspaceId: workspace.id,
+      repositoryUrl: "https://github.com/zexy2/Nexus",
+      repositoryOwner: "zexy2",
+      repositoryName: "Nexus",
+      defaultBranch: "main",
+      createdBy: userId,
+    }).returning({ id: workspaceRepositories.id });
+    if (!repository) {
+      throw new Error("Failed to create demo repository proof");
+    }
+
+    const contextSnapshot = {
+      task: {
+        id: proofTask.id,
+        title: proofTask.title,
+        description: "Refine the landing workflow chapters and hero badges without changing product behavior.",
+      },
+      repository: {
+        url: "https://github.com/zexy2/Nexus",
+        baseBranch: "main",
+      },
+      acceptanceCriteria: [
+        "The workflow story remains readable on desktop and mobile.",
+        "Reduced-motion behavior remains available.",
+        "The production build passes.",
+      ],
+      immutableDemoProof: true,
+    };
+    const contextHash = createHash("sha256")
+      .update(JSON.stringify(contextSnapshot))
+      .digest("hex");
+    const completedAt = new Date("2026-06-20T10:55:28.000Z");
+
+    const [agentJob] = await tx.insert(agentJobs).values({
+      workspaceId: workspace.id,
+      taskId: proofTask.id,
+      repositoryId: repository.id,
+      status: "approved",
+      contextVersion: 1,
+      contextHash,
+      contextSnapshot,
+      claimedByClient: "Codex",
+      createdBy: userId,
+      claimedAt: completedAt,
+      startedAt: completedAt,
+      submittedAt: completedAt,
+      completedAt,
+      createdAt: completedAt,
+      updatedAt: completedAt,
+    }).returning({ id: agentJobs.id });
+    if (!agentJob) {
+      throw new Error("Failed to create coding-agent proof job");
+    }
+
+    await tx.insert(agentJobEvents).values([
+      {
+        jobId: agentJob.id,
+        workspaceId: workspace.id,
+        type: "claimed",
+        message: "Codex claimed the immutable task brief.",
+        metadata: { client: "Codex", demoProof: true },
+        createdAt: completedAt,
+      },
+      {
+        jobId: agentJob.id,
+        workspaceId: workspace.id,
+        type: "submitted",
+        message: "Tests passed and pull request evidence was submitted.",
+        metadata: { demoProof: true },
+        createdAt: completedAt,
+      },
+      {
+        jobId: agentJob.id,
+        workspaceId: workspace.id,
+        type: "approved",
+        message: "The human reviewer approved the result.",
+        metadata: { demoProof: true },
+        createdAt: completedAt,
+      },
     ]);
+
+    await tx.insert(agentJobSubmissions).values({
+      jobId: agentJob.id,
+      workspaceId: workspace.id,
+      revision: 1,
+      pullRequestUrl: "https://github.com/zexy2/Nexus/pull/33",
+      commitSha: "6c67e85cb35f4d5f6f087101cf618355e5e97e04",
+      summary: "Polished the landing workflow chapters and hero badges while preserving reduced-motion behavior.",
+      tests: [
+        { command: "pnpm --filter @nexus/web type-check", status: "passed" },
+        { command: "pnpm --filter @nexus/web build", status: "passed" },
+      ],
+      acceptanceEvidence: [
+        {
+          requirementKey: "DEMO-PR-001",
+          criterion: "Workflow story is readable and build-safe.",
+          evidence: "Merged PR #33 with type-check and production build evidence.",
+        },
+      ],
+      reviewStatus: "approved",
+      reviewNote: "Read-only proof from a real merged Nexus pull request.",
+      reviewedBy: userId,
+      reviewedAt: completedAt,
+      createdAt: completedAt,
+    });
 
     return { userId, email, password, workspaceId: workspace.id, expiresAt };
   });

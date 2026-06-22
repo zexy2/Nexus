@@ -2,7 +2,7 @@
  * OpenTelemetry Configuration
  * 
  * Provides distributed tracing and observability for the Nexus platform.
- * Tracks agent execution, API calls, and system performance.
+ * Tracks API calls, durable workflows, and system performance.
  * 
  * Setup:
  * 1. Run Jaeger: docker run -d --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest
@@ -127,21 +127,6 @@ export async function withSpan<T>(
 }
 
 /**
- * Create a span for agent execution
- */
-export async function traceAgentExecution<T>(
-  agentName: string,
-  taskDescription: string,
-  fn: (span: Span) => Promise<T>
-): Promise<T> {
-  return withSpan(`agent.${agentName}`, fn, {
-    "agent.name": agentName,
-    "agent.task": taskDescription,
-    "agent.type": "langgraph",
-  });
-}
-
-/**
  * Create a span for LLM calls
  */
 export async function traceLLMCall<T>(
@@ -186,4 +171,3 @@ export async function traceWorkflow<T>(
 }
 
 export { trace, context, SpanStatusCode };
-

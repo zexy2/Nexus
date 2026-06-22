@@ -146,6 +146,23 @@ describe("POST /api/workflows (real handler)", () => {
     expect(startWorkflow).not.toHaveBeenCalled();
   });
 
+  it("returns a controlled 503 when web research is requested without Tavily", async () => {
+    const originalKey = process.env.TAVILY_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    try {
+      const res = await POST(wfReq({
+        workflowType: "research",
+        input: { query: "current AI regulation", sources: ["web"] },
+      }));
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ error: "TAVILY_NOT_CONFIGURED" });
+      expect(startWorkflow).not.toHaveBeenCalled();
+    } finally {
+      if (originalKey === undefined) delete process.env.TAVILY_API_KEY;
+      else process.env.TAVILY_API_KEY = originalKey;
+    }
+  });
+
   it("marks the execution failed and returns 503 when the workflow fails to start", async () => {
     startWorkflow.mockRejectedValue(new Error("temporal down"));
     const res = await POST(wfReq({ workflowType: "document", input: { prompt: "x" } }));

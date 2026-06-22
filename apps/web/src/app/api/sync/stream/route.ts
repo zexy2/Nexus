@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * GET /api/sync/stream — Server-Sent Events for near-real-time sync.
  *
  * Listens to Postgres NOTIFY (channel `nexus_changes`, emitted by the triggers
- * in scripts/sync-notify.sql) and forwards a "change" event to the client ONLY
+ * installed by the database migrations) and forwards a "change" event to the client ONLY
  * for workspaces the caller can access. The client reacts by pulling
  * immediately instead of waiting for the 10s poll. Polling remains as a
  * fallback, so this is a pure enhancement.

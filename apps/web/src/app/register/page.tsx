@@ -19,10 +19,13 @@ import { Separator } from "@/components/ui/separator";
 import { signUp, signIn } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n/provider";
 import { Loader2, Github, Sparkles, Check } from "lucide-react";
+import { useAuthProviders } from "@/lib/use-auth-providers";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { t } = useLocale();
+  const authProviders = useAuthProviders();
+  const hasSocialProvider = authProviders.github || authProviders.google;
   const signupEnabled = process.env.NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED !== "false";
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const [isLoading, setIsLoading] = useState(false);
@@ -170,7 +173,8 @@ export default function RegisterPage() {
               )}
 
               {/* Social Login */}
-              <div className={signupEnabled ? "grid grid-cols-2 gap-3" : "hidden"}>
+              <div className={signupEnabled && hasSocialProvider ? `grid gap-3 ${authProviders.github && authProviders.google ? "grid-cols-2" : "grid-cols-1"}` : "hidden"}>
+                {authProviders.github && (
                 <Button
                   variant="outline"
                   onClick={handleGithubLogin}
@@ -179,6 +183,8 @@ export default function RegisterPage() {
                   <Github className="size-4 mr-2" />
                   GitHub
                 </Button>
+                )}
+                {authProviders.google && (
                 <Button
                   variant="outline"
                   onClick={handleGoogleLogin}
@@ -204,9 +210,10 @@ export default function RegisterPage() {
                   </svg>
                   Google
                 </Button>
+                )}
               </div>
 
-              {signupEnabled && (
+              {signupEnabled && hasSocialProvider && (
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
                   <Separator />
