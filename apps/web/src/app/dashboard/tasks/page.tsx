@@ -229,6 +229,7 @@ function SortableTaskCard({
       style={style}
       {...attributes}
       {...listeners}
+      data-testid="kanban-task-card"
       data-task-id={task.id}
       layout
       initial={{ opacity: 0, y: 10 }}

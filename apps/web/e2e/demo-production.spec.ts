@@ -24,16 +24,53 @@ async function pollWorkflow(page: Page, workflowId: string) {
   throw new Error(`Workflow ${workflowId} did not complete before timeout`);
 }
 
+async function pollPendingChangeSet(page: Page, docId: string) {
+  const deadline = Date.now() + 180_000;
+
+  while (Date.now() < deadline) {
+    const response = await page.request.get(
+      `/api/change-sets?docId=${docId}&status=pending&limit=1`
+    );
+    expect(response.ok()).toBeTruthy();
+    const rows = await response.json() as Array<{ id: string }>;
+    if (rows[0]?.id) return rows[0].id;
+    await page.waitForTimeout(5000);
+  }
+
+  throw new Error("Plan impact workflow did not create a pending change set");
+}
+
 test.describe("public demo production smoke", () => {
   test.skip(
     process.env.DEMO_E2E !== "true",
-    "Set DEMO_E2E=true on the VPS after seeding the demo user."
+    "Set DEMO_E2E=true against a running demo environment."
   );
 
-  test("demo login, document workflow, task breakdown, Kanban, and history", async ({ page }) => {
+  test("isolated demo proves Living Plan, Kanban, workflow history, and coding-agent evidence", async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: /try the public demo/i }).click();
+    await page.getByTestId("public-demo-login").click();
     await page.waitForURL(/\/dashboard/);
+
+    const codingJobsResponse = await page.request.get("/api/agent-jobs");
+    expect(codingJobsResponse.ok()).toBeTruthy();
+    const codingJobs = await codingJobsResponse.json() as Array<{
+      id: string;
+      status: string;
+      claimedByClient: string | null;
+      task: { id: string; title: string } | null;
+    }>;
+    const proofJob = codingJobs.find((job) =>
+      job.status === "approved" && job.claimedByClient === "Codex"
+    );
+    expect(proofJob?.task?.id).toBeTruthy();
+
+    const proofResponse = await page.request.get(`/api/agent-jobs/${proofJob!.id}`);
+    expect(proofResponse.ok()).toBeTruthy();
+    const proof = await proofResponse.json() as {
+      submissions: Array<{ pullRequestUrl: string; reviewStatus: string }>;
+    };
+    expect(proof.submissions[0]?.pullRequestUrl).toBe("https://github.com/zexy2/Nexus/pull/33");
+    expect(proof.submissions[0]?.reviewStatus).toBe("approved");
 
     const bootstrapResponse = await page.request.post("/api/onboarding/bootstrap", {
       data: { includeStarterData: true },
@@ -78,6 +115,7 @@ test.describe("public demo production smoke", () => {
         workflowType: "tasks",
         workspaceId: bootstrap.workspace.id,
         input: {
+          docId: documentId,
           projectDescription: "Create 3 Kanban-ready implementation tasks from the Nexus recruiter demo brief.",
         },
       },
@@ -99,10 +137,34 @@ test.describe("public demo production smoke", () => {
     const kanbanTaskIds = new Set(kanbanTasks.map((task) => task.id));
     expect(createdTasks?.some((task) => kanbanTaskIds.has(task.id))).toBeTruthy();
 
-    await page.goto("/dashboard");
-    await expect(page.getByText("Agent Activity")).toBeVisible();
+    const impactResponse = await page.request.post(`/api/plans/${documentId}/analyze-change`, {
+      data: {},
+    });
+    expect(impactResponse.status()).toBe(202);
+    const impact = await impactResponse.json() as { workflowId: string };
+    const changeSetId = await pollPendingChangeSet(page, documentId);
+
+    const changeSetResponse = await page.request.get(`/api/change-sets/${changeSetId}`);
+    expect(changeSetResponse.ok()).toBeTruthy();
+    const changeSet = await changeSetResponse.json() as {
+      proposals: Array<{ id: string; status: string }>;
+    };
+    const selectedProposalIds = changeSet.proposals
+      .filter((proposal) => proposal.status === "pending")
+      .slice(0, 3)
+      .map((proposal) => proposal.id);
+    expect(selectedProposalIds.length).toBeGreaterThan(0);
+
+    const applyResponse = await page.request.post(`/api/change-sets/${changeSetId}/apply`, {
+      data: { selectedProposalIds },
+    });
+    expect(applyResponse.ok()).toBeTruthy();
+    const impactStatus = await pollWorkflow(page, impact.workflowId);
+    expect(impactStatus.status).toBe("completed");
 
     await page.goto("/dashboard/agents");
-    await expect(page.getByText(/Workflow Steps|Execution History/i)).toBeVisible();
+    await expect(page.getByText("Coding Agent Runs")).toBeVisible();
+    await expect(page.getByText("Polish the landing workflow story")).toBeVisible();
+    await expect(page.getByText(/Codex/)).toBeVisible();
   });
 });

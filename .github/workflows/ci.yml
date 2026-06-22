@@ -106,10 +106,32 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [build]
-    # E2E needs a real Postgres and provider secrets. It is skipped by default so
-    # it doesn't block PRs; set the repo variable RUN_E2E=true (after configuring
-    # DATABASE_URL/GEMINI_API_KEY secrets and a database) to enable it.
-    if: ${{ vars.RUN_E2E == 'true' }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexus"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://nexus:nexus@localhost:5432/nexus
+      BETTER_AUTH_SECRET: nexus-ci-e2e-secret-at-least-32-characters
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      DEMO_MODE: "true"
+      NEXT_PUBLIC_DEMO_MODE: "true"
+      PUBLIC_SIGNUP_ENABLED: "false"
+      NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: "false"
+      AI_ENABLED: "false"
+      DEMO_MAX_ACTIVE_SESSIONS: "10"
+      DEMO_SESSION_TTL_MINUTES: "15"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -126,16 +148,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply database migrations
+        run: pnpm db:migrate
+
       - name: Install Playwright browsers
         run: pnpm --filter @nexus/web exec playwright install chromium
 
       - name: Run E2E tests
-        run: pnpm --filter @nexus/web test:e2e -- --project=chromium
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          AI_ENABLED: "true"
-          TEMPORAL_NAMESPACE: default
+        run: pnpm --filter @nexus/web exec playwright test --project=chromium
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
