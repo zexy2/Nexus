@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local build/test artifacts. Keep these here because this config overrides
+    // eslint-config-next's default ignore list.
+    ".turbo/**",
+    "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "tsconfig.tsbuildinfo",
   ]),
   {
     rules: {
