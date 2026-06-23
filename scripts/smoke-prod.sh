@@ -70,10 +70,20 @@ poll_workflow() {
 
 poll_pending_change_set() {
   local doc_id="$1"
-  local output_file="$2"
+  local workflow_id="$2"
+  local output_file="$3"
   local deadline=$((SECONDS + ${SMOKE_WORKFLOW_TIMEOUT_SECONDS:-180}))
 
   while (( SECONDS < deadline )); do
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/workflows/$workflow_id" > "$WORKFLOW_STATUS_FILE"
+    local workflow_status
+    workflow_status="$(json_get status < "$WORKFLOW_STATUS_FILE")"
+    if [[ "$workflow_status" == "failed" ]]; then
+      echo "Plan impact workflow failed:" >&2
+      cat "$WORKFLOW_STATUS_FILE" >&2
+      exit 1
+    fi
+
     curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets?docId=$doc_id&status=pending&limit=1" > "$output_file"
 
     local change_set_id
@@ -82,7 +92,7 @@ poll_pending_change_set() {
       return 0
     fi
 
-    echo "Plan impact change set is not ready yet." >&2
+    echo "Plan impact workflow status: $workflow_status; change set is not ready yet." >&2
     sleep 5
   done
 
@@ -225,7 +235,7 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
       --data '{}'
   )"
   plan_workflow_id="$(printf '%s' "$impact_body" | json_get workflowId)"
-  change_set_id="$(poll_pending_change_set "$document_id" "$CHANGE_SET_STATUS_FILE")"
+  change_set_id="$(poll_pending_change_set "$document_id" "$plan_workflow_id" "$CHANGE_SET_STATUS_FILE")"
   echo "Plan impact created change set $change_set_id."
 
   curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"

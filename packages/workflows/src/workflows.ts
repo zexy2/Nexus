@@ -49,8 +49,8 @@ const {
   retry: {
     initialInterval: "3 seconds",
     backoffCoefficient: 2,
-    maximumAttempts: 5,
-    maximumInterval: "20 seconds",
+    maximumAttempts: 7,
+    maximumInterval: "60 seconds",
   },
 });
 
