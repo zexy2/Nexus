@@ -75,7 +75,7 @@ export function getAiUsageLimits(isAdmin = false, isDemo = false) {
   if (isAdmin) {
     return {
       globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
+      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
       userDaily: intEnv("AI_ADMIN_DAILY_LIMIT", 50),
       userMinute: intEnv("AI_ADMIN_PER_MINUTE_LIMIT", 4),
       workflowDaily: intEnv("AI_ADMIN_WORKFLOW_DAILY_LIMIT", 20),
@@ -87,9 +87,9 @@ export function getAiUsageLimits(isAdmin = false, isDemo = false) {
   if (isDemo) {
     return {
       globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
+      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
       userDaily: intEnv("AI_DEMO_DAILY_LIMIT", 12),
-      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 1),
+      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 3),
       workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", 4),
       chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", 8),
       maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 5),
@@ -98,7 +98,7 @@ export function getAiUsageLimits(isAdmin = false, isDemo = false) {
 
   return {
     globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
+    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
     userDaily: intEnv("AI_USER_DAILY_LIMIT", 6),
     userMinute: intEnv("AI_USER_PER_MINUTE_LIMIT", 1),
     workflowDaily: intEnv("AI_WORKFLOW_DAILY_LIMIT", 2),
