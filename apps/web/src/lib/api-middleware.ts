@@ -140,6 +140,12 @@ export const RATE_LIMITS = {
     maxRequests: 10,
     keyPrefix: "research",
   },
+  // Workflow status/history polling is read-only and must not compete with paid AI starts.
+  workflowStatus: {
+    windowMs: 60 * 1000,
+    maxRequests: 90,
+    keyPrefix: "workflow-status",
+  },
   // Sync endpoints - 60 requests per minute
   sync: {
     windowMs: 60 * 1000,

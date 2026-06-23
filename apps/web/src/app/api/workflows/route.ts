@@ -330,7 +330,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const protection = await protectRoute(request, {
     requireAuth: true,
-    rateLimit: RATE_LIMITS.research,
+    rateLimit: RATE_LIMITS.workflowStatus,
   });
   if (!protection.success) return protection.response;
   if (!protection.user) {
