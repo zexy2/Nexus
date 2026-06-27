@@ -438,9 +438,9 @@ export default function DocsPage() {
   // Fetch documents: local-first (instant cache + offline), then refresh online.
   const fetchDocuments = useCallback(async () => {
     let renderedFromCache = false;
-    if (engine) {
+    if (engine && workspaceId) {
       try {
-        const local = await engine.query<SyncDoc>("docs");
+        const local = await engine.query<SyncDoc>("docs", workspaceId);
         const active = local.filter((d) => !d.isArchived);
         if (active.length > 0) {
           setDocuments(active.map(fromSyncDoc));
@@ -476,21 +476,21 @@ export default function DocsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [engine]);
+  }, [engine, workspaceId]);
 
   // Load on mount, and re-read the local store when background sync updates it.
   useEffect(() => {
     fetchDocuments();
-    if (!engine) return;
+    if (!engine || !workspaceId) return;
     return engine.subscribe("docs", async () => {
       try {
-        const local = await engine.query<SyncDoc>("docs");
+        const local = await engine.query<SyncDoc>("docs", workspaceId);
         setDocuments(local.filter((d) => !d.isArchived).map(fromSyncDoc));
       } catch {
         // ignore
       }
     });
-  }, [engine, fetchDocuments]);
+  }, [engine, workspaceId, fetchDocuments]);
 
   // Filter and sort documents
   const filteredDocuments = useMemo(() => {

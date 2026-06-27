@@ -616,9 +616,9 @@ export default function TasksPage() {
     // Local-first read: render cached tasks from IndexedDB instantly (and while
     // offline), then refresh from the network when it is reachable.
     let renderedFromCache = false;
-    if (engine) {
+    if (engine && workspaceId) {
       try {
-        const local = await engine.query<SyncTask>("tasks");
+        const local = await engine.query<SyncTask>("tasks", workspaceId);
         if (local.length > 0) {
           setTasks(local.filter((task) => !task.isArchived).map(fromSyncTask));
           setIsLoading(false);
@@ -649,18 +649,18 @@ export default function TasksPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [engine, t]);
+  }, [engine, workspaceId, t]);
 
   useEffect(() => {
     void fetchTasks();
 
     // Re-read the local store when the background sync updates it, unless a drag
     // is in progress (so optimistic reordering isn't clobbered mid-gesture).
-    if (!engine) return;
+    if (!engine || !workspaceId) return;
     return engine.subscribe("tasks", async () => {
       if (activeIdRef.current) return;
       try {
-        const local = await engine.query<SyncTask>("tasks");
+        const local = await engine.query<SyncTask>("tasks", workspaceId);
         setTasks((current) => {
           const currentById = new Map(current.map((task) => [task.id, task]));
           return local
@@ -678,7 +678,7 @@ export default function TasksPage() {
         // ignore
       }
     });
-  }, [engine, fetchTasks]);
+  }, [engine, workspaceId, fetchTasks]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {

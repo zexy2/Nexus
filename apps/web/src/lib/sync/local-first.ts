@@ -22,6 +22,15 @@ export function useLocalFirstContext() {
   const userId = session?.user?.id ?? null;
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const resolving = useRef(false);
+  const lastUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (lastUserId.current === userId) return;
+
+    lastUserId.current = userId;
+    resolving.current = false;
+    setWorkspaceId(null);
+  }, [userId]);
 
   useEffect(() => {
     if (!engine || !userId || workspaceId) return;
@@ -31,7 +40,7 @@ export function useLocalFirstContext() {
       // 1) Prefer the workspace already cached locally (works offline).
       try {
         const cached = await engine.query<Workspace>("workspaces");
-        const owned = cached.find((w) => w.ownerId === userId) ?? cached[0];
+        const owned = cached.find((w) => w.ownerId === userId);
         if (owned) {
           if (!cancelled) setWorkspaceId(owned.id);
           return;
