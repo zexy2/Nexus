@@ -15,6 +15,7 @@
     "db:migrate:raw": "pnpm --filter @nexus/database db:migrate",
     "backup:postgres": "bash scripts/backup-postgres.sh",
     "smoke:prod": "bash scripts/smoke-prod.sh",
+    "smoke:integrations": "bash scripts/smoke-integrations.sh",
     "db:studio": "pnpm --filter @nexus/database db:studio",
     "clean": "turbo clean && rm -rf node_modules",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""

@@ -103,6 +103,27 @@ MCP tools: `list_available_jobs`, `claim_job`, `get_job_context`, `report_progre
 
 Submission requires a PR URL for the configured repository, commit SHA, test results, and acceptance-criteria evidence. Submission moves the task to `in_review`; only human approval moves it to `done`.
 
+## GitHub / Linear impact graph
+
+- `GET /api/integrations` - list workspace integration status and provider configuration readiness.
+- `POST /api/integrations/github/connect` - return a GitHub App install URL when the app environment is configured.
+- `GET /api/integrations/github/setup` - GitHub App setup callback; stores installation state and starts user authorization.
+- `GET /api/integrations/github/callback` - verifies the installation belongs to the authorized GitHub user, then stores the workspace integration.
+- `POST /api/integrations/linear/connect` - return a Linear OAuth URL when the OAuth environment is configured.
+- `GET /api/integrations/linear/callback` - exchanges the OAuth code, encrypts the token, stores organization/team metadata.
+- `DELETE /api/integrations/:id` - disconnect an integration for workspace owners.
+- `GET /api/integrations/:id/resources` - list GitHub repositories or Linear teams/projects for configuration.
+- `PATCH /api/integrations/:id/config` - owner-only repo/team/project selection.
+- `POST /api/integrations/:id/sync` - sync seeded data, GitHub issues/PRs/checks, or Linear issues.
+- `GET /api/external-issues` - list synced/seeded external issues for the workspace.
+- `GET /api/external-pull-requests` - list synced/seeded pull requests and checks for the workspace.
+- `GET /api/impact-graph?docId=...` - return plan -> requirement -> task -> issue -> PR -> check/job evidence.
+- `POST /api/webhooks/github` - verify GitHub webhook signatures, dedupe delivery IDs, and queue the event.
+- `POST /api/webhooks/linear` - verify Linear webhook signatures/replay window, dedupe delivery IDs, and queue the event.
+- `POST /api/external-write-operations/:id/retry` - owner-only retry for an approved GitHub/Linear write operation.
+
+Public demo sessions receive isolated seeded external-work data and cannot connect real GitHub or Linear accounts. External provider writes are never faked: proposals create queued operations and the operation status records success or failure.
+
 ## Collaboration and sync
 
 - `POST /api/collab/token` - short-lived, document-scoped WebSocket token.

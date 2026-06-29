@@ -33,6 +33,7 @@ Public demo is considered ready only when all of these are true:
 - `GEMINI_API_KEY` is set.
 - `/api/health` reports healthy database, Temporal, worker heartbeat, and configured AI provider.
 - `pnpm smoke:prod` completes document generation, task breakdown, and Living Plan impact analysis.
+- `pnpm smoke:integrations` passes after GitHub App and Linear OAuth environment values are configured.
 - Demo login creates a separate expiring identity and workspace without exposing a password.
 - The workflow center shows a read-only completed Codex run backed by a merged PR.
 

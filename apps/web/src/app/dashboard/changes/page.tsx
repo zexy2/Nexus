@@ -44,13 +44,23 @@ type ChangeSetSummary = {
 
 type ChangeProposal = {
   id: string;
-  action: "create_task" | "update_task" | "archive_task" | "relink_task";
+  action: string;
   title: string;
   description: string | null;
   priority: string | null;
   rationale: string;
   confidence: number;
   status: string;
+  metadata: Record<string, unknown> | null;
+  externalOperations: Array<{
+    id: string;
+    provider: string;
+    operationType: string;
+    status: string;
+    error: string | null;
+    attemptedAt: string | null;
+    completedAt: string | null;
+  }>;
   requirement: {
     id: string;
     stableKey: string | null;
@@ -70,7 +80,11 @@ type ChangeSetDetail = Omit<ChangeSetSummary, "proposals"> & {
 
 const statusStyles: Record<string, string> = {
   pending: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+  pending_external: "border-purple-400/30 bg-purple-400/10 text-purple-200",
+  external_pending: "border-purple-400/30 bg-purple-400/10 text-purple-200",
   applied: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+  failed_retryable: "border-red-400/30 bg-red-400/10 text-red-200",
+  failed_terminal: "border-red-400/30 bg-red-400/10 text-red-200",
   partially_applied: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
   rejected: "border-white/10 bg-white/5 text-white/50",
   expired: "border-white/10 bg-white/5 text-white/40",
@@ -109,12 +123,27 @@ export default function ChangesPage() {
     ) {
       return t(`changes.status.${status}`);
     }
+    if (status === "external_pending") {
+      return locale === "tr" ? "dış yazım bekliyor" : "external pending";
+    }
+    if (status === "pending_external") {
+      return locale === "tr" ? "dış yazım kuyruğunda" : "external queued";
+    }
     return status;
-  }, [t]);
+  }, [locale, t]);
 
-  const actionLabel = useCallback((action: ChangeProposal["action"]) => {
-    return t(`changes.action.${action}`);
-  }, [t]);
+  const actionLabel = useCallback((action: string) => {
+    const fallback: Record<string, string> = {
+      linear_create_issue: locale === "tr" ? "Linear issue oluştur" : "Create Linear issue",
+      linear_update_issue: locale === "tr" ? "Linear issue güncelle" : "Update Linear issue",
+      linear_comment: locale === "tr" ? "Linear yorum ekle" : "Add Linear comment",
+      github_issue_comment: locale === "tr" ? "GitHub yorum ekle" : "Add GitHub comment",
+      github_issue_update: locale === "tr" ? "GitHub issue güncelle" : "Update GitHub issue",
+      github_issue_label: locale === "tr" ? "GitHub label güncelle" : "Update GitHub label",
+      mark_agent_job_outdated: locale === "tr" ? "Agent işini eski işaretle" : "Mark agent job outdated",
+    };
+    return fallback[action] || t(`changes.action.${action}`);
+  }, [locale, t]);
 
   const fetchChangeSets = useCallback(async () => {
     const response = await fetch("/api/change-sets", { cache: "no-store" });
@@ -195,6 +224,16 @@ export default function ChangesPage() {
         className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
       };
     }
+    if (detail.status === "external_pending") {
+      return {
+        title: locale === "tr" ? "Dış sistem yazımları bekliyor" : "External writes are pending",
+        description:
+          locale === "tr"
+            ? "Plan kabul edildi. GitHub veya Linear yazımları ayrı operasyon olarak çalıştırılmalı ve sonucu izlenmelidir."
+            : "The plan was accepted. GitHub or Linear writes must be run as separate operations and tracked here.",
+        className: "border-purple-400/20 bg-purple-400/10 text-purple-100",
+      };
+    }
     if (detail.status === "expired") {
       return {
         title: t("changes.resolution.expiredTitle"),
@@ -207,7 +246,7 @@ export default function ChangesPage() {
       description: t("changes.resolution.rejectedDesc"),
       className: "border-white/10 bg-white/[0.04] text-white/65",
     };
-  }, [detail, t]);
+  }, [detail, locale, t]);
 
   const toggleProposal = (id: string) => {
     setSelectedProposalIds((current) => {
@@ -244,6 +283,22 @@ export default function ChangesPage() {
       showToast.error(error instanceof Error ? error.message : t("changes.resolveError"));
     } finally {
       setResolving(null);
+    }
+  };
+
+  const retryExternalOperation = async (operationId: string) => {
+    try {
+      const response = await fetch(`/api/external-write-operations/${operationId}/retry`, {
+        method: "POST",
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "External write failed");
+      }
+      showToast.success(locale === "tr" ? "Dış sistem yazımı tamamlandı" : "External write completed");
+      if (detail) await fetchDetail(detail.id);
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : "External write failed");
     }
   };
 
@@ -457,6 +512,47 @@ export default function ChangesPage() {
                             <p className="mt-2 text-xs text-white/35">
                               {t("changes.currentTask")}: {displayGeneratedCopy(proposal.task.title)}
                             </p>
+                          )}
+                          {proposal.externalOperations.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              {proposal.externalOperations.map((operation) => (
+                                <div
+                                  key={operation.id}
+                                  className="flex flex-col gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div>
+                                    <span className="font-mono uppercase text-white/35">
+                                      {operation.provider}
+                                    </span>{" "}
+                                    <span>{actionLabel(operation.operationType)}</span>
+                                    <Badge
+                                      variant="outline"
+                                      className={cn("ml-2", statusStyles[operation.status] || "border-white/10 bg-white/5")}
+                                    >
+                                      {operation.status}
+                                    </Badge>
+                                    {operation.error && (
+                                      <p className="mt-1 text-red-300">{operation.error}</p>
+                                    )}
+                                  </div>
+                                  {(operation.status === "pending" ||
+                                    operation.status === "failed_retryable") && (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={(event) => {
+                                        event.preventDefault();
+                                        void retryExternalOperation(operation.id);
+                                      }}
+                                    >
+                                      {locale === "tr" ? "Yazmayı dene" : "Run write"}
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           )}
                         </div>
                         <div className="text-right">

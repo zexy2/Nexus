@@ -4,10 +4,10 @@ Nexus is a portfolio-demo AI workflow workspace that keeps project plans and del
 
 **Product promise:** Change the plan once. Nexus finds the impacted work, proposes updates, and changes the Kanban board only after human approval.
 
-This is not positioned as a full Jira, Linear, or Notion replacement. It is a focused public demo that proves one workflow end to end:
+The product direction is an AI change-control layer for GitHub + Linear workflows. It is not positioned as a full Jira, Linear, or Notion replacement. It is a focused public demo that proves one workflow end to end:
 
 ```text
-Project idea -> Living Plan -> Requirements -> Kanban tasks -> Impact review -> Approved changes -> Coding-agent handoff -> Human review
+Project idea -> Living Plan -> Requirements -> Impact graph -> Review proposals -> Approved work changes -> Coding-agent handoff -> Human review
 ```
 
 ## Why It Exists
@@ -30,12 +30,29 @@ Nexus treats the plan as a versioned delivery artifact, not a disposable chat re
 - Extracts stable requirement IDs such as `REQ-001`.
 - Links requirements to Kanban tasks.
 - Shows requirement coverage and task alignment status.
+- Shows a read-only impact graph across requirements, seeded Linear-like issues, GitHub PRs, checks, and coding-agent jobs.
 - Analyzes plan changes against the previous accepted version.
 - Creates reviewable change proposals instead of mutating work automatically.
 - Applies only the proposals selected by the user.
 - Records workflow runs, audit events, failures, and approval history.
 - Hands approved, versioned task context to local Codex, Claude Code, or Cursor clients over MCP.
 - Requires a pull request, test results, and acceptance-criteria evidence before human approval.
+
+## GitHub + Linear Change-Control Layer
+
+Nexus now has the first vertical slice of the GitHub/Linear direction:
+
+- Database tables for workspace integrations, external issues, external pull requests, check runs, requirement-external links, impact graph edges, and sync runs.
+- GitHub App setup callback with installation ownership verification before the integration is saved.
+- Linear OAuth callback with encrypted token storage.
+- Provider sync adapters for GitHub issues, pull requests, changed files, check runs, and Linear issues.
+- APIs for integration status, resources, config, external issues, external PRs, and `GET /api/impact-graph?docId=...`.
+- Settings UI for GitHub App / Linear OAuth connection, repo/team/project selection, and sync status.
+- Demo workspaces receive isolated seeded external-work data, so reviewers can see the impact graph without connecting real accounts.
+- Webhook endpoints reject unsigned requests, dedupe delivery IDs, and record verified events for targeted sync processing.
+- Approved external proposals create retryable `external_write_operations`; Nexus does not mutate GitHub/Linear without user approval.
+
+Current limit: external writes are deliberately queued and retried as explicit operations. Nexus does not merge PRs, run repository code, or claim that a provider write succeeded until the operation succeeds.
 
 ## Core Demo Flow
 
@@ -139,6 +156,7 @@ pnpm test               # test suite
 pnpm db:migrate         # production-safe migrations + guarded legacy baseline
 pnpm db:push            # local disposable DB only
 pnpm smoke:prod         # Docker VPS smoke test
+pnpm smoke:integrations # GitHub/Linear env and webhook smoke test
 pnpm backup:postgres    # write a Postgres backup
 ```
 
@@ -155,6 +173,7 @@ SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 Production uses migrations. `db:push` is local-only and should not be used for deploys.
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables, reverse proxy notes, smoke checks, and backups.
+See [docs/INTEGRATIONS_SETUP.md](docs/INTEGRATIONS_SETUP.md) for GitHub App, Linear OAuth, callback URLs, and integration smoke checks.
 
 ## What Makes It Different From a Chat Prompt
 
@@ -179,6 +198,8 @@ If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The curre
 - Production Zero cache is deferred; v1 uses API-backed sync and offline queue behavior.
 - The public CV demo is intentionally quota-limited and uses isolated, expiring sessions.
 - Nexus does not host coding sandboxes or store GitHub credentials; coding agents run on the user's machine.
+- GitHub/Linear integrations support real OAuth/App connection and sync when provider env is configured. Public demo accounts still use seeded read-only data and cannot connect real accounts.
+- Webhooks are verified and recorded; targeted incremental sync workers are still a follow-up, so manual sync remains the reliable path after provider changes.
 
 ## Documentation
 
@@ -186,6 +207,7 @@ If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The curre
 - [Project Status](docs/STATUS.md)
 - [API Reference](docs/API.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
+- [GitHub + Linear Setup](docs/INTEGRATIONS_SETUP.md)
 - [Architecture Decisions](docs/adr/)
 
 ## License

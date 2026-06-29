@@ -7,7 +7,10 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleDot,
+  ExternalLink,
+  GitBranch,
   GitPullRequestArrow,
+  ListChecks,
   Loader2,
   RefreshCw,
 } from "lucide-react";
@@ -62,6 +65,67 @@ type LivingPlan = {
   } | null;
 };
 
+type ImpactGraph = {
+  integrations: Array<{
+    id: string;
+    provider: string;
+    status: string;
+    accountName: string | null;
+    lastSyncAt: string | null;
+    lastError: string | null;
+    seeded: boolean;
+  }>;
+  summary: {
+    requirements: number;
+    externalIssues: number;
+    pullRequests: number;
+    checkRuns: number;
+    outdatedAgentJobs: number;
+    missingCoverage: number;
+    orphanedExternalWork: number;
+  };
+  requirements: Array<{
+    id: string;
+    stableKey: string;
+    title: string;
+    externalIssues: Array<{
+      id: string;
+      provider: string;
+      key: string | null;
+      title: string;
+      status: string;
+      url: string | null;
+    }>;
+    pullRequests: Array<{
+      id: string;
+      number: number;
+      title: string;
+      status: string;
+      url: string | null;
+    }>;
+    checkRuns: Array<{
+      id: string;
+      name: string;
+      status: string;
+      conclusion: string | null;
+      url: string | null;
+    }>;
+    agentJobs: Array<{
+      id: string;
+      status: string;
+      client: string | null;
+    }>;
+  }>;
+  orphanedExternalIssues: Array<{
+    id: string;
+    provider: string;
+    key: string | null;
+    title: string;
+    status: string;
+    url: string | null;
+  }>;
+};
+
 type AnalysisState =
   | { status: "idle" }
   | { status: "starting" }
@@ -80,6 +144,7 @@ export function LivingPlanInspector({
   const t = useT();
   const { locale } = useLocale();
   const [plan, setPlan] = useState<LivingPlan | null>(null);
+  const [impactGraph, setImpactGraph] = useState<ImpactGraph | null>(null);
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
 
@@ -102,11 +167,22 @@ export function LivingPlanInspector({
     return data;
   }, [docId, t]);
 
+  const fetchImpactGraph = useCallback(async () => {
+    const response = await fetch(`/api/impact-graph?docId=${encodeURIComponent(docId)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    const data = await response.json() as ImpactGraph;
+    setImpactGraph(data);
+    return data;
+  }, [docId]);
+
   useEffect(() => {
     void fetchPlan()
+      .then(() => fetchImpactGraph())
       .catch(() => setPlan(null))
       .finally(() => setLoading(false));
-  }, [fetchPlan]);
+  }, [fetchImpactGraph, fetchPlan]);
 
   useEffect(() => {
     if (analysis.status !== "running") return;
@@ -115,6 +191,7 @@ export function LivingPlanInspector({
     const poll = async () => {
       try {
         const current = await fetchPlan();
+        void fetchImpactGraph();
         if (cancelled) return;
         if (current.pendingChangeSet) {
           setAnalysis({ status: "idle" });
@@ -152,11 +229,23 @@ export function LivingPlanInspector({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [analysis, fetchPlan, readableError, t]);
+  }, [analysis, fetchImpactGraph, fetchPlan, readableError, t]);
 
   const activeRequirements = useMemo(
     () => plan?.requirements.filter((requirement) => requirement.status === "active") || [],
     [plan]
+  );
+
+  const graphRequirementsWithExternalWork = useMemo(
+    () =>
+      (impactGraph?.requirements || []).filter(
+        (requirement) =>
+          requirement.externalIssues.length > 0 ||
+          requirement.pullRequests.length > 0 ||
+          requirement.checkRuns.length > 0 ||
+          requirement.agentJobs.length > 0
+      ),
+    [impactGraph]
   );
 
   const startAnalysis = async () => {
@@ -245,7 +334,7 @@ export function LivingPlanInspector({
           <div className="mt-4 flex items-center justify-between text-xs text-white/40">
             <span>{plan.pendingChangeSet.proposalCount} {t('docs.livingPlan.workChanges')}</span>
             <Button asChild size="sm">
-              <Link href={`/dashboard/changes?changeSet=${plan.pendingChangeSet.id}`}>
+            <Link href={`/dashboard/changes?changeSet=${plan.pendingChangeSet.id}`}>
                 {t('docs.livingPlan.review')}
                 <ArrowRight className="ml-2 size-3.5" />
               </Link>
@@ -284,6 +373,137 @@ export function LivingPlanInspector({
           {analysis.message}
         </div>
       )}
+
+      <div className="mt-7 border-y border-white/10 py-5">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-medium text-white">
+              {locale === "tr" ? "Etki grafiği" : "Impact graph"}
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-white/35">
+              {locale === "tr"
+                ? "Plan, iş, PR, test ve agent kanıtlarını aynı bağlamda gösterir."
+                : "Shows plan, work, PR, test, and agent evidence in one context."}
+            </p>
+          </div>
+          <GitBranch className="mt-0.5 size-4 text-cyan-300" />
+        </div>
+
+        <div className="grid grid-cols-3 divide-x divide-white/10 border-y border-white/10">
+          {[
+            {
+              label: locale === "tr" ? "Issue" : "Issues",
+              value: impactGraph?.summary.externalIssues ?? 0,
+            },
+            {
+              label: "PR",
+              value: impactGraph?.summary.pullRequests ?? 0,
+            },
+            {
+              label: locale === "tr" ? "Test" : "Checks",
+              value: impactGraph?.summary.checkRuns ?? 0,
+            },
+          ].map((item) => (
+            <div key={item.label} className="px-3 py-3">
+              <div className="text-lg font-semibold text-white">{item.value}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-wide text-white/35">
+                {item.label}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {impactGraph && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {impactGraph.integrations.length === 0 ? (
+              <Badge variant="outline" className="border-white/10 text-white/45">
+                {locale === "tr" ? "Entegrasyon yok" : "No integrations"}
+              </Badge>
+            ) : (
+              impactGraph.integrations.map((integration) => (
+                <Badge
+                  key={integration.id}
+                  variant="outline"
+                  className={cn(
+                    "border-white/10 bg-white/5 text-white/55",
+                    integration.status === "connected" && "border-emerald-300/20 text-emerald-200"
+                  )}
+                >
+                  {integration.provider}
+                  <span className="ml-1 text-white/35">
+                    {integration.seeded
+                      ? locale === "tr" ? "demo seed" : "demo seed"
+                      : integration.status}
+                  </span>
+                </Badge>
+              ))
+            )}
+          </div>
+        )}
+
+        {impactGraph?.summary.outdatedAgentJobs ? (
+          <div className="mt-4 flex items-start gap-2 border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs leading-5 text-amber-200">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+            {locale === "tr"
+              ? `${impactGraph.summary.outdatedAgentJobs} agent işi eski bağlamla kalmış.`
+              : `${impactGraph.summary.outdatedAgentJobs} agent job is running on outdated context.`}
+          </div>
+        ) : null}
+
+        {graphRequirementsWithExternalWork.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {graphRequirementsWithExternalWork.slice(0, 3).map((requirement) => {
+              const firstIssue = requirement.externalIssues[0];
+              const firstPr = requirement.pullRequests[0];
+              const passingChecks = requirement.checkRuns.filter(
+                (check) => check.conclusion === "success"
+              ).length;
+              return (
+                <div key={requirement.id} className="border border-white/10 bg-white/[0.03] p-3">
+                  <div className="font-mono text-[11px] text-cyan-300">
+                    {requirement.stableKey}
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-sm font-medium leading-5 text-white">
+                    {localizeGeneratedCopy(requirement.title, locale)}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/45">
+                    {firstIssue && (
+                      <span className="inline-flex items-center gap-1 border border-white/10 px-2 py-1">
+                        <ListChecks className="size-3" />
+                        {firstIssue.key || firstIssue.provider}
+                      </span>
+                    )}
+                    {firstPr && (
+                      <a
+                        href={firstPr.url || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 hover:text-white"
+                      >
+                        <GitPullRequestArrow className="size-3" />
+                        #{firstPr.number}
+                        <ExternalLink className="size-3" />
+                      </a>
+                    )}
+                    {requirement.checkRuns.length > 0 && (
+                      <span className="inline-flex items-center gap-1 border border-white/10 px-2 py-1">
+                        <CheckCircle2 className="size-3 text-emerald-300" />
+                        {passingChecks}/{requirement.checkRuns.length}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 border border-white/10 bg-white/[0.02] p-4 text-xs leading-5 text-white/35">
+            {locale === "tr"
+              ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
+              : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist."}
+          </div>
+        )}
+      </div>
 
       <div className="mt-7">
         <div className="mb-3 flex items-center justify-between">

@@ -8,10 +8,14 @@ import {
   agentJobs,
   agentJobSubmissions,
   docs,
+  externalCheckRuns,
+  externalIssues,
+  externalPullRequests,
   rateLimitBuckets,
   sessions,
   tasks,
   users,
+  workspaceIntegrations,
   workspaceRepositories,
   workspaces,
 } from "@nexus/database/schema";
@@ -207,6 +211,7 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
     if (!proofTask) {
       throw new Error("Failed to create coding-agent proof task");
     }
+    const completedAt = new Date("2026-06-20T10:55:28.000Z");
 
     const [repository] = await tx.insert(workspaceRepositories).values({
       workspaceId: workspace.id,
@@ -219,6 +224,161 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
     if (!repository) {
       throw new Error("Failed to create demo repository proof");
     }
+
+    const [githubIntegration] = await tx.insert(workspaceIntegrations).values({
+      workspaceId: workspace.id,
+      provider: "github",
+      status: "connected",
+      externalAccountId: "zexy2/Nexus",
+      externalAccountName: "zexy2/Nexus",
+      scopes: ["metadata:read", "issues:write", "pull_requests:read", "checks:read"],
+      metadata: {
+        seeded: true,
+        demoOnly: true,
+        note: "Seeded GitHub-like proof data for the public demo workspace.",
+      },
+      lastSyncAt: new Date(),
+      createdBy: userId,
+    }).returning({ id: workspaceIntegrations.id });
+
+    const [linearIntegration] = await tx.insert(workspaceIntegrations).values({
+      workspaceId: workspace.id,
+      provider: "linear",
+      status: "connected",
+      externalAccountId: "nexus-demo",
+      externalAccountName: "Nexus Demo Linear",
+      scopes: ["read", "write"],
+      metadata: {
+        seeded: true,
+        demoOnly: true,
+        note: "Seeded Linear-like issue data for the public demo workspace.",
+      },
+      lastSyncAt: new Date(),
+      createdBy: userId,
+    }).returning({ id: workspaceIntegrations.id });
+
+    if (!githubIntegration || !linearIntegration) {
+      throw new Error("Failed to seed demo integrations");
+    }
+
+    const reviewTask = seededTasks.find((task) => task.title === "Review the living plan");
+    const kanbanTask = seededTasks.find((task) => task.title === "Test Kanban alignment");
+    if (!reviewTask || !kanbanTask) {
+      throw new Error("Failed to locate demo tasks for external issue seeding");
+    }
+
+    const seededIssues = await tx.insert(externalIssues).values([
+      {
+        workspaceId: workspace.id,
+        integrationId: linearIntegration.id,
+        taskId: reviewTask.id,
+        provider: "linear",
+        externalId: "LIN-DEMO-101",
+        externalKey: "LIN-101",
+        title: "Review plan impact before changing delivery work",
+        description: "Validate that new requirements are connected to reviewed work before the board changes.",
+        status: "In Progress",
+        priority: "High",
+        url: "https://linear.app/nexus-demo/issue/LIN-101/review-plan-impact",
+        teamName: "Demo",
+        projectName: "Nexus Change Control",
+        labels: ["living-plan", "approval-gate"],
+        metadata: { seeded: true, requirementHint: "review impact" },
+        syncedAt: new Date(),
+      },
+      {
+        workspaceId: workspace.id,
+        integrationId: linearIntegration.id,
+        taskId: kanbanTask.id,
+        provider: "linear",
+        externalId: "LIN-DEMO-102",
+        externalKey: "LIN-102",
+        title: "Keep Kanban aligned with accepted requirements",
+        description: "Move work only after the change proposal is reviewed.",
+        status: "Todo",
+        priority: "Medium",
+        url: "https://linear.app/nexus-demo/issue/LIN-102/kanban-alignment",
+        teamName: "Demo",
+        projectName: "Nexus Change Control",
+        labels: ["kanban", "traceability"],
+        metadata: { seeded: true, requirementHint: "kanban alignment" },
+        syncedAt: new Date(),
+      },
+      {
+        workspaceId: workspace.id,
+        integrationId: linearIntegration.id,
+        taskId: proofTask.id,
+        provider: "linear",
+        externalId: "LIN-DEMO-103",
+        externalKey: "LIN-103",
+        title: "Polish public workflow proof",
+        description: "Show a completed coding-agent handoff with PR evidence.",
+        status: "Done",
+        priority: "Medium",
+        url: "https://linear.app/nexus-demo/issue/LIN-103/workflow-proof",
+        teamName: "Demo",
+        projectName: "Nexus Change Control",
+        labels: ["agent-handoff", "proof"],
+        metadata: { seeded: true, requirementHint: "public proof" },
+        syncedAt: new Date(),
+      },
+    ]).returning({ id: externalIssues.id, externalKey: externalIssues.externalKey });
+
+    const proofIssue = seededIssues.find((issue) => issue.externalKey === "LIN-103");
+    const reviewIssue = seededIssues.find((issue) => issue.externalKey === "LIN-101");
+    if (!proofIssue || !reviewIssue) {
+      throw new Error("Failed to seed demo external issue proof");
+    }
+
+    const [proofPullRequest] = await tx.insert(externalPullRequests).values({
+      workspaceId: workspace.id,
+      integrationId: githubIntegration.id,
+      repositoryId: repository.id,
+      externalId: "github-pr-33",
+      number: 33,
+      title: "Polish landing workflow proof",
+      status: "merged",
+      url: "https://github.com/zexy2/Nexus/pull/33",
+      branch: "codex/landing-proof-polish",
+      baseBranch: "main",
+      latestCommitSha: "6c67e85cb35f4d5f6f087101cf618355e5e97e04",
+      linkedExternalIssueIds: [proofIssue.id, reviewIssue.id],
+      changedFiles: [
+        "apps/web/src/components/landing/hero-cinematic.tsx",
+        "apps/web/src/components/landing/workflow-story.tsx",
+      ],
+      metadata: { seeded: true, demoProof: true },
+      syncedAt: new Date(),
+    }).returning({ id: externalPullRequests.id });
+
+    if (!proofPullRequest) {
+      throw new Error("Failed to seed demo pull request proof");
+    }
+
+    await tx.insert(externalCheckRuns).values([
+      {
+        workspaceId: workspace.id,
+        pullRequestId: proofPullRequest.id,
+        externalId: "github-check-typecheck-pr33",
+        name: "pnpm --filter @nexus/web type-check",
+        status: "completed",
+        conclusion: "success",
+        url: "https://github.com/zexy2/Nexus/pull/33/checks",
+        completedAt: completedAt,
+        metadata: { seeded: true },
+      },
+      {
+        workspaceId: workspace.id,
+        pullRequestId: proofPullRequest.id,
+        externalId: "github-check-build-pr33",
+        name: "pnpm --filter @nexus/web build",
+        status: "completed",
+        conclusion: "success",
+        url: "https://github.com/zexy2/Nexus/pull/33/checks",
+        completedAt: completedAt,
+        metadata: { seeded: true },
+      },
+    ]);
 
     const contextSnapshot = {
       task: {
@@ -240,7 +400,6 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
     const contextHash = createHash("sha256")
       .update(JSON.stringify(contextSnapshot))
       .digest("hex");
-    const completedAt = new Date("2026-06-20T10:55:28.000Z");
 
     const [agentJob] = await tx.insert(agentJobs).values({
       workspaceId: workspace.id,

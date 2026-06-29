@@ -41,6 +41,9 @@ import {
   KeyRound,
   Copy,
   Trash2,
+  Plug,
+  RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
@@ -82,6 +85,7 @@ interface SettingsData {
     mcpEndpoint: string;
     repository: { url: string; owner: string; name: string; defaultBranch: string } | null;
   };
+  integrations: IntegrationSettings;
 }
 
 type AgentTokenSummary = {
@@ -92,6 +96,44 @@ type AgentTokenSummary = {
   lastUsedAt: string | null;
   revokedAt: string | null;
 };
+
+type IntegrationSummary = {
+  id: string;
+  provider: string;
+  status: string;
+  accountName: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  seeded: boolean;
+  metadata: Record<string, unknown>;
+  config: {
+    selectedRepository?: string | null;
+    selectedTeamId?: string | null;
+    selectedProjectId?: string | null;
+    selectedTeamName?: string | null;
+    selectedProjectName?: string | null;
+  };
+};
+
+type IntegrationResources = {
+  repositories?: Array<{ fullName: string; owner: string; name: string; defaultBranch: string }>;
+  teams?: Array<{ id: string; key: string; name: string }>;
+  projects?: Array<{ id: string; name: string; teamIds: string[] }>;
+};
+
+type ProviderConfig = {
+  configured: boolean;
+  missing: string[];
+};
+
+interface IntegrationSettings {
+  connectionEnabled: boolean;
+  providers: {
+    github: ProviderConfig;
+    linear: ProviderConfig;
+  };
+  items: IntegrationSummary[];
+}
 
 // Model definitions with provider info
 const AI_MODELS = [
@@ -134,6 +176,14 @@ function SettingsContent() {
   const [agentTokens, setAgentTokens] = useState<AgentTokenSummary[]>([]);
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [agentSaving, setAgentSaving] = useState(false);
+  const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
+  const [integrationConnectionEnabled, setIntegrationConnectionEnabled] = useState(false);
+  const [integrationProviders, setIntegrationProviders] = useState<IntegrationSettings["providers"]>({
+    github: { configured: false, missing: [] },
+    linear: { configured: false, missing: [] },
+  });
+  const [integrationSaving, setIntegrationSaving] = useState<string | null>(null);
+  const [integrationResources, setIntegrationResources] = useState<Record<string, IntegrationResources>>({});
   
   // Track original values for dirty checking
   const [originalSettings, setOriginalSettings] = useState<SettingsData | null>(null);
@@ -195,6 +245,12 @@ function SettingsContent() {
       setRepositoryUrl(data.agentHandoff.repository?.url || "");
       setDefaultBranchName(data.agentHandoff.repository?.defaultBranch || "main");
       setTokenCreationEnabled(data.agentHandoff.tokenCreationEnabled);
+      setIntegrations(data.integrations?.items || []);
+      setIntegrationConnectionEnabled(data.integrations?.connectionEnabled || false);
+      setIntegrationProviders(data.integrations?.providers || {
+        github: { configured: false, missing: [] },
+        linear: { configured: false, missing: [] },
+      });
       const tokenResponse = await fetch(`/api/agent-tokens?workspaceId=${data.agentHandoff.workspaceId}`);
       if (tokenResponse.ok) setAgentTokens(await tokenResponse.json());
       
@@ -339,6 +395,85 @@ function SettingsContent() {
     if (response.ok) setAgentTokens((current) => current.map((token) => token.id === id ? { ...token, revokedAt: new Date().toISOString() } : token));
   };
 
+  const connectIntegration = async (provider: "github" | "linear") => {
+    setIntegrationSaving(provider);
+    try {
+      const response = await fetch(`/api/integrations/${provider}/connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "Integration could not be connected");
+      }
+      const url = body.installUrl || body.authUrl;
+      if (url) window.location.href = url;
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Integration could not be connected");
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
+  const syncIntegration = async (integrationId: string) => {
+    setIntegrationSaving(integrationId);
+    try {
+      const response = await fetch(`/api/integrations/${integrationId}/sync`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "Integration sync failed");
+      }
+      await fetchSettings();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Integration sync failed");
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
+  const loadIntegrationResources = async (integrationId: string) => {
+    setIntegrationSaving(`${integrationId}:resources`);
+    try {
+      const response = await fetch(`/api/integrations/${integrationId}/resources`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "Integration resources could not be loaded");
+      }
+      setIntegrationResources((current) => ({
+        ...current,
+        [integrationId]: body.resources || {},
+      }));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Integration resources could not be loaded");
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
+  const saveIntegrationConfig = async (
+    integrationId: string,
+    payload: { selectedRepository?: string; selectedTeamId?: string; selectedProjectId?: string | null }
+  ) => {
+    setIntegrationSaving(`${integrationId}:config`);
+    try {
+      const response = await fetch(`/api/integrations/${integrationId}/config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "Integration config could not be saved");
+      }
+      await fetchSettings();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Integration config could not be saved");
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col h-screen">
@@ -387,7 +522,7 @@ function SettingsContent() {
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-            <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full h-auto gap-1">
+            <TabsList className="grid grid-cols-3 sm:grid-cols-7 w-full h-auto gap-1">
               <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <User className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.profile")}</span>
@@ -399,6 +534,10 @@ function SettingsContent() {
               <TabsTrigger value="agents" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <GitBranch className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{locale === "tr" ? "Agentlar" : "Agents"}</span>
+              </TabsTrigger>
+              <TabsTrigger value="integrations" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+                <Plug className="size-3 md:size-4" />
+                <span className="hidden xs:inline">{locale === "tr" ? "Bağlantılar" : "Integrations"}</span>
               </TabsTrigger>
               <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
                 <Bell className="size-3 md:size-4" />
@@ -699,6 +838,236 @@ function SettingsContent() {
                             </Button>
                           </div>
                           <code className="block overflow-x-auto whitespace-nowrap text-xs text-muted-foreground">{command}</code>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="integrations">
+              <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
+                <CardHeader>
+                  <CardTitle>{locale === "tr" ? "GitHub ve Linear bağlantıları" : "GitHub and Linear integrations"}</CardTitle>
+                  <CardDescription>
+                    {locale === "tr"
+                      ? "Nexus plan değişikliğinin issue, PR, test ve agent işlerini nasıl etkilediğini bu bağlantılardan okur. Dış sistemlere yazma yalnızca onaylı önerilerle yapılmalıdır."
+                      : "Nexus reads issues, PRs, checks, and agent work from these integrations. External writes must happen through approved proposals only."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {!integrationConnectionEnabled && (
+                    <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                      {locale === "tr"
+                        ? "Geçici demo oturumlarında gerçek GitHub/Linear bağlantısı kapalıdır. Demo seed verisi salt okunur olarak gösterilir."
+                        : "Temporary demo sessions cannot connect real GitHub/Linear accounts. Seeded demo data is shown read-only."}
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {(["github", "linear"] as const).map((provider) => {
+                      const existing = integrations.find((integration) => integration.provider === provider);
+                      const providerConfig = integrationProviders[provider];
+                      const title = provider === "github" ? "GitHub App" : "Linear OAuth";
+                      const connected = existing?.status === "connected";
+                      const resources = existing ? integrationResources[existing.id] : undefined;
+                      const repositories = resources?.repositories || [];
+                      const teams = resources?.teams || [];
+                      const projects = resources?.projects || [];
+                      return (
+                        <div key={provider} className="border border-border p-4 dark:border-neutral-700">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-medium">{title}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {existing?.accountName ||
+                                  (locale === "tr" ? "Bağlı çalışma alanı yok" : "No connected workspace")}
+                              </p>
+                            </div>
+                            <Badge variant={connected ? "secondary" : "outline"}>
+                              {connected
+                                ? existing.seeded
+                                  ? "demo seed"
+                                  : locale === "tr" ? "bağlı" : "connected"
+                                : providerConfig.configured
+                                  ? locale === "tr" ? "hazır" : "ready"
+                                  : locale === "tr" ? "env eksik" : "env missing"}
+                            </Badge>
+                          </div>
+
+                          {existing?.lastSyncAt && (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              {locale === "tr" ? "Son senkronizasyon" : "Last sync"}:{" "}
+                              {new Date(existing.lastSyncAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}
+                            </p>
+                          )}
+
+                          {providerConfig.missing.length > 0 && !existing && (
+                            <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                              {locale === "tr" ? "Eksik env" : "Missing env"}:{" "}
+                              <span className="font-mono">{providerConfig.missing.join(", ")}</span>
+                            </p>
+                          )}
+
+                          {existing?.lastError && (
+                            <p className="mt-3 text-xs leading-5 text-red-300">{existing.lastError}</p>
+                          )}
+
+                          {existing && !existing.seeded && (
+                            <div className="mt-4 space-y-3 border-t border-border pt-4 dark:border-neutral-700">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2"
+                                onClick={() => loadIntegrationResources(existing.id)}
+                                disabled={integrationSaving === `${existing.id}:resources`}
+                              >
+                                {integrationSaving === `${existing.id}:resources` ? (
+                                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="mr-2 size-3.5" />
+                                )}
+                                {locale === "tr" ? "Kaynakları getir" : "Load resources"}
+                              </Button>
+
+                              {provider === "github" && repositories.length > 0 && (
+                                <div className="grid gap-2">
+                                  <Label className="text-xs">
+                                    {locale === "tr" ? "Senkronize edilecek repo" : "Repository to sync"}
+                                  </Label>
+                                  <Select
+                                    value={existing.config.selectedRepository || ""}
+                                    onValueChange={(value) =>
+                                      saveIntegrationConfig(existing.id, { selectedRepository: value })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 text-xs">
+                                      <SelectValue
+                                        placeholder={locale === "tr" ? "Repo seç" : "Select repository"}
+                                      />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {repositories.map((repository) => (
+                                        <SelectItem key={repository.fullName} value={repository.fullName}>
+                                          {repository.fullName}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              {provider === "linear" && teams.length > 0 && (
+                                <div className="grid gap-2">
+                                  <Label className="text-xs">
+                                    {locale === "tr" ? "Linear takım" : "Linear team"}
+                                  </Label>
+                                  <Select
+                                    value={existing.config.selectedTeamId || ""}
+                                    onValueChange={(value) =>
+                                      saveIntegrationConfig(existing.id, {
+                                        selectedTeamId: value,
+                                        selectedProjectId: existing.config.selectedProjectId || null,
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 text-xs">
+                                      <SelectValue
+                                        placeholder={locale === "tr" ? "Takım seç" : "Select team"}
+                                      />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {teams.map((team) => (
+                                        <SelectItem key={team.id} value={team.id}>
+                                          {team.name} ({team.key})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              {provider === "linear" && projects.length > 0 && (
+                                <div className="grid gap-2">
+                                  <Label className="text-xs">
+                                    {locale === "tr" ? "Linear proje" : "Linear project"}
+                                  </Label>
+                                  <Select
+                                    value={existing.config.selectedProjectId || "all"}
+                                    onValueChange={(value) =>
+                                      saveIntegrationConfig(existing.id, {
+                                        selectedTeamId: existing.config.selectedTeamId || undefined,
+                                        selectedProjectId: value === "all" ? null : value,
+                                      })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="all">
+                                        {locale === "tr" ? "Tüm projeler" : "All projects"}
+                                      </SelectItem>
+                                      {projects.map((project) => (
+                                        <SelectItem key={project.id} value={project.id}>
+                                          {project.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
+
+                              {(existing.config.selectedRepository ||
+                                existing.config.selectedTeamName ||
+                                existing.config.selectedProjectName) && (
+                                <p className="text-xs text-muted-foreground">
+                                  {locale === "tr" ? "Seçili kaynak" : "Selected source"}:{" "}
+                                  {existing.config.selectedRepository ||
+                                    [existing.config.selectedTeamName, existing.config.selectedProjectName]
+                                      .filter(Boolean)
+                                      .join(" / ")}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-4 flex gap-2">
+                            {existing ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => syncIntegration(existing.id)}
+                                disabled={integrationSaving === existing.id}
+                              >
+                                {integrationSaving === existing.id ? (
+                                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="mr-2 size-3.5" />
+                                )}
+                                {locale === "tr" ? "Senkronize et" : "Sync"}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => connectIntegration(provider)}
+                                disabled={
+                                  !integrationConnectionEnabled ||
+                                  !providerConfig.configured ||
+                                  integrationSaving === provider
+                                }
+                              >
+                                {integrationSaving === provider ? (
+                                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                                ) : (
+                                  <ExternalLink className="mr-2 size-3.5" />
+                                )}
+                                {locale === "tr" ? "Bağla" : "Connect"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

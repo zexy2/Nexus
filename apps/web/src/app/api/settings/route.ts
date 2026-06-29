@@ -6,6 +6,7 @@ import { userSettings, users, workspaceRepositories } from "@nexus/database";
 import { eq } from "drizzle-orm";
 import { getAiProviderStatus, getAiUsageLimits, getAiUsageRemaining, isAdminEmail, isDemoEmail } from "@/lib/production-guardrails";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
+import { getIntegrationProviderConfig, listWorkspaceIntegrations } from "@/lib/integrations/impact-graph";
 
 const SERVER_MANAGED_MODEL = "gemini-2.5-flash";
 
@@ -45,6 +46,7 @@ export async function GET() {
     const repository = await db.query.workspaceRepositories.findFirst({
       where: eq(workspaceRepositories.workspaceId, workspace.id),
     });
+    const integrations = await listWorkspaceIntegrations(workspace.id);
 
     return NextResponse.json({
       // Profile
@@ -83,6 +85,14 @@ export async function GET() {
           name: repository.repositoryName,
           defaultBranch: repository.defaultBranch,
         } : null,
+      },
+      integrations: {
+        connectionEnabled: !isDemoEmail(email),
+        providers: {
+          github: getIntegrationProviderConfig("github"),
+          linear: getIntegrationProviderConfig("linear"),
+        },
+        items: integrations,
       },
       // Notifications
       notifications: {
