@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   DropdownMenu,
@@ -19,7 +18,6 @@ import {
   Trash2,
   RotateCcw,
   Clock,
-  Sparkles,
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
@@ -172,15 +170,6 @@ export default function ArchivePage() {
                       <Clock className="size-3" />
                       {formatRelativeTime(doc.updatedAt)}
                     </span>
-                    {doc.createdBy && (
-                      <Badge
-                        variant="secondary"
-                        className="text-xs gap-1 px-1.5"
-                      >
-                        <Sparkles className="size-3" />
-                        AI
-                      </Badge>
-                    )}
                   </div>
                 </CardContent>
               </Card>

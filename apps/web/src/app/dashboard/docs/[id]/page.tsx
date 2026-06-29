@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -549,13 +548,6 @@ export default function DocDetailPage() {
               </>
             ) : null}
           </div>
-
-          {doc.createdBy && (
-            <Badge variant="secondary" className="gap-1">
-              <Sparkles className="size-3" />
-              {t("docs.detail.aiGenerated")}
-            </Badge>
-          )}
 
           <Button variant="outline" size="sm" className="gap-1" onClick={handleShare}>
             <Share2 className="size-3" />
