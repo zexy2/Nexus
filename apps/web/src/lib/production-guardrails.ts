@@ -74,36 +74,36 @@ export function isDemoEmail(email?: string | null) {
 export function getAiUsageLimits(isAdmin = false, isDemo = false) {
   if (isAdmin) {
     return {
-      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
+      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
+      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
       userDaily: intEnv("AI_ADMIN_DAILY_LIMIT", 50),
       userMinute: intEnv("AI_ADMIN_PER_MINUTE_LIMIT", 4),
       workflowDaily: intEnv("AI_ADMIN_WORKFLOW_DAILY_LIMIT", 20),
       chatDaily: intEnv("AI_ADMIN_CHAT_DAILY_LIMIT", 100),
-      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 8),
+      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
     };
   }
 
   if (isDemo) {
     return {
-      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
-      userDaily: intEnv("AI_DEMO_DAILY_LIMIT", 12),
-      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 3),
-      workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", 4),
-      chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", 8),
-      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 5),
+      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
+      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
+      userDaily: intEnv("AI_DEMO_DAILY_LIMIT", 3),
+      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 1),
+      workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", 2),
+      chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", 1),
+      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
     };
   }
 
   return {
-    globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 40),
-    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 4),
-    userDaily: intEnv("AI_USER_DAILY_LIMIT", 6),
+    globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
+    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
+    userDaily: intEnv("AI_USER_DAILY_LIMIT", 5),
     userMinute: intEnv("AI_USER_PER_MINUTE_LIMIT", 1),
     workflowDaily: intEnv("AI_WORKFLOW_DAILY_LIMIT", 2),
-    chatDaily: intEnv("AI_CHAT_DAILY_LIMIT", intEnv("AI_CHAT_MESSAGES_PER_DAY", 4)),
-    maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 5),
+    chatDaily: intEnv("AI_CHAT_DAILY_LIMIT", intEnv("AI_CHAT_MESSAGES_PER_DAY", 3)),
+    maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
   };
 }
 
