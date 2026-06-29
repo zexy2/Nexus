@@ -316,6 +316,7 @@ class SyncEngine {
   private syncBackoff: number = 5000; // Start with 5 seconds
   private maxBackoff: number = 60000; // Max 1 minute
   private isSyncing: boolean = false;
+  private syncQueued: boolean = false;
 
   constructor(serverUrl: string) {
     this.localStore = new LocalStore();
@@ -363,7 +364,7 @@ class SyncEngine {
       const es = new EventSource(`${this.serverUrl}/api/sync/stream`);
       es.addEventListener("change", () => {
         // A doc/task changed in one of our workspaces — sync now.
-        this.sync();
+        void this.sync({ force: true });
       });
       es.onerror = () => {
         // Connection dropped (offline, restart, or unsupported). Close and let
@@ -387,13 +388,16 @@ class SyncEngine {
     return () => this.statusListeners.delete(listener);
   }
 
-  async sync(): Promise<void> {
+  async sync(options: { force?: boolean } = {}): Promise<void> {
     // Prevent concurrent syncs
-    if (this.isSyncing) return;
+    if (this.isSyncing) {
+      if (options.force) this.syncQueued = true;
+      return;
+    }
     
     // Check backoff timing
     const now = Date.now();
-    if (now - this.lastSyncAttempt < this.syncBackoff) {
+    if (!options.force && now - this.lastSyncAttempt < this.syncBackoff) {
       return;
     }
     
@@ -427,6 +431,10 @@ class SyncEngine {
       this.syncBackoff = Math.min(this.syncBackoff * 2, this.maxBackoff);
     } finally {
       this.isSyncing = false;
+      if (this.syncQueued) {
+        this.syncQueued = false;
+        void this.sync({ force: true });
+      }
     }
   }
 
@@ -517,7 +525,7 @@ class SyncEngine {
 
     // Try to sync immediately if online
     if (navigator.onLine) {
-      this.sync();
+      await this.sync({ force: true });
     }
   }
 
