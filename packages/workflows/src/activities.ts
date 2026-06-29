@@ -107,7 +107,18 @@ type PlanRequirementAnalysis = {
 };
 
 type PlanProposalAnalysis = {
-  action: "create_task" | "update_task" | "archive_task" | "relink_task";
+  action:
+    | "create_task"
+    | "update_task"
+    | "archive_task"
+    | "relink_task"
+    | "linear_create_issue"
+    | "linear_update_issue"
+    | "linear_comment"
+    | "github_issue_comment"
+    | "github_issue_update"
+    | "github_issue_label"
+    | "mark_agent_job_outdated";
   requirementStableKey?: string;
   taskId?: string;
   title: string;
@@ -115,6 +126,7 @@ type PlanProposalAnalysis = {
   priority?: "low" | "medium" | "high" | "urgent";
   rationale: string;
   confidence: number;
+  metadata?: Record<string, unknown>;
 };
 
 type PlanAnalysis = {
@@ -1172,12 +1184,121 @@ export async function persistPlanImpact(
         }
       }
 
+      await tx`
+        INSERT INTO requirement_external_links (
+          workspace_id, requirement_id, external_issue_id, confidence, source, created_by
+        )
+        SELECT DISTINCT
+          rtl.workspace_id,
+          rtl.requirement_id,
+          ei.id,
+          85,
+          ${"sync"},
+          ${analysis.userId}
+        FROM requirement_task_links rtl
+        INNER JOIN external_issues ei
+          ON ei.task_id = rtl.task_id
+          AND ei.workspace_id = rtl.workspace_id
+        INNER JOIN requirements r
+          ON r.id = rtl.requirement_id
+        WHERE rtl.workspace_id = ${analysis.workspaceId}
+          AND r.plan_version_id = ${proposedVersionId}
+        ON CONFLICT (requirement_id, external_issue_id) DO NOTHING
+      `;
+
+      const externalIssueLinks = await tx<Array<{
+        requirement_id: string;
+        stable_key: string;
+        change_type: string;
+        title: string;
+        provider: string;
+        integration_id: string | null;
+        external_id: string;
+        external_key: string | null;
+        external_title: string;
+      }>>`
+        SELECT
+          r.id AS requirement_id,
+          r.stable_key,
+          r.change_type,
+          r.title,
+          ei.provider,
+          ei.integration_id,
+          ei.external_id,
+          ei.external_key,
+          ei.title AS external_title
+        FROM requirement_external_links rel
+        INNER JOIN requirements r ON r.id = rel.requirement_id
+        INNER JOIN external_issues ei ON ei.id = rel.external_issue_id
+        WHERE r.workspace_id = ${analysis.workspaceId}
+          AND r.plan_version_id = ${proposedVersionId}
+          AND r.change_type IN ('added', 'modified', 'removed')
+          AND ei.provider IN ('linear', 'github')
+      `;
+
+      const localizedForTurkish = detectPlanOutputLanguage(`${analysis.title}\n${analysis.contentText}`) === "tr";
+      const externalProposals: PlanProposalAnalysis[] = [];
+      for (const link of externalIssueLinks) {
+        const operationTitle = localizedForTurkish
+          ? `${link.provider === "linear" ? "Linear" : "GitHub"} işine plan değişikliği yorumu ekle`
+          : `Add plan change comment to ${link.provider === "linear" ? "Linear" : "GitHub"} work`;
+        const operationRationale = localizedForTurkish
+          ? `${link.stable_key} gereksinimi ${link.change_type} olarak işaretlendi; bağlı dış işte iz bırakılmalı.`
+          : `${link.stable_key} was marked as ${link.change_type}; the linked external work needs an audit trail.`;
+        const body = localizedForTurkish
+          ? `Nexus plan etki analizi: ${link.stable_key} (${link.title}) gereksinimi ${link.change_type} olarak işaretlendi. Lütfen bağlı işi bu plan değişikliğine göre gözden geçirin.`
+          : `Nexus plan impact analysis: requirement ${link.stable_key} (${link.title}) was marked as ${link.change_type}. Please review this linked work against the plan change.`;
+
+        if (link.provider === "linear") {
+          externalProposals.push({
+            action: "linear_comment",
+            requirementStableKey: link.stable_key,
+            title: operationTitle,
+            description: body,
+            rationale: operationRationale,
+            confidence: 85,
+            metadata: {
+              externalProvider: "linear",
+              integrationId: link.integration_id,
+              payload: {
+                issueId: link.external_id,
+                body,
+              },
+            },
+          });
+        }
+
+        if (link.provider === "github") {
+          const issueNumber = Number((link.external_key || "").replace("#", ""));
+          if (Number.isInteger(issueNumber) && issueNumber > 0) {
+            externalProposals.push({
+              action: "github_issue_comment",
+              requirementStableKey: link.stable_key,
+              title: operationTitle,
+              description: body,
+              rationale: operationRationale,
+              confidence: 85,
+              metadata: {
+                externalProvider: "github",
+                integrationId: link.integration_id,
+                payload: {
+                  issueNumber,
+                  body,
+                },
+              },
+            });
+          }
+        }
+      }
+
+      const allProposals = [...analysis.proposals, ...externalProposals];
+
       const stats = {
         added: analysis.requirements.filter((item) => item.changeType === "added").length,
         modified: analysis.requirements.filter((item) => item.changeType === "modified").length,
         unchanged: analysis.requirements.filter((item) => item.changeType === "unchanged").length,
         removed: analysis.requirements.filter((item) => item.changeType === "removed").length,
-        proposals: analysis.proposals.length,
+        proposals: allProposals.length,
       };
 
       const changeSetRows = await tx<Array<{ id: string }>>`
@@ -1201,7 +1322,7 @@ export async function persistPlanImpact(
       const changeSetId = changeSetRows[0]?.id;
       if (!changeSetId) throw new Error("Change set insert failed");
 
-      for (const proposal of analysis.proposals) {
+      for (const proposal of allProposals) {
         await tx`
           INSERT INTO change_proposals (
             change_set_id, workspace_id, requirement_id, task_id, action,
@@ -1221,7 +1342,10 @@ export async function persistPlanImpact(
             ${proposal.rationale},
             ${proposal.confidence},
             ${"pending"},
-            ${JSON.stringify({ requirementStableKey: proposal.requirementStableKey })}::jsonb
+            ${JSON.stringify({
+              requirementStableKey: proposal.requirementStableKey,
+              ...(proposal.metadata || {}),
+            })}::jsonb
           )
         `;
 
@@ -1313,8 +1437,9 @@ export async function applyPlanChangeSet(
         description: string | null;
         priority: string | null;
         rationale: string;
+        metadata: Record<string, unknown> | null;
       }>>`
-        SELECT id, requirement_id, task_id, action, title, description, priority, rationale
+        SELECT id, requirement_id, task_id, action, title, description, priority, rationale, metadata
         FROM change_proposals
         WHERE change_set_id = ${changeSetId}
           AND status = 'pending'
@@ -1329,8 +1454,18 @@ export async function applyPlanChangeSet(
 
       const selected = selectedProposalIdSet;
       const createdTaskIds: string[] = [];
+      const externalActions = new Set([
+        "linear_create_issue",
+        "linear_update_issue",
+        "linear_comment",
+        "github_issue_comment",
+        "github_issue_update",
+        "github_issue_label",
+        "mark_agent_job_outdated",
+      ]);
       let applied = 0;
       let rejected = 0;
+      let externalQueued = 0;
 
       for (const proposal of proposals) {
         if (!selected.has(proposal.id)) {
@@ -1339,6 +1474,104 @@ export async function applyPlanChangeSet(
             WHERE id = ${proposal.id}
           `;
           rejected++;
+          continue;
+        }
+
+        if (externalActions.has(proposal.action)) {
+          const metadata = proposal.metadata || {};
+          const provider =
+            typeof metadata.externalProvider === "string"
+              ? metadata.externalProvider
+              : proposal.action.startsWith("github_")
+                ? "github"
+                : proposal.action.startsWith("linear_")
+                  ? "linear"
+                  : "agent";
+          const payload =
+            metadata.payload && typeof metadata.payload === "object"
+              ? metadata.payload
+              : {};
+
+          if (provider === "agent") {
+            await tx`
+              UPDATE agent_jobs
+              SET status = 'outdated', updated_at = now()
+              WHERE workspace_id = ${changeSet.workspace_id}
+                AND status IN ('queued', 'claimed', 'running', 'submitted')
+                AND task_id = ${proposal.task_id}
+            `;
+            await tx`
+              UPDATE change_proposals
+              SET status = 'applied', applied_at = now()
+              WHERE id = ${proposal.id}
+            `;
+            applied++;
+            continue;
+          }
+
+          const integrationRows = await tx<Array<{ id: string }>>`
+            SELECT id
+            FROM workspace_integrations
+            WHERE workspace_id = ${changeSet.workspace_id}
+              AND provider = ${provider}
+            ORDER BY updated_at DESC
+            LIMIT 1
+          `;
+          const integrationId =
+            typeof metadata.integrationId === "string"
+              ? metadata.integrationId
+              : integrationRows[0]?.id || null;
+          if (!integrationId) {
+            throw new Error(`No ${provider} integration is available for external proposal ${proposal.id}`);
+          }
+
+          await tx`
+            INSERT INTO external_write_operations (
+              workspace_id,
+              change_set_id,
+              change_proposal_id,
+              integration_id,
+              provider,
+              operation_type,
+              payload,
+              status,
+              idempotency_key,
+              created_by
+            )
+            VALUES (
+              ${changeSet.workspace_id},
+              ${changeSetId},
+              ${proposal.id},
+              ${integrationId},
+              ${provider},
+              ${proposal.action},
+              ${JSON.stringify(payload)}::jsonb,
+              ${"pending"},
+              ${`${changeSetId}:${proposal.id}:${proposal.action}`},
+              ${userId}
+            )
+            ON CONFLICT (idempotency_key) DO NOTHING
+          `;
+          await tx`
+            UPDATE change_proposals
+            SET status = 'pending_external'
+            WHERE id = ${proposal.id}
+          `;
+          await tx`
+            INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+            VALUES (
+              ${userId},
+              ${changeSet.workspace_id},
+              ${`plan.${proposal.action}.queued`},
+              ${"success"},
+              ${JSON.stringify({
+                changeSetId,
+                proposalId: proposal.id,
+                provider,
+              })}::jsonb
+            )
+          `;
+          externalQueued++;
           continue;
         }
 
@@ -1435,6 +1668,22 @@ export async function applyPlanChangeSet(
                 updated_at = now()
             WHERE id = ${taskId}
           `;
+          await tx`
+            INSERT INTO requirement_external_links (
+              workspace_id, requirement_id, external_issue_id, confidence, source, created_by
+            )
+            SELECT DISTINCT
+              ${changeSet.workspace_id},
+              ${proposal.requirement_id},
+              ei.id,
+              85,
+              ${"sync"},
+              ${userId}
+            FROM external_issues ei
+            WHERE ei.workspace_id = ${changeSet.workspace_id}
+              AND ei.task_id = ${taskId}
+            ON CONFLICT (requirement_id, external_issue_id) DO NOTHING
+          `;
         }
 
         await tx`
@@ -1471,7 +1720,12 @@ export async function applyPlanChangeSet(
         SET status = 'accepted'
         WHERE id = ${changeSet.proposed_version_id}
       `;
-      const finalChangeSetStatus = rejected > 0 ? "partially_applied" : "applied";
+      const finalChangeSetStatus =
+        externalQueued > 0
+          ? "external_pending"
+          : rejected > 0
+            ? "partially_applied"
+            : "applied";
 
       await tx`
         UPDATE change_sets
@@ -1492,6 +1746,7 @@ export async function applyPlanChangeSet(
                 changeSetId,
                 applied,
                 rejected,
+                externalQueued,
                 createdTaskIds,
                 status: finalChangeSetStatus,
               })}::jsonb

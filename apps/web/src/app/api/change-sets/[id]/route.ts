@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   changeProposals,
   changeSets,
   docs,
+  externalWriteOperations,
   requirements,
   tasks,
 } from "@nexus/database/schema";
@@ -57,6 +58,22 @@ export async function GET(
     .leftJoin(tasks, eq(tasks.id, changeProposals.taskId))
     .where(eq(changeProposals.changeSetId, id));
 
+  const proposalIds = proposals.map(({ proposal }) => proposal.id);
+  const operations = proposalIds.length > 0
+    ? await db.query.externalWriteOperations.findMany({
+        where: inArray(externalWriteOperations.changeProposalId, proposalIds),
+      })
+    : [];
+  const operationsByProposalId = new Map<string, typeof operations>();
+  for (const operation of operations) {
+    const proposalId = operation.changeProposalId;
+    if (!proposalId) continue;
+    operationsByProposalId.set(proposalId, [
+      ...(operationsByProposalId.get(proposalId) || []),
+      operation,
+    ]);
+  }
+
   return NextResponse.json({
     id: row.changeSet.id,
     docId: row.changeSet.docId,
@@ -84,6 +101,17 @@ export async function GET(
         rationale: proposal.rationale,
         confidence: proposal.confidence,
         status: proposal.status,
+        metadata: proposal.metadata,
+        externalOperations: (operationsByProposalId.get(proposal.id) || []).map((operation) => ({
+          id: operation.id,
+          provider: operation.provider,
+          operationType: operation.operationType,
+          status: operation.status,
+          error: operation.error,
+          response: operation.response,
+          attemptedAt: operation.attemptedAt?.toISOString() || null,
+          completedAt: operation.completedAt?.toISOString() || null,
+        })),
         requirement: proposal.requirementId
           ? {
               id: proposal.requirementId,

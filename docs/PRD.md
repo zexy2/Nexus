@@ -10,6 +10,8 @@ The product is not "AI generates a document and a task list." That is easy to re
 
 Nexus stores the plan, extracts stable requirements, links them to delivery tasks, detects what changed, proposes work updates, and applies only the changes approved by the user.
 
+The next SaaS wedge is GitHub + Linear impact review: when a plan changes, Nexus should show affected requirements, Linear issues, GitHub PRs, test/check evidence, and coding-agent jobs before any external system is updated.
+
 ## 2. Target Audience
 
 Primary reviewers:
@@ -73,6 +75,10 @@ It is:
 | Requirement-task link | Relationship between scope and delivery work.                   |
 | Change set            | Impact analysis result for a plan change.                       |
 | Change proposal       | Suggested task/link/archive action awaiting approval.           |
+| Workspace integration | GitHub/Linear connection metadata and sync status.               |
+| External issue        | Synced Linear/GitHub issue representation.                       |
+| External PR/check     | Synced GitHub pull request and CI evidence.                      |
+| Impact graph edge     | Relationship between plan, requirement, issue, PR, check, job.   |
 | Workflow run          | Durable execution record with status, steps, output, and error. |
 | Audit log             | Record of critical user/system actions.                         |
 
@@ -160,6 +166,18 @@ It is:
 | AU-03 | Demo passwords are never bundled into client JavaScript. | P0       |
 | AU-04 | Optional demo access code can limit casual public usage. | P1       |
 
+### 8.7 GitHub / Linear Impact Graph
+
+| ID    | Requirement                                                                 | Priority |
+| ----- | --------------------------------------------------------------------------- | -------- |
+| IG-01 | Workspaces can store GitHub and Linear integration metadata and sync status. | P0       |
+| IG-02 | Demo workspaces show isolated seeded external issues, PRs, and checks.      | P0       |
+| IG-03 | The plan detail view shows requirement-to-issue/PR/check evidence.          | P0       |
+| IG-04 | Demo users cannot connect real GitHub or Linear accounts.                   | P0       |
+| IG-05 | Missing provider config returns explicit unavailable/not-implemented states. | P0       |
+| IG-06 | Webhook endpoints verify signatures before accepting events.                | P0       |
+| IG-07 | Approved future proposals may update Linear/GitHub only after user review.  | P1       |
+
 ## 9. Non-Functional Requirements
 
 | Area          | Requirement                                                                  |
@@ -182,8 +200,9 @@ The demo is acceptable for a CV link when:
 5. The reviewer can approve proposals and see tasks appear on Kanban.
 6. Editing the plan and running impact review produces a new change set.
 7. Workflow history shows the relevant run statuses and steps.
-8. `/api/health` reports healthy database, Temporal, worker heartbeat, and configured AI provider.
-9. Quota and unavailable states are clear instead of silent failures.
+8. The plan detail view shows the impact graph with seeded external issue/PR/check evidence.
+9. `/api/health` reports healthy database, Temporal, worker heartbeat, AI provider, and integration configuration state.
+10. Quota and unavailable states are clear instead of silent failures.
 
 ## 11. Known Constraints
 
@@ -193,12 +212,15 @@ The demo is acceptable for a CV link when:
 - OpenAI embeddings and Tavily search are optional.
 - Production Zero cache is deferred; API-backed sync and offline queue behavior are used in v1.
 - Oracle/VPS deployment requires cloud ingress, HTTPS, and provider secrets before the public demo is fully ready.
+- GitHub/Linear is now a safe vertical slice with real GitHub App / Linear OAuth callbacks, provider sync adapters, seeded demo data, impact graph APIs, settings configuration, signed webhook event recording, and queued external write operations.
 
 ## 12. Future Options
 
 Potential next steps after the core demo is stable:
 
-- GitHub Issues or Linear export/import.
+- Targeted webhook-driven incremental sync workers.
+- Broader external write coverage beyond approved issue comments/issue updates.
+- Approved external proposal execution for issue comments, labels, and descriptions.
 - Provider selection and BYOK for advanced/admin users.
 - Better requirement matching with embeddings.
 - Commenting and review discussions on change proposals.

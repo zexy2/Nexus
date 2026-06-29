@@ -637,6 +637,328 @@ export const agentJobSubmissions = pgTable(
 );
 
 // ==========================================
+// INTEGRATION CHANGE-CONTROL GRAPH
+// ==========================================
+
+export const workspaceIntegrations = pgTable(
+  "workspace_integrations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    status: varchar("status", { length: 40 }).notNull().default("not_configured"),
+    externalAccountId: varchar("external_account_id", { length: 255 }),
+    externalAccountName: varchar("external_account_name", { length: 255 }),
+    installationId: varchar("installation_id", { length: 255 }),
+    tokenCiphertext: text("token_ciphertext"),
+    scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("workspace_integrations_workspace_provider_idx").on(
+      table.workspaceId,
+      table.provider
+    ),
+    index("workspace_integrations_workspace_idx").on(table.workspaceId),
+    index("workspace_integrations_status_idx").on(table.status),
+  ]
+);
+
+export const externalIssues = pgTable(
+  "external_issues",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    integrationId: uuid("integration_id")
+      .references(() => workspaceIntegrations.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").references(() => tasks.id, { onDelete: "set null" }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    externalId: varchar("external_id", { length: 255 }).notNull(),
+    externalKey: varchar("external_key", { length: 120 }),
+    title: varchar("title", { length: 500 }).notNull(),
+    description: text("description"),
+    status: varchar("status", { length: 120 }).notNull(),
+    priority: varchar("priority", { length: 40 }),
+    url: text("url"),
+    teamName: varchar("team_name", { length: 255 }),
+    projectName: varchar("project_name", { length: 255 }),
+    labels: jsonb("labels").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("external_issues_workspace_provider_external_idx").on(
+      table.workspaceId,
+      table.provider,
+      table.externalId
+    ),
+    index("external_issues_workspace_idx").on(table.workspaceId),
+    index("external_issues_task_idx").on(table.taskId),
+    index("external_issues_status_idx").on(table.status),
+  ]
+);
+
+export const externalPullRequests = pgTable(
+  "external_pull_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    integrationId: uuid("integration_id")
+      .references(() => workspaceIntegrations.id, { onDelete: "cascade" }),
+    repositoryId: uuid("repository_id").references(() => workspaceRepositories.id, {
+      onDelete: "set null",
+    }),
+    externalId: varchar("external_id", { length: 255 }).notNull(),
+    number: integer("number").notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
+    status: varchar("status", { length: 80 }).notNull(),
+    url: text("url"),
+    branch: varchar("branch", { length: 255 }),
+    baseBranch: varchar("base_branch", { length: 255 }),
+    latestCommitSha: varchar("latest_commit_sha", { length: 64 }),
+    linkedExternalIssueIds: jsonb("linked_external_issue_ids").$type<string[]>().notNull().default([]),
+    changedFiles: jsonb("changed_files").$type<string[]>().notNull().default([]),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("external_prs_workspace_external_idx").on(
+      table.workspaceId,
+      table.externalId
+    ),
+    index("external_prs_workspace_idx").on(table.workspaceId),
+    index("external_prs_repository_idx").on(table.repositoryId),
+    index("external_prs_status_idx").on(table.status),
+  ]
+);
+
+export const externalCheckRuns = pgTable(
+  "external_check_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    pullRequestId: uuid("pull_request_id")
+      .notNull()
+      .references(() => externalPullRequests.id, { onDelete: "cascade" }),
+    externalId: varchar("external_id", { length: 255 }),
+    name: varchar("name", { length: 255 }).notNull(),
+    status: varchar("status", { length: 80 }).notNull(),
+    conclusion: varchar("conclusion", { length: 80 }),
+    url: text("url"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("external_check_runs_workspace_idx").on(table.workspaceId),
+    index("external_check_runs_pr_idx").on(table.pullRequestId),
+    index("external_check_runs_status_idx").on(table.status),
+  ]
+);
+
+export const requirementExternalLinks = pgTable(
+  "requirement_external_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    requirementId: uuid("requirement_id")
+      .notNull()
+      .references(() => requirements.id, { onDelete: "cascade" }),
+    externalIssueId: uuid("external_issue_id")
+      .notNull()
+      .references(() => externalIssues.id, { onDelete: "cascade" }),
+    confidence: integer("confidence").notNull().default(80),
+    source: varchar("source", { length: 40 }).notNull().default("seed"),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("requirement_external_links_unique_idx").on(
+      table.requirementId,
+      table.externalIssueId
+    ),
+    index("requirement_external_links_workspace_idx").on(table.workspaceId),
+    index("requirement_external_links_requirement_idx").on(table.requirementId),
+    index("requirement_external_links_issue_idx").on(table.externalIssueId),
+  ]
+);
+
+export const impactGraphEdges = pgTable(
+  "impact_graph_edges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    docId: uuid("doc_id").references(() => docs.id, { onDelete: "cascade" }),
+    sourceType: varchar("source_type", { length: 60 }).notNull(),
+    sourceId: varchar("source_id", { length: 255 }).notNull(),
+    targetType: varchar("target_type", { length: 60 }).notNull(),
+    targetId: varchar("target_id", { length: 255 }).notNull(),
+    edgeType: varchar("edge_type", { length: 60 }).notNull(),
+    confidence: integer("confidence").notNull().default(100),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("impact_graph_edges_workspace_idx").on(table.workspaceId),
+    index("impact_graph_edges_doc_idx").on(table.docId),
+    index("impact_graph_edges_source_idx").on(table.sourceType, table.sourceId),
+    index("impact_graph_edges_target_idx").on(table.targetType, table.targetId),
+  ]
+);
+
+export const integrationSyncRuns = pgTable(
+  "integration_sync_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    integrationId: uuid("integration_id").references(() => workspaceIntegrations.id, {
+      onDelete: "set null",
+    }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    status: varchar("status", { length: 40 }).notNull().default("running"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    error: text("error"),
+    stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  },
+  (table) => [
+    index("integration_sync_runs_workspace_idx").on(table.workspaceId),
+    index("integration_sync_runs_integration_idx").on(table.integrationId),
+    index("integration_sync_runs_provider_status_idx").on(table.provider, table.status),
+  ]
+);
+
+export const integrationConnectStates = pgTable(
+  "integration_connect_states",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    stateHash: varchar("state_hash", { length: 128 }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("integration_connect_states_hash_idx").on(table.stateHash),
+    index("integration_connect_states_workspace_idx").on(table.workspaceId),
+    index("integration_connect_states_provider_idx").on(table.provider),
+    index("integration_connect_states_expiry_idx").on(table.expiresAt),
+  ]
+);
+
+export const integrationWebhookEvents = pgTable(
+  "integration_webhook_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    integrationId: uuid("integration_id").references(() => workspaceIntegrations.id, {
+      onDelete: "set null",
+    }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    deliveryId: varchar("delivery_id", { length: 255 }).notNull(),
+    eventType: varchar("event_type", { length: 120 }).notNull(),
+    status: varchar("status", { length: 40 }).notNull().default("queued"),
+    rawMetadataHash: varchar("raw_metadata_hash", { length: 128 }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("integration_webhook_events_delivery_idx").on(
+      table.provider,
+      table.deliveryId
+    ),
+    index("integration_webhook_events_workspace_idx").on(table.workspaceId),
+    index("integration_webhook_events_integration_idx").on(table.integrationId),
+    index("integration_webhook_events_status_idx").on(table.status),
+  ]
+);
+
+export const externalWriteOperations = pgTable(
+  "external_write_operations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    changeSetId: uuid("change_set_id").references(() => changeSets.id, {
+      onDelete: "cascade",
+    }),
+    changeProposalId: uuid("change_proposal_id").references(() => changeProposals.id, {
+      onDelete: "cascade",
+    }),
+    integrationId: uuid("integration_id").references(() => workspaceIntegrations.id, {
+      onDelete: "set null",
+    }),
+    provider: varchar("provider", { length: 30 }).notNull(),
+    operationType: varchar("operation_type", { length: 80 }).notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: varchar("status", { length: 40 }).notNull().default("pending"),
+    response: jsonb("response").$type<Record<string, unknown>>(),
+    error: text("error"),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("external_write_operations_idempotency_idx").on(table.idempotencyKey),
+    index("external_write_operations_workspace_idx").on(table.workspaceId),
+    index("external_write_operations_change_set_idx").on(table.changeSetId),
+    index("external_write_operations_proposal_idx").on(table.changeProposalId),
+    index("external_write_operations_status_idx").on(table.status),
+  ]
+);
+
+// ==========================================
 // VECTORS (Embeddings - pgvector)
 // ==========================================
 

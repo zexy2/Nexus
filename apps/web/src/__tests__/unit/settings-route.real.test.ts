@@ -14,6 +14,7 @@ vi.mock("@/lib/api-middleware", () => ({
 const userSettingsFindFirst = vi.fn();
 const usersFindFirst = vi.fn();
 const repositoriesFindFirst = vi.fn();
+const workspaceIntegrationsFindMany = vi.fn();
 const insertReturning = vi.fn();
 const insertValues = vi.fn(() => ({ returning: insertReturning }));
 const updateWhere = vi.fn();
@@ -25,6 +26,7 @@ vi.mock("@/lib/db", () => ({
       userSettings: { findFirst: (...a: unknown[]) => userSettingsFindFirst(...a) },
       users: { findFirst: (...a: unknown[]) => usersFindFirst(...a) },
       workspaceRepositories: { findFirst: (...a: unknown[]) => repositoriesFindFirst(...a) },
+      workspaceIntegrations: { findMany: (...a: unknown[]) => workspaceIntegrationsFindMany(...a) },
     },
     insert: () => ({ values: (...a: unknown[]) => insertValues(...a) }),
     update: () => ({ set: (...a: unknown[]) => updateSet(...a) }),
@@ -90,6 +92,7 @@ beforeEach(() => {
   isDemoEmail.mockReturnValue(false);
   ensureDefaultWorkspace.mockResolvedValue({ id: "ws-1", ownerId: "user-1", name: "Workspace" });
   repositoriesFindFirst.mockResolvedValue(null);
+  workspaceIntegrationsFindMany.mockResolvedValue([]);
 });
 
 describe("GET /api/settings (real handler)", () => {
@@ -116,6 +119,10 @@ describe("GET /api/settings (real handler)", () => {
     expect(body.notifications.emailNotifications).toBe(true);
     expect(body.appearance.theme).toBe("system");
     expect(body.sync.offlineMode).toBe(true);
+    expect(body.integrations).toMatchObject({
+      connectionEnabled: true,
+      items: [],
+    });
   });
 
   it("uses existing settings without creating new ones", async () => {

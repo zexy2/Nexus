@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { workerHeartbeats } from "@nexus/database/schema";
 import { desc, sql } from "drizzle-orm";
 import { getAiProviderStatus } from "@/lib/production-guardrails";
+import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 
 // GET - Health check endpoint
 export async function GET() {
@@ -40,6 +41,8 @@ export async function GET() {
     }
 
     const ai = getAiProviderStatus();
+    const githubIntegration = getIntegrationProviderConfig("github");
+    const linearIntegration = getIntegrationProviderConfig("linear");
     const collaborationHealthUrl =
       process.env.COLLABORATION_HEALTH_URL || "http://localhost:1234";
     let collaborationStatus: "healthy" | "unavailable" = "unavailable";
@@ -142,6 +145,20 @@ export async function GET() {
           geminiAvailable: ai.geminiAvailable,
           openaiAvailable: ai.openaiAvailable,
           tavilyAvailable: ai.tavilyAvailable,
+        },
+        integrations: {
+          status:
+            githubIntegration.configured || linearIntegration.configured
+              ? "partially_configured"
+              : "not_configured",
+          github: {
+            configured: githubIntegration.configured,
+            missing: githubIntegration.missing,
+          },
+          linear: {
+            configured: linearIntegration.configured,
+            missing: linearIntegration.missing,
+          },
         },
       },
       uptime: process.uptime(),
