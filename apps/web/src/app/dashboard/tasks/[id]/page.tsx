@@ -490,7 +490,7 @@ export default function TaskDetailPage() {
                   <SelectContent>
                     <SelectItem value="todo">{t("tasks.colTodo")}</SelectItem>
                     <SelectItem value="in_progress">{t("tasks.colInProgress")}</SelectItem>
-                    {status === "in_review" && <SelectItem value="in_review">{t("tasks.colInReview")}</SelectItem>}
+                    <SelectItem value="in_review">{t("tasks.colInReview")}</SelectItem>
                     <SelectItem value="done">{t("tasks.colDone")}</SelectItem>
                   </SelectContent>
                 </Select>

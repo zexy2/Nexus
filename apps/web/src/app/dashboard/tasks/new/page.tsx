@@ -43,6 +43,7 @@ export default function NewTaskPage() {
   const statusOptions: Array<{ value: TaskStatus; label: string }> = [
     { value: "todo", label: t("tasks.colTodo") },
     { value: "in_progress", label: t("tasks.colInProgress") },
+    { value: "in_review", label: t("tasks.colInReview") },
     { value: "done", label: t("tasks.colDone") },
   ];
 

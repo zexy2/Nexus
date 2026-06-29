@@ -158,9 +158,6 @@ async function authorizeMutation(
 
   const accessibleWorkspaceIds = await getAccessibleWorkspaceIds(userId);
 
-  if (table === "tasks" && data.status === "in_review") {
-    return { allowed: false, status: 409, reason: "Only a coding-agent submission can move a task into review" };
-  }
   if (table === "tasks" && operation === "update" && data.status === "done" && typeof data.id === "string") {
     const pendingReview = await db.query.agentJobs.findFirst({
       where: and(

@@ -173,12 +173,6 @@ export async function PATCH(
           { status: 400 }
         );
       }
-      if (status === "in_review") {
-        return Response.json(
-          { error: "AGENT_SUBMISSION_REQUIRED", message: "Only a coding-agent submission can move a task into review." },
-          { status: 409 }
-        );
-      }
       if (status === "done") {
         const pendingAgentReview = await db.query.agentJobs.findFirst({
           where: and(

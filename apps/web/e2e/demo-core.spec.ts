@@ -59,7 +59,7 @@ test.describe("cost-free public demo core", () => {
     await expect(page.getByRole("link", { name: title })).toBeVisible();
   });
 
-  test("a task can move from Todo to Done and persists on the server", async ({ page }) => {
+  test("a task can move through Review and Done and persists on the server", async ({ page }) => {
     await enterPublicDemo(page);
 
     const title = `E2E Task ${Date.now()}`;
@@ -77,11 +77,24 @@ test.describe("cost-free public demo core", () => {
     await page.goto("/dashboard/tasks");
 
     const card = page.locator(`[data-testid="kanban-task-card"][data-task-id="${task.id}"]`);
+    const reviewColumn = page.getByTestId("kanban-column-in_review");
     const doneColumn = page.getByTestId("kanban-column-done");
     await expect(card).toBeVisible();
+    await expect(reviewColumn).toBeVisible();
     await expect(doneColumn).toBeVisible();
 
-    await dragWithPointer(page, card, doneColumn);
+    await dragWithPointer(page, card, reviewColumn);
+    await expect(reviewColumn.locator(`[data-task-id="${task.id}"]`)).toBeVisible();
+
+    await expect.poll(async () => {
+      const response = await page.request.get("/api/tasks");
+      if (!response.ok()) return "request-failed";
+      const tasks = await response.json() as Array<{ id: string; status: string }>;
+      return tasks.find((item) => item.id === task.id)?.status;
+    }).toBe("in_review");
+
+    const reviewCard = reviewColumn.locator(`[data-testid="kanban-task-card"][data-task-id="${task.id}"]`);
+    await dragWithPointer(page, reviewCard, doneColumn);
     await expect(doneColumn.locator(`[data-task-id="${task.id}"]`)).toBeVisible();
 
     await expect.poll(async () => {

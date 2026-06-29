@@ -173,10 +173,10 @@ function getDragTargetStatus(overId: string | number | null | undefined, taskLis
 
   const id = String(overId);
   const overTask = taskList.find((task) => task.id === id);
-  if (overTask) return overTask.status === "in_review" ? null : overTask.status;
+  if (overTask) return overTask.status;
 
   const column = columns.find((item) => item.id === id)?.id ?? null;
-  return column === "in_review" ? null : column;
+  return column;
 }
 
 // Priority config
@@ -463,7 +463,6 @@ function KanbanColumn({
   // Add droppable to enable dropping tasks on the column itself
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
-    disabled: column.id === "in_review",
   });
 
   const colorClasses = {
@@ -725,7 +724,6 @@ export default function TasksPage() {
 
     const activeTask = tasks.find((t) => t.id === active.id);
     if (!activeTask) return;
-    if (activeTask.status === "in_review") return;
 
     const targetStatus = getDragTargetStatus(over.id, tasks);
     dragTargetStatusRef.current = targetStatus;
@@ -745,11 +743,6 @@ export default function TasksPage() {
     const { active, over } = event;
 
     const movedTask = tasks.find((task) => task.id === active.id);
-    if (movedTask?.status === "in_review") {
-      activeIdRef.current = null;
-      dragTargetStatusRef.current = null;
-      return;
-    }
     const targetStatus =
       getDragTargetStatus(over?.id, tasks) ||
       dragTargetStatusRef.current ||
@@ -781,8 +774,7 @@ export default function TasksPage() {
         return newTasks;
       });
 
-      // Local-first: persist the new status to the local store and queue the sync.
-      if (engine) {
+      if (engine && typeof navigator !== "undefined" && !navigator.onLine) {
         const existing = await engine.get<SyncTask>("tasks", movedTask.id);
         if (existing) {
           await engine.mutate<SyncTask>("tasks", "update", {
@@ -790,7 +782,7 @@ export default function TasksPage() {
             status: targetStatus,
             updatedAt: Date.now(),
           });
-          showToast.success(t('tasks.toastMoved'));
+          showToast.info(t('tasks.toastMoveQueued'));
           return;
         }
       }
@@ -802,6 +794,16 @@ export default function TasksPage() {
       });
 
       if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
+      if (engine) {
+        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
+        if (existing) {
+          await engine.mutate<SyncTask>("tasks", "update", {
+            ...existing,
+            status: targetStatus,
+            updatedAt: Date.now(),
+          });
+        }
+      }
       showToast.success(t('tasks.toastMoved'));
     } catch (error) {
       console.error("Failed to persist task move:", error);
@@ -1237,6 +1239,7 @@ export default function TasksPage() {
                   <SelectContent>
                     <SelectItem value="todo">{t('tasks.colTodo')}</SelectItem>
                     <SelectItem value="in_progress">{t('tasks.colInProgress')}</SelectItem>
+                    <SelectItem value="in_review">{t('tasks.colInReview')}</SelectItem>
                     <SelectItem value="done">{t('tasks.colDone')}</SelectItem>
                   </SelectContent>
                 </Select>
