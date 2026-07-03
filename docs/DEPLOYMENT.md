@@ -25,20 +25,21 @@ DEMO_MAX_ACTIVE_SESSIONS=25
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
+REQUIRE_INTEGRATIONS_HEALTH=true
 AI_ENABLED=true
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 TAVILY_API_KEY=
-AI_GLOBAL_DAILY_LIMIT=40
+AI_GLOBAL_DAILY_LIMIT=25
 AI_GLOBAL_PER_MINUTE_LIMIT=2
-AI_USER_DAILY_LIMIT=6
+AI_USER_DAILY_LIMIT=5
 AI_USER_PER_MINUTE_LIMIT=1
 AI_WORKFLOW_DAILY_LIMIT=2
-AI_CHAT_DAILY_LIMIT=4
-AI_DEMO_DAILY_LIMIT=12
+AI_CHAT_DAILY_LIMIT=3
+AI_DEMO_DAILY_LIMIT=3
 AI_DEMO_PER_MINUTE_LIMIT=1
-AI_DEMO_WORKFLOW_DAILY_LIMIT=4
-AI_DEMO_CHAT_DAILY_LIMIT=8
+AI_DEMO_WORKFLOW_DAILY_LIMIT=2
+AI_DEMO_CHAT_DAILY_LIMIT=1
 AI_MAX_STEPS_PER_WORKFLOW=5
 ```
 
@@ -53,6 +54,7 @@ Each public demo login gets its own temporary user and workspace. `DEMO_SESSION_
 ## Start
 
 ```bash
+export APP_COMMIT_SHA="$(git rev-parse HEAD)"
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
@@ -113,6 +115,7 @@ Expected:
 - `pnpm smoke:prod` starts and completes one real AI document workflow.
 - `pnpm smoke:prod` starts and completes one real task breakdown workflow from the generated document and verifies at least one task.
 - `pnpm smoke:prod` starts one Living Plan impact workflow, waits for a pending change set, applies selected proposals, and verifies the change set resolves as `applied` or `partially_applied`.
+- `/api/health` reports the deployed `commitSha` and warns when an external write remains non-terminal for more than five minutes.
 - For quota verification, temporarily set `AI_USER_DAILY_LIMIT=1`, restart web, and confirm the second AI request returns `429`.
 
 Retention note: `rate_limit_buckets` and `audit_logs` are intentionally simple for the portfolio demo. Before long-running public usage, add a scheduled cleanup for expired buckets and old audit rows.

@@ -54,6 +54,20 @@ const {
   },
 });
 
+const {
+  executeExternalWriteOperation,
+  finalizeExternalWriteOperations,
+} = proxyActivities<typeof activities>({
+  startToCloseTimeout: "90 seconds",
+  retry: {
+    initialInterval: "5 seconds",
+    backoffCoefficient: 2,
+    maximumAttempts: 5,
+    maximumInterval: "2 minutes",
+    nonRetryableErrorTypes: ["ExternalWriteTerminalError"],
+  },
+});
+
 export const resolvePlanChangeSignal =
   defineSignal<[PlanChangeDecision]>("resolvePlanChange");
 
@@ -361,6 +375,19 @@ export async function planImpactWorkflow(
     decision.userId
   );
 
+  for (const operationId of applied.externalOperationIds) {
+    try {
+      await executeExternalWriteOperation(operationId);
+    } catch {
+      // The activity persists its terminal state. Continue so one provider
+      // failure cannot hide successful internal or external operations.
+    }
+  }
+
+  const external = applied.externalOperationIds.length > 0
+    ? await finalizeExternalWriteOperations(persisted.changeSetId, decision.userId)
+    : null;
+
   return {
     changeSetId: persisted.changeSetId,
     docId: input.docId,
@@ -368,9 +395,23 @@ export async function planImpactWorkflow(
     decision: "applied",
     summary: persisted.summary,
     stats: persisted.stats,
-    applied,
+    applied: { ...applied, external },
     steps: persisted.steps,
   };
+}
+
+export async function externalWriteRetryWorkflow(input: {
+  operationId: string;
+  changeSetId: string;
+  userId: string;
+}) {
+  try {
+    await executeExternalWriteOperation(input.operationId);
+  } catch {
+    // The activity persisted the provider failure. Finalize the parent change
+    // set so the UI always reaches a truthful terminal state.
+  }
+  return finalizeExternalWriteOperations(input.changeSetId, input.userId);
 }
 
 /**

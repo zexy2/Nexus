@@ -125,6 +125,13 @@ export type ImpactGraphResult = {
     missingCoverage: number;
     orphanedExternalWork: number;
   };
+  diagnostics: Array<
+    | "NO_INTEGRATION"
+    | "NO_SYNCED_ISSUES"
+    | "NO_REQUIREMENT_MATCHES"
+    | "NO_LINKED_PRS"
+    | "NO_CHECK_RUNS"
+  >;
   requirements: ImpactGraphRequirement[];
   orphanedExternalIssues: Array<{
     id: string;
@@ -564,6 +571,18 @@ export async function buildImpactGraph(workspaceId: string, docId: string): Prom
   const missingCoverage = requirementSummaries.filter(
     (requirement) => requirement.taskCount === 0 && requirement.externalIssues.length === 0
   ).length;
+  const diagnostics: ImpactGraphResult["diagnostics"] = [];
+  if (integrations.length === 0) {
+    diagnostics.push("NO_INTEGRATION");
+  } else if (allExternalIssues.length === 0) {
+    diagnostics.push("NO_SYNCED_ISSUES");
+  } else if (relevantIssues.length === 0) {
+    diagnostics.push("NO_REQUIREMENT_MATCHES");
+  } else if (relevantPullRequests.length === 0) {
+    diagnostics.push("NO_LINKED_PRS");
+  } else if (relevantChecks.length === 0) {
+    diagnostics.push("NO_CHECK_RUNS");
+  }
 
   return {
     docId,
@@ -575,6 +594,7 @@ export async function buildImpactGraph(workspaceId: string, docId: string): Prom
         }
       : null,
     integrations,
+    diagnostics,
     summary: {
       requirements: activeRequirements.length,
       externalIssues: relevantIssues.length,

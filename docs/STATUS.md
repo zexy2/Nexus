@@ -20,6 +20,9 @@
 | Collaboration         | Implemented                     | Yjs updates and snapshots persist through a custom WebSocket service.|
 | Embeddings/RAG        | Optional                        | pgvector when configured; scoped keyword fallback otherwise.         |
 | Coding-agent handoff  | Implemented                     | MCP brief, PR/test evidence, stale-context guard, human review.       |
+| GitHub integration    | Implemented with env dependency | GitHub App sync, impact links, approved writes, webhook refresh.     |
+| Linear integration    | Implemented with env dependency | OAuth, team/project sync, approved writes; credentials required.     |
+| External writes       | Implemented                     | Temporal retries approved writes and records terminal outcomes.      |
 | Zero production cache | Deferred                        | v1 uses API-backed sync/offline queue behavior.                      |
 
 ## Demo Readiness

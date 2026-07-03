@@ -61,10 +61,20 @@ export async function POST(
       { status: 202 }
     );
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Workflow engine is unavailable";
+    if (/already completed|not found|closed/i.test(message)) {
+      return NextResponse.json(
+        {
+          error: "CHANGE_SET_ALREADY_RESOLVED",
+          message: "This plan version has already been resolved.",
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       {
         error: "TEMPORAL_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "Workflow engine is unavailable",
+        message,
       },
       { status: 503 }
     );

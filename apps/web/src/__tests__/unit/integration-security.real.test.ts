@@ -7,6 +7,11 @@ const dbMock = vi.hoisted(() => ({
   insert: vi.fn(),
   values: vi.fn(),
   onConflictDoNothing: vi.fn(),
+  returning: vi.fn(),
+  update: vi.fn(),
+  set: vi.fn(),
+  where: vi.fn(),
+  syncIntegration: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -17,7 +22,12 @@ vi.mock("@/lib/db", () => ({
       },
     },
     insert: (...args: unknown[]) => dbMock.insert(...args),
+    update: (...args: unknown[]) => dbMock.update(...args),
   },
+}));
+
+vi.mock("@/lib/integrations/sync", () => ({
+  syncIntegrationById: (...args: unknown[]) => dbMock.syncIntegration(...args),
 }));
 
 import {
@@ -49,9 +59,14 @@ beforeEach(() => {
   delete process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY;
 
   dbMock.findIntegration.mockResolvedValue({ id: "integration-1", workspaceId: "workspace-1" });
-  dbMock.onConflictDoNothing.mockResolvedValue(undefined);
+  dbMock.syncIntegration.mockResolvedValue({ status: "completed" });
+  dbMock.returning.mockResolvedValue([{ id: "event-1" }]);
+  dbMock.onConflictDoNothing.mockReturnValue({ returning: dbMock.returning });
   dbMock.values.mockReturnValue({ onConflictDoNothing: dbMock.onConflictDoNothing });
   dbMock.insert.mockReturnValue({ values: dbMock.values });
+  dbMock.where.mockResolvedValue(undefined);
+  dbMock.set.mockReturnValue({ where: dbMock.where });
+  dbMock.update.mockReturnValue({ set: dbMock.set });
 });
 
 afterEach(() => {
@@ -119,7 +134,7 @@ describe("GitHub webhook security", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "queued" });
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "github",
@@ -132,6 +147,7 @@ describe("GitHub webhook security", () => {
       })
     );
     expect(JSON.stringify(dbMock.values.mock.calls[0]?.[0])).not.toContain(body);
+    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
   });
 });
 
@@ -178,7 +194,7 @@ describe("Linear webhook security", () => {
     );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "queued" });
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "linear",
@@ -195,5 +211,6 @@ describe("Linear webhook security", () => {
         }),
       })
     );
+    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
   });
 });

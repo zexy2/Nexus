@@ -109,6 +109,7 @@ export async function GET(
           status: operation.status,
           error: operation.error,
           response: operation.response,
+          attemptCount: operation.attemptCount,
           attemptedAt: operation.attemptedAt?.toISOString() || null,
           completedAt: operation.completedAt?.toISOString() || null,
         })),

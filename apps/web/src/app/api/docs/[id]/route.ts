@@ -101,6 +101,7 @@ export async function GET(
       iconEmoji: doc.iconEmoji,
       content: doc.content || [],
       createdBy: doc.createdBy,
+      isAiGenerated: doc.isAiGenerated === 1,
       updatedAt: doc.updatedAt.toISOString(),
     });
   } catch (error) {

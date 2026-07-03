@@ -58,6 +58,7 @@ type ChangeProposal = {
     operationType: string;
     status: string;
     error: string | null;
+    attemptCount: number;
     attemptedAt: string | null;
     completedAt: string | null;
   }>;
@@ -86,6 +87,7 @@ const statusStyles: Record<string, string> = {
   failed_retryable: "border-red-400/30 bg-red-400/10 text-red-200",
   failed_terminal: "border-red-400/30 bg-red-400/10 text-red-200",
   partially_applied: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+  external_failed: "border-red-400/30 bg-red-400/10 text-red-200",
   rejected: "border-white/10 bg-white/5 text-white/50",
   expired: "border-white/10 bg-white/5 text-white/40",
 };
@@ -129,14 +131,30 @@ export default function ChangesPage() {
     if (status === "pending_external") {
       return locale === "tr" ? "dış yazım kuyruğunda" : "external queued";
     }
+    if (status === "external_failed") {
+      return locale === "tr" ? "dış yazım başarısız" : "external write failed";
+    }
     return status;
   }, [locale, t]);
+
+  const operationStatusLabel = useCallback((status: string) => {
+    const labels: Record<string, [string, string]> = {
+      pending: ["Kuyrukta", "Queued"],
+      running: ["Uygulanıyor", "Running"],
+      succeeded: ["Tamamlandı", "Completed"],
+      failed_retryable: ["Yeniden denenebilir", "Retryable failure"],
+      failed_terminal: ["Uygulanamadı", "Terminal failure"],
+    };
+    const pair = labels[status];
+    return pair ? pair[locale === "tr" ? 0 : 1] : status;
+  }, [locale]);
 
   const actionLabel = useCallback((action: string) => {
     const fallback: Record<string, string> = {
       linear_create_issue: locale === "tr" ? "Linear issue oluştur" : "Create Linear issue",
       linear_update_issue: locale === "tr" ? "Linear issue güncelle" : "Update Linear issue",
       linear_comment: locale === "tr" ? "Linear yorum ekle" : "Add Linear comment",
+      github_create_issue: locale === "tr" ? "GitHub issue oluştur" : "Create GitHub issue",
       github_issue_comment: locale === "tr" ? "GitHub yorum ekle" : "Add GitHub comment",
       github_issue_update: locale === "tr" ? "GitHub issue güncelle" : "Update GitHub issue",
       github_issue_label: locale === "tr" ? "GitHub label güncelle" : "Update GitHub label",
@@ -193,7 +211,9 @@ export default function ChangesPage() {
   }, [fetchDetail, selectedId, t]);
 
   useEffect(() => {
-    const hasPending = changeSets.some((changeSet) => changeSet.status === "pending");
+    const hasPending = changeSets.some((changeSet) =>
+      changeSet.status === "pending" || changeSet.status === "external_pending"
+    );
     if (!hasPending && !resolving) return;
 
     const timer = window.setInterval(() => {
@@ -229,9 +249,19 @@ export default function ChangesPage() {
         title: locale === "tr" ? "Dış sistem yazımları bekliyor" : "External writes are pending",
         description:
           locale === "tr"
-            ? "Plan kabul edildi. GitHub veya Linear yazımları ayrı operasyon olarak çalıştırılmalı ve sonucu izlenmelidir."
-            : "The plan was accepted. GitHub or Linear writes must be run as separate operations and tracked here.",
+            ? "Plan kabul edildi. GitHub ve Linear güncellemeleri otomatik olarak uygulanıyor."
+            : "The plan was accepted. GitHub and Linear updates are being applied automatically.",
         className: "border-purple-400/20 bg-purple-400/10 text-purple-100",
+      };
+    }
+    if (detail.status === "external_failed") {
+      return {
+        title: locale === "tr" ? "Dış sistem güncellemesi başarısız" : "External update failed",
+        description:
+          locale === "tr"
+            ? "Internal değişiklik yapılmadı veya dış yazımlar tamamlanamadı. Aşağıdaki hata ayrıntısını inceleyip operasyonu yeniden deneyin."
+            : "No internal change was applied or the external writes could not complete. Review the error and retry the failed operation.",
+        className: "border-red-400/20 bg-red-400/10 text-red-100",
       };
     }
     if (detail.status === "expired") {
@@ -270,6 +300,13 @@ export default function ChangesPage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
+        if (body?.error === "CHANGE_SET_ALREADY_RESOLVED" || body?.error === "CHANGE_SET_NOT_PENDING") {
+          throw new Error(
+            locale === "tr"
+              ? "Bu plan sürümü daha önce sonuçlandırıldı."
+              : "This plan version has already been resolved."
+          );
+        }
         throw new Error(body?.message || body?.error || t("changes.resolveError"));
       }
       showToast.success(
@@ -295,12 +332,16 @@ export default function ChangesPage() {
       if (!response.ok) {
         throw new Error(body?.message || body?.error || "External write failed");
       }
-      showToast.success(locale === "tr" ? "Dış sistem yazımı tamamlandı" : "External write completed");
+      showToast.success(locale === "tr" ? "Dış sistem yazımı yeniden kuyruğa alındı" : "External write queued again");
       if (detail) await fetchDetail(detail.id);
     } catch (error) {
       showToast.error(error instanceof Error ? error.message : "External write failed");
     }
   };
+
+  const appliedTaskCount = detail?.proposals.filter(
+    (proposal) => proposal.status === "applied" && proposal.task?.id
+  ).length || 0;
 
   if (loading) {
     return (
@@ -443,6 +484,22 @@ export default function ChangesPage() {
                   </div>
                 )}
 
+                {appliedTaskCount > 0 && detail.status !== "pending" && (
+                  <div className="mt-4 flex flex-col justify-between gap-3 border border-white/10 px-5 py-4 sm:flex-row sm:items-center">
+                    <span className="text-sm text-white/65">
+                      {locale === "tr"
+                        ? `${appliedTaskCount} görev teslimat panosuna uygulandı.`
+                        : `${appliedTaskCount} tasks were applied to the delivery board.`}
+                    </span>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href="/dashboard/tasks">
+                        {locale === "tr" ? "İşleri aç" : "Open work"}
+                        <ArrowRight className="ml-2 size-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+
                 <div className="py-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
@@ -529,8 +586,11 @@ export default function ChangesPage() {
                                       variant="outline"
                                       className={cn("ml-2", statusStyles[operation.status] || "border-white/10 bg-white/5")}
                                     >
-                                      {operation.status}
+                                      {operationStatusLabel(operation.status)}
                                     </Badge>
+                                    <span className="ml-2 text-white/35">
+                                      {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
+                                    </span>
                                     {operation.error && (
                                       <p className="mt-1 text-red-300">{operation.error}</p>
                                     )}

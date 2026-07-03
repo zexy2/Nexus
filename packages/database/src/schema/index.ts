@@ -202,6 +202,7 @@ export const docs = pgTable(
     iconEmoji: varchar("icon_emoji", { length: 10 }),
     coverUrl: text("cover_url"),
     isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer (Zero Sync uyumluluğu)
+    isAiGenerated: integer("is_ai_generated").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
     // pgvector embedding for semantic search
     embedding: vector("embedding", { dimensions: 1536 }),
@@ -940,6 +941,7 @@ export const externalWriteOperations = pgTable(
     response: jsonb("response").$type<Record<string, unknown>>(),
     error: text("error"),
     idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
     attemptedAt: timestamp("attempted_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),

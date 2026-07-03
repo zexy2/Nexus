@@ -20,6 +20,10 @@ import {
   resolveLinearAccessToken,
 } from "@/lib/integrations/providers/linear-client";
 import { recordSeededIntegrationSync } from "@/lib/integrations/impact-graph";
+import {
+  buildGitHubIssueReferenceMap,
+  extractPullRequestReferences,
+} from "@/lib/integrations/github-linking";
 
 type IntegrationRow = typeof workspaceIntegrations.$inferSelect;
 
@@ -58,14 +62,6 @@ function selectedGitHubRepo(metadata: Record<string, unknown>) {
   const repo = typeof metadata.repositoryName === "string" ? metadata.repositoryName : null;
   if (owner && repo) return { owner, repo, fullName: `${owner}/${repo}` };
   return null;
-}
-
-function extractIssueKeys(text: string | null | undefined) {
-  if (!text) return [];
-  const keys = new Set<string>();
-  for (const match of text.matchAll(/\b[A-Z][A-Z0-9]+-\d+\b/g)) keys.add(match[0]);
-  for (const match of text.matchAll(/(^|\s)#(\d+)\b/g)) keys.add(`#${match[2]}`);
-  return Array.from(keys);
 }
 
 function normalizeText(value: string) {
@@ -275,23 +271,24 @@ async function syncGitHubIntegration(integration: IntegrationRow) {
     }
   }
 
-  const issueKeyToId = new Map<string, string>();
   const syncedIssues = await db.query.externalIssues.findMany({
     where: and(eq(externalIssues.workspaceId, integration.workspaceId), eq(externalIssues.provider, "github")),
   });
-  for (const issue of syncedIssues) {
-    if (issue.externalKey) issueKeyToId.set(issue.externalKey, issue.id);
-  }
+  const issueReferenceToId = buildGitHubIssueReferenceMap(syncedIssues);
 
   for (const detail of data.pullDetails) {
     const pull = detail.pullRequest;
-    const keys = [
-      ...extractIssueKeys(pull.title),
-      ...extractIssueKeys(pull.body),
-      ...extractIssueKeys(pull.head.ref),
-    ];
+    const keys = extractPullRequestReferences({
+      title: pull.title,
+      body: pull.body,
+      branch: pull.head.ref,
+    });
     const linkedExternalIssueIds = Array.from(
-      new Set(keys.map((key) => issueKeyToId.get(key)).filter((id): id is string => Boolean(id)))
+      new Set(
+        keys
+          .map((key) => issueReferenceToId.get(key.toUpperCase()))
+          .filter((id): id is string => Boolean(id))
+      )
     );
     const [prRow] = await db
       .insert(externalPullRequests)

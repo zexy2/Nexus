@@ -70,7 +70,32 @@ vi.mock("postgres", () => ({
   default: mockState.postgres,
 }));
 
-import { applyPlanChangeSet } from "../../../../../packages/workflows/src/activities";
+import {
+  applyPlanChangeSet,
+  externalErrorIsRetryable,
+  resolveExternalChangeSetStatus,
+} from "../../../../../packages/workflows/src/activities";
+
+describe("external write policy", () => {
+  it("retries timeouts, rate limits, server errors, and network failures", () => {
+    expect(externalErrorIsRetryable(Object.assign(new Error("timeout"), { status: 408 }))).toBe(true);
+    expect(externalErrorIsRetryable(Object.assign(new Error("limited"), { status: 429 }))).toBe(true);
+    expect(externalErrorIsRetryable(Object.assign(new Error("provider"), { status: 503 }))).toBe(true);
+    expect(externalErrorIsRetryable(new Error("network"))).toBe(true);
+  });
+
+  it("does not retry provider validation or permission errors", () => {
+    expect(externalErrorIsRetryable(Object.assign(new Error("invalid"), { status: 400 }))).toBe(false);
+    expect(externalErrorIsRetryable(Object.assign(new Error("forbidden"), { status: 403 }))).toBe(false);
+  });
+
+  it("calculates truthful terminal change-set states", () => {
+    expect(resolveExternalChangeSetStatus({ succeeded: 2, failed: 0, internalApplied: 1 })).toBe("applied");
+    expect(resolveExternalChangeSetStatus({ succeeded: 1, failed: 1, internalApplied: 0 })).toBe("partially_applied");
+    expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 1, internalApplied: 2 })).toBe("partially_applied");
+    expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 2, internalApplied: 0 })).toBe("external_failed");
+  });
+});
 
 describe("applyPlanChangeSet", () => {
   beforeEach(() => {
@@ -146,7 +171,12 @@ describe("applyPlanChangeSet", () => {
 
     const result = await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
 
-    expect(result).toEqual({ applied: 1, rejected: 1, createdTaskIds: [] });
+    expect(result).toEqual({
+      applied: 1,
+      rejected: 1,
+      createdTaskIds: [],
+      externalOperationIds: [],
+    });
     expect(mockState.calls.some((call) => call.text.includes("UPDATE change_proposals SET status = 'rejected'"))).toBe(true);
 
     const changeSetUpdate = mockState.calls.find((call) => call.text.includes("UPDATE change_sets"));
@@ -174,7 +204,12 @@ describe("applyPlanChangeSet", () => {
 
     const result = await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
 
-    expect(result).toEqual({ applied: 1, rejected: 0, createdTaskIds: [] });
+    expect(result).toEqual({
+      applied: 1,
+      rejected: 0,
+      createdTaskIds: [],
+      externalOperationIds: [],
+    });
     expect(mockState.calls.some((call) => call.text.includes("DELETE FROM requirement_task_links"))).toBe(true);
 
     const changeSetUpdate = mockState.calls.find((call) => call.text.includes("UPDATE change_sets"));

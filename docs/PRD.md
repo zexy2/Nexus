@@ -171,7 +171,7 @@ It is:
 | ID    | Requirement                                                                 | Priority |
 | ----- | --------------------------------------------------------------------------- | -------- |
 | IG-01 | Workspaces can store GitHub and Linear integration metadata and sync status. | P0       |
-| IG-02 | Demo workspaces show isolated seeded external issues, PRs, and checks.      | P0       |
+| IG-02 | Demo workspaces show isolated sample external issues, PRs, and checks.      | P0       |
 | IG-03 | The plan detail view shows requirement-to-issue/PR/check evidence.          | P0       |
 | IG-04 | Demo users cannot connect real GitHub or Linear accounts.                   | P0       |
 | IG-05 | Missing provider config returns explicit unavailable/not-implemented states. | P0       |
@@ -200,7 +200,7 @@ The demo is acceptable for a CV link when:
 5. The reviewer can approve proposals and see tasks appear on Kanban.
 6. Editing the plan and running impact review produces a new change set.
 7. Workflow history shows the relevant run statuses and steps.
-8. The plan detail view shows the impact graph with seeded external issue/PR/check evidence.
+8. The plan detail view shows the impact graph with isolated sample issue/PR/check evidence.
 9. `/api/health` reports healthy database, Temporal, worker heartbeat, AI provider, and integration configuration state.
 10. Quota and unavailable states are clear instead of silent failures.
 
@@ -212,7 +212,7 @@ The demo is acceptable for a CV link when:
 - OpenAI embeddings and Tavily search are optional.
 - Production Zero cache is deferred; API-backed sync and offline queue behavior are used in v1.
 - Oracle/VPS deployment requires cloud ingress, HTTPS, and provider secrets before the public demo is fully ready.
-- GitHub/Linear is now a safe vertical slice with real GitHub App / Linear OAuth callbacks, provider sync adapters, seeded demo data, impact graph APIs, settings configuration, signed webhook event recording, and queued external write operations.
+- GitHub/Linear is a guarded vertical slice with real GitHub App / Linear OAuth callbacks, provider sync adapters, isolated demo data, impact graph APIs, settings configuration, signed webhook refresh, and Temporal-backed approved external writes.
 
 ## 12. Future Options
 

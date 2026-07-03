@@ -74,7 +74,15 @@ type ImpactGraph = {
     lastSyncAt: string | null;
     lastError: string | null;
     seeded: boolean;
+    config?: { selectedRepository?: string | null };
   }>;
+  diagnostics: Array<
+    | "NO_INTEGRATION"
+    | "NO_SYNCED_ISSUES"
+    | "NO_REQUIREMENT_MATCHES"
+    | "NO_LINKED_PRS"
+    | "NO_CHECK_RUNS"
+  >;
   summary: {
     requirements: number;
     externalIssues: number;
@@ -247,6 +255,19 @@ export function LivingPlanInspector({
       ),
     [impactGraph]
   );
+
+  const graphDiagnosticCopy = useMemo(() => {
+    const code = impactGraph?.diagnostics?.[0];
+    const copy = {
+      NO_INTEGRATION: ["GitHub veya Linear bağlantısı yok.", "No GitHub or Linear integration is connected."],
+      NO_SYNCED_ISSUES: ["Bağlantı hazır ancak henüz senkronize issue bulunamadı.", "The integration is connected, but no synced issues were found."],
+      NO_REQUIREMENT_MATCHES: ["Issue'lar senkronize edildi ancak bu plandaki gereksinimlerle eşleşmedi.", "Issues are synced, but none match this plan's requirements."],
+      NO_LINKED_PRS: ["Issue bağlantıları var; PR'ların issue numarasına veya REQ anahtarına referans vermesi gerekiyor.", "Issue links exist; PRs must reference the issue number or requirement key."],
+      NO_CHECK_RUNS: ["PR bağlantısı bulundu ancak henüz check run sonucu yok.", "A PR is linked, but no check run result is available yet."],
+    } as const;
+    const pair = code ? copy[code] : null;
+    return pair ? pair[locale === "tr" ? 0 : 1] : null;
+  }, [impactGraph, locale]);
 
   const startAnalysis = async () => {
     setAnalysis({ status: "starting" });
@@ -432,8 +453,10 @@ export function LivingPlanInspector({
                   {integration.provider}
                   <span className="ml-1 text-white/35">
                     {integration.seeded
-                      ? locale === "tr" ? "demo seed" : "demo seed"
-                      : integration.status}
+                      ? locale === "tr" ? "örnek veri" : "sample data"
+                      : integration.status === "connected"
+                        ? locale === "tr" ? "bağlı" : "connected"
+                        : integration.status}
                   </span>
                 </Badge>
               ))
@@ -498,9 +521,28 @@ export function LivingPlanInspector({
           </div>
         ) : (
           <div className="mt-4 border border-white/10 bg-white/[0.02] p-4 text-xs leading-5 text-white/35">
-            {locale === "tr"
+            {graphDiagnosticCopy || (locale === "tr"
               ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
-              : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist."}
+              : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist.")}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/settings?tab=integrations">
+                  {locale === "tr" ? "Bağlantıları aç" : "Open integrations"}
+                </Link>
+              </Button>
+              {impactGraph?.integrations.find((item) => item.provider === "github")?.config?.selectedRepository && (
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={`https://github.com/${impactGraph.integrations.find((item) => item.provider === "github")?.config?.selectedRepository}/issues`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {locale === "tr" ? "GitHub issue'larını aç" : "Open GitHub issues"}
+                    <ExternalLink className="ml-2 size-3.5" />
+                  </a>
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>

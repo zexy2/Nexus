@@ -48,6 +48,8 @@ services:
         condition: service_started
     environment:
       NODE_ENV: production
+      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
+      REQUIRE_INTEGRATIONS_HEALTH: ${REQUIRE_INTEGRATIONS_HEALTH:-true}
       DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexus}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
@@ -133,9 +135,15 @@ services:
     command: ["pnpm", "--filter", "@nexus/workflows", "worker"]
     environment:
       NODE_ENV: production
+      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
       DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexus}
       TEMPORAL_ADDRESS: temporal:7233
       TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+      INTEGRATION_TOKEN_ENCRYPTION_KEY: ${INTEGRATION_TOKEN_ENCRYPTION_KEY:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      LINEAR_CLIENT_ID: ${LINEAR_CLIENT_ID:-}
+      LINEAR_CLIENT_SECRET: ${LINEAR_CLIENT_SECRET:-}
       AI_ENABLED: ${AI_ENABLED:-true}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
