@@ -4,12 +4,12 @@ set -euo pipefail
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env.production}"
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+# shellcheck source=lib/load-env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
+load_env_values "$ENV_FILE" \
+  NEXT_PUBLIC_APP_URL \
+  GEMINI_API_KEY \
+  DEMO_ACCESS_CODE
 
 BASE_URL="${SMOKE_BASE_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}"
 COOKIE_JAR="$(mktemp)"
