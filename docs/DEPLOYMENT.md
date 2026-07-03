@@ -122,11 +122,27 @@ Retention note: `rate_limit_buckets` and `audit_logs` are intentionally simple f
 
 ## Backups
 
-Run daily Postgres backups from the VPS:
+Run Postgres backups from the VPS:
 
 ```bash
 pnpm backup:postgres
 ```
+
+For the public demo VPS, install the maintenance timers once:
+
+```bash
+BASE_URL=https://your-domain.com pnpm maintenance:install-vps
+```
+
+This installs three systemd timers:
+
+- `nexus-health-check.timer` runs every five minutes and calls `/api/health`.
+  It does not call AI endpoints and does not create fake CPU/network load.
+- `nexus-postgres-backup.timer` writes a daily Postgres dump to `backups/`
+  and prunes old `nexus-YYYY-*` backups after 14 days by default.
+- `nexus-docker-cleanup.timer` runs a conservative weekly cleanup for old
+  build cache, dangling images, and stopped containers. It does not prune
+  volumes.
 
 Verify restore periodically on a staging database and confirm `CREATE EXTENSION vector` exists.
 
