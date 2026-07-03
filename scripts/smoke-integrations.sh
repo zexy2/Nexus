@@ -3,12 +3,22 @@ set -euo pipefail
 
 ENV_FILE="${ENV_FILE:-.env.local}"
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+# shellcheck source=lib/load-env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
+load_env_values "$ENV_FILE" \
+  APP_URL \
+  NEXT_PUBLIC_APP_URL \
+  INTEGRATION_TOKEN_ENCRYPTION_KEY \
+  GITHUB_APP_ID \
+  GITHUB_APP_SLUG \
+  GITHUB_APP_PRIVATE_KEY \
+  GITHUB_APP_CLIENT_ID \
+  GITHUB_APP_CLIENT_SECRET \
+  GITHUB_WEBHOOK_SECRET \
+  LINEAR_CLIENT_ID \
+  LINEAR_CLIENT_SECRET \
+  LINEAR_WEBHOOK_SECRET \
+  LINEAR_REDIRECT_URI
 
 BASE_URL="${SMOKE_BASE_URL:-${APP_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}}"
 BASE_URL="${BASE_URL%/}"
