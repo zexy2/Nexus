@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { agentExecutions, auditLogs, rateLimitBuckets } from "@nexus/database/schema";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import {
+  agentExecutions,
+  auditLogs,
+  externalWriteOperations,
+  rateLimitBuckets,
+} from "@nexus/database/schema";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getAuditUsageSummary, isAdminEmail } from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
@@ -45,11 +50,36 @@ export async function GET() {
     .orderBy(desc(auditLogs.createdAt))
     .limit(25);
 
+  const staleExternalWriteCutoff = new Date(Date.now() - 5 * 60 * 1000);
+  const staleExternalWrites = await db
+    .select({
+      id: externalWriteOperations.id,
+      provider: externalWriteOperations.provider,
+      operationType: externalWriteOperations.operationType,
+      status: externalWriteOperations.status,
+      error: externalWriteOperations.error,
+      updatedAt: externalWriteOperations.updatedAt,
+    })
+    .from(externalWriteOperations)
+    .where(
+      and(
+        inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+        lt(externalWriteOperations.updatedAt, staleExternalWriteCutoff)
+      )
+    )
+    .orderBy(externalWriteOperations.updatedAt)
+    .limit(50);
+
   return NextResponse.json({
     ...summary,
     failedWorkflows24h: failedWorkflows?.count ?? 0,
     activeBuckets,
     recentAuditEvents,
+    externalWrites: {
+      staleAfterMinutes: 5,
+      staleCount: staleExternalWrites.length,
+      staleOperations: staleExternalWrites,
+    },
     retention: {
       note: "For a long-running public demo, schedule cleanup for expired rate_limit_buckets and old audit_logs rows.",
       rateLimitBuckets: "delete where reset_at < now() - interval '7 days'",

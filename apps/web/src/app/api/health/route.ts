@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { workerHeartbeats } from "@nexus/database/schema";
-import { desc, sql } from "drizzle-orm";
+import { externalWriteOperations, workerHeartbeats } from "@nexus/database/schema";
+import { and, desc, inArray, lt, sql } from "drizzle-orm";
 import { getAiProviderStatus } from "@/lib/production-guardrails";
 import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 
@@ -43,6 +43,40 @@ export async function GET() {
     const ai = getAiProviderStatus();
     const githubIntegration = getIntegrationProviderConfig("github");
     const linearIntegration = getIntegrationProviderConfig("linear");
+    const integrationsConfigured =
+      githubIntegration.configured && linearIntegration.configured;
+    const integrationsRequired =
+      process.env.REQUIRE_INTEGRATIONS_HEALTH === "true";
+    const externalWriteStaleAfterMinutes = 5;
+    let externalWriteStatus: "healthy" | "stale" | "unavailable" = "unavailable";
+    let pendingExternalWrites = 0;
+    let staleExternalWrites = 0;
+
+    if (dbStatus === "healthy") {
+      try {
+        const staleBefore = new Date(Date.now() - externalWriteStaleAfterMinutes * 60 * 1000);
+        const [pending, stale] = await Promise.all([
+          db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(externalWriteOperations)
+            .where(inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"])),
+          db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(externalWriteOperations)
+            .where(
+              and(
+                inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                lt(externalWriteOperations.updatedAt, staleBefore)
+              )
+            ),
+        ]);
+        pendingExternalWrites = pending[0]?.count ?? 0;
+        staleExternalWrites = stale[0]?.count ?? 0;
+        externalWriteStatus = staleExternalWrites > 0 ? "stale" : "healthy";
+      } catch {
+        externalWriteStatus = "unavailable";
+      }
+    }
     const collaborationHealthUrl =
       process.env.COLLABORATION_HEALTH_URL || "http://localhost:1234";
     let collaborationStatus: "healthy" | "unavailable" = "unavailable";
@@ -105,7 +139,9 @@ export async function GET() {
       dbStatus === "healthy" &&
       temporalStatus === "healthy" &&
       workerStatus === "healthy" &&
-      collaborationStatus === "healthy"
+      collaborationStatus === "healthy" &&
+      externalWriteStatus !== "stale" &&
+      (!integrationsRequired || integrationsConfigured)
         ? "healthy"
         : "degraded";
 
@@ -113,6 +149,7 @@ export async function GET() {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || "1.0.0",
+      commitSha: process.env.APP_COMMIT_SHA || "unknown",
       services: {
         database: {
           status: dbStatus,
@@ -148,9 +185,12 @@ export async function GET() {
         },
         integrations: {
           status:
-            githubIntegration.configured || linearIntegration.configured
+            integrationsConfigured
+              ? "configured"
+              : githubIntegration.configured || linearIntegration.configured
               ? "partially_configured"
               : "not_configured",
+          required: integrationsRequired,
           github: {
             configured: githubIntegration.configured,
             missing: githubIntegration.missing,
@@ -158,6 +198,12 @@ export async function GET() {
           linear: {
             configured: linearIntegration.configured,
             missing: linearIntegration.missing,
+          },
+          externalWrites: {
+            status: externalWriteStatus,
+            pending: pendingExternalWrites,
+            stale: staleExternalWrites,
+            staleAfterMinutes: externalWriteStaleAfterMinutes,
           },
         },
       },

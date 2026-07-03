@@ -4,6 +4,7 @@ import { requireWorkspaceOwner, ensureDefaultWorkspace } from "@/lib/workspace-a
 import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 import { isDemoEmail } from "@/lib/production-guardrails";
 import { createIntegrationConnectState, getCanonicalAppUrl } from "@/lib/integrations/crypto";
+import { getGitHubAppConfig } from "@/lib/integrations/providers/github-client";
 
 export const runtime = "nodejs";
 
@@ -30,29 +31,34 @@ export async function POST(request: NextRequest) {
   }
 
   const config = getIntegrationProviderConfig("github");
-  const appSlug = process.env.GITHUB_APP_SLUG;
-  if (!config.configured || !appSlug) {
+  if (!config.configured) {
     return NextResponse.json(
       {
         error: "GITHUB_APP_NOT_CONFIGURED",
         message: "GitHub App installation is not configured on this server.",
-        missing: appSlug ? config.missing : [...config.missing, "GITHUB_APP_SLUG"],
+        missing: config.missing,
       },
       { status: 503 }
     );
   }
 
+  const { clientId } = getGitHubAppConfig();
+
   const state = await createIntegrationConnectState({
     provider: "github",
     workspaceId,
     userId: session.user.id,
-    metadata: { stage: "install" },
+    metadata: { stage: "oauth" },
   });
   const appUrl = getCanonicalAppUrl(request.nextUrl.origin);
-  const setupUrl = new URL("/api/integrations/github/setup", appUrl);
+  const callbackUrl = new URL("/api/integrations/github/callback", appUrl);
+  const authUrl = new URL("https://github.com/login/oauth/authorize");
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", callbackUrl.toString());
+  authUrl.searchParams.set("state", state);
 
   return NextResponse.json({
     ok: true,
-    installUrl: `https://github.com/apps/${appSlug}/installations/new?state=${encodeURIComponent(state)}&redirect_url=${encodeURIComponent(setupUrl.toString())}`,
+    authUrl: authUrl.toString(),
   });
 }

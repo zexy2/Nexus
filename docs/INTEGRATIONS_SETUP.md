@@ -180,7 +180,8 @@ It does not complete OAuth. OAuth requires using the UI as the workspace owner.
 11. Edit the plan and run impact analysis.
 12. Review proposals. GitHub/Linear proposals should be grouped separately from internal task proposals.
 13. Apply selected proposals.
-14. For queued external write operations, use the retry/run action in the Changes screen and verify operation status.
+14. Wait for the Changes screen to reach a terminal state. Temporal applies approved external writes automatically.
+15. Use the retry action only for an operation that ended as retryable failure.
 
 ## Production Smoke
 
@@ -197,7 +198,9 @@ Then run the manual acceptance flow in the browser.
 ## Current Limits
 
 - Public demo users cannot connect real providers.
-- Webhooks are verified and recorded; targeted incremental sync workers are not yet implemented.
-- External writes are queued and auditable. Nexus does not merge PRs or execute repository code.
+- Webhooks are verified, deduplicated, and trigger provider refreshes for supported events.
+- Approved external writes run automatically through Temporal with bounded retries and audit events.
+- Manual retry is available only after a retryable provider failure.
+- Nexus does not merge PRs or execute repository code.
 - GitHub installation tokens are generated on demand and are not stored.
 - Linear OAuth tokens are encrypted at rest.

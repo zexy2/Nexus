@@ -80,6 +80,12 @@ export interface PlanImpactOutput {
     applied: number;
     rejected: number;
     createdTaskIds: string[];
+    externalOperationIds: string[];
+    external: {
+      succeeded: number;
+      failed: number;
+      status: "applied" | "partially_applied" | "external_failed";
+    } | null;
   };
   steps: AgentStepResult[];
 }

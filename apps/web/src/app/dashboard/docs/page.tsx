@@ -459,14 +459,14 @@ export default function DocsPage() {
       if (res.ok) {
         const data = await res.json();
         setDocuments(
-          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null }) => ({
+          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null; isAiGenerated?: boolean }) => ({
             id: d.id,
             title: d.title,
             iconEmoji: d.iconEmoji || "📄",
             updatedAt: new Date(d.updatedAt),
             createdAt: new Date(d.updatedAt),
             createdBy: d.createdBy || "User",
-            isAI: false,
+            isAI: d.isAiGenerated === true,
             isFavorite: false,
           }))
         );
@@ -575,7 +575,7 @@ export default function DocsPage() {
         updatedAt: new Date(data.updatedAt),
         createdAt: new Date(data.updatedAt),
         createdBy: data.createdBy || "User",
-        isAI: false,
+        isAI: data.isAiGenerated === true,
         isFavorite: false,
       };
 

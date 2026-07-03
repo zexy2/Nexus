@@ -638,14 +638,16 @@ function SettingsContent() {
                         onValueChange={(value) => {
                           // Check if model is available
 	                          if (!isModelAvailable(value)) {
-	                            alert("Server-managed Gemini is not configured for this demo.");
+                            alert(locale === "tr"
+                              ? "Sunucu tarafından yönetilen Gemini bu demo için yapılandırılmamış."
+                              : "Server-managed Gemini is not configured for this demo.");
 	                            return;
 	                          }
                           setDefaultModel(value);
                         }}
                       >
                         <SelectTrigger className="text-sm">
-                          <SelectValue placeholder="Select a model" />
+                          <SelectValue placeholder={locale === "tr" ? "Model seç" : "Select a model"} />
                         </SelectTrigger>
                         <SelectContent>
                           {AI_MODELS.map((model) => {
@@ -888,7 +890,7 @@ function SettingsContent() {
                             <Badge variant={connected ? "secondary" : "outline"}>
                               {connected
                                 ? existing.seeded
-                                  ? "demo seed"
+                                  ? locale === "tr" ? "örnek veri" : "sample data"
                                   : locale === "tr" ? "bağlı" : "connected"
                                 : providerConfig.configured
                                   ? locale === "tr" ? "hazır" : "ready"

@@ -30,7 +30,7 @@ Nexus treats the plan as a versioned delivery artifact, not a disposable chat re
 - Extracts stable requirement IDs such as `REQ-001`.
 - Links requirements to Kanban tasks.
 - Shows requirement coverage and task alignment status.
-- Shows a read-only impact graph across requirements, seeded Linear-like issues, GitHub PRs, checks, and coding-agent jobs.
+- Shows an impact graph across requirements, connected GitHub/Linear issues, pull requests, checks, and coding-agent jobs.
 - Analyzes plan changes against the previous accepted version.
 - Creates reviewable change proposals instead of mutating work automatically.
 - Applies only the proposals selected by the user.
@@ -48,11 +48,11 @@ Nexus now has the first vertical slice of the GitHub/Linear direction:
 - Provider sync adapters for GitHub issues, pull requests, changed files, check runs, and Linear issues.
 - APIs for integration status, resources, config, external issues, external PRs, and `GET /api/impact-graph?docId=...`.
 - Settings UI for GitHub App / Linear OAuth connection, repo/team/project selection, and sync status.
-- Demo workspaces receive isolated seeded external-work data, so reviewers can see the impact graph without connecting real accounts.
+- Demo workspaces receive isolated sample external-work data, so reviewers can see the impact graph without connecting real accounts.
 - Webhook endpoints reject unsigned requests, dedupe delivery IDs, and record verified events for targeted sync processing.
-- Approved external proposals create retryable `external_write_operations`; Nexus does not mutate GitHub/Linear without user approval.
+- Approved external proposals create durable `external_write_operations`; Temporal applies them automatically with bounded retries after user approval.
 
-Current limit: external writes are deliberately queued and retried as explicit operations. Nexus does not merge PRs, run repository code, or claim that a provider write succeeded until the operation succeeds.
+Nexus does not merge PRs, run repository code, or claim that a provider write succeeded until the provider operation reaches a terminal success state.
 
 ## Core Demo Flow
 
@@ -198,8 +198,8 @@ If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The curre
 - Production Zero cache is deferred; v1 uses API-backed sync and offline queue behavior.
 - The public CV demo is intentionally quota-limited and uses isolated, expiring sessions.
 - Nexus does not host coding sandboxes or store GitHub credentials; coding agents run on the user's machine.
-- GitHub/Linear integrations support real OAuth/App connection and sync when provider env is configured. Public demo accounts still use seeded read-only data and cannot connect real accounts.
-- Webhooks are verified and recorded; targeted incremental sync workers are still a follow-up, so manual sync remains the reliable path after provider changes.
+- GitHub/Linear integrations support real OAuth/App connection, sync, and approved external writes when provider env is configured. Public demo accounts use isolated sample data and cannot connect real accounts.
+- GitHub issue/PR/check changes are refreshed through verified webhooks; manual sync remains available as an operational fallback.
 
 ## Documentation
 

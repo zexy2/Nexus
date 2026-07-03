@@ -115,14 +115,14 @@ Submission requires a PR URL for the configured repository, commit SHA, test res
 - `GET /api/integrations/:id/resources` - list GitHub repositories or Linear teams/projects for configuration.
 - `PATCH /api/integrations/:id/config` - owner-only repo/team/project selection.
 - `POST /api/integrations/:id/sync` - sync seeded data, GitHub issues/PRs/checks, or Linear issues.
-- `GET /api/external-issues` - list synced/seeded external issues for the workspace.
-- `GET /api/external-pull-requests` - list synced/seeded pull requests and checks for the workspace.
+- `GET /api/external-issues` - list synchronized or isolated sample issues for the workspace.
+- `GET /api/external-pull-requests` - list synchronized or isolated sample pull requests and checks.
 - `GET /api/impact-graph?docId=...` - return plan -> requirement -> task -> issue -> PR -> check/job evidence.
-- `POST /api/webhooks/github` - verify GitHub webhook signatures, dedupe delivery IDs, and queue the event.
-- `POST /api/webhooks/linear` - verify Linear webhook signatures/replay window, dedupe delivery IDs, and queue the event.
-- `POST /api/external-write-operations/:id/retry` - owner-only retry for an approved GitHub/Linear write operation.
+- `POST /api/webhooks/github` - verify the signature, dedupe the delivery, and refresh the connected repository data.
+- `POST /api/webhooks/linear` - verify signature/replay window, dedupe the delivery, and refresh the connected workspace data.
+- `POST /api/external-write-operations/:id/retry` - owner-only manual retry for a failed retryable GitHub/Linear operation. Initial execution is automatic after approval.
 
-Public demo sessions receive isolated seeded external-work data and cannot connect real GitHub or Linear accounts. External provider writes are never faked: proposals create queued operations and the operation status records success or failure.
+Public demo sessions receive isolated sample external-work data and cannot connect real GitHub or Linear accounts. External provider writes are never faked: approved proposals run through Temporal and expose attempt, success, and failure state.
 
 ## Collaboration and sync
 

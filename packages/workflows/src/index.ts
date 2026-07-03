@@ -25,6 +25,8 @@ export {
   analyzePlanImpact,
   persistPlanImpact,
   applyPlanChangeSet,
+  executeExternalWriteOperation,
+  finalizeExternalWriteOperations,
   rejectPlanChangeSet,
   expirePlanChangeSet,
 } from "./activities";

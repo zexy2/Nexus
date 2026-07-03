@@ -32,6 +32,7 @@ export async function GET() {
         iconEmoji: d.iconEmoji,
         updatedAt: d.updatedAt.toISOString(),
         createdBy: d.createdBy,
+        isAiGenerated: d.isAiGenerated === 1,
       }))
     );
   } catch (error) {
@@ -136,6 +137,7 @@ export async function POST(req: Request) {
       iconEmoji: doc.iconEmoji,
       updatedAt: doc.updatedAt.toISOString(),
       createdBy: doc.createdBy,
+      isAiGenerated: doc.isAiGenerated === 1,
     });
   } catch (error) {
     console.error("Failed to create doc:", error);

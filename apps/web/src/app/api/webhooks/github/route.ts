@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { integrationWebhookEvents, workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { sha256Hex } from "@/lib/integrations/crypto";
+import { syncIntegrationById } from "@/lib/integrations/sync";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
       })
     : null;
 
-  await db
+  const [webhookEvent] = await db
     .insert(integrationWebhookEvents)
     .values({
       workspaceId: integration?.workspaceId,
@@ -74,11 +75,41 @@ export async function POST(request: NextRequest) {
       },
       processedAt: integration ? null : new Date(),
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: integrationWebhookEvents.id });
+
+  if (!webhookEvent) {
+    return NextResponse.json({ ok: true, status: "duplicate", event: eventType });
+  }
+
+  if (integration) {
+    try {
+      await syncIntegrationById(integration.id);
+      await db
+        .update(integrationWebhookEvents)
+        .set({ status: "completed", processedAt: new Date() })
+        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
+    } catch (error) {
+      await db
+        .update(integrationWebhookEvents)
+        .set({
+          status: "failed",
+          processedAt: new Date(),
+          metadata: {
+            action: payload.action,
+            repository: payload.repository?.full_name,
+            installationId,
+            error: error instanceof Error ? error.message : "GitHub sync failed",
+          },
+        })
+        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
+      return NextResponse.json({ ok: false, status: "failed", event: eventType }, { status: 502 });
+    }
+  }
 
   return NextResponse.json({
     ok: true,
-    status: integration ? "queued" : "ignored",
+    status: integration ? "completed" : "ignored",
     event: eventType,
   });
 }

@@ -144,6 +144,19 @@ export async function verifyGitHubInstallationForUser(userAccessToken: string, i
   return body.installations.find((installation) => installation.id === numericInstallationId) || null;
 }
 
+export async function listGitHubInstallationsForUser(userAccessToken: string) {
+  const body = await githubFetch<{
+    installations: Array<{
+      id: number;
+      app_id?: number;
+      app_slug?: string;
+      account?: { login?: string };
+    }>;
+  }>("https://api.github.com/user/installations?per_page=100", userAccessToken);
+
+  return body.installations;
+}
+
 export async function createInstallationAccessToken(installationId: string) {
   const body = await githubFetch<{ token: string; expires_at: string }>(
     `https://api.github.com/app/installations/${installationId}/access_tokens`,

@@ -4,8 +4,6 @@ import { externalWriteOperations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceOwner } from "@/lib/workspace-auth";
-import { performExternalWriteOperation } from "@/lib/integrations/external-writes";
-import { IntegrationSyncError } from "@/lib/integrations/sync";
 
 export const runtime = "nodejs";
 
@@ -30,20 +28,29 @@ export async function POST(
   if (!access.ok) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
+  if (!operation.changeSetId) {
+    return NextResponse.json(
+      { error: "CHANGE_SET_NOT_FOUND", message: "External operation is not linked to a change set." },
+      { status: 409 }
+    );
+  }
 
   try {
-    const result = await performExternalWriteOperation(operation.id);
-    return NextResponse.json({ ok: true, ...result });
+    const temporal = await import("@nexus/workflows/client");
+    const result = await temporal.startWorkflow(
+      "externalWriteRetryWorkflow",
+      {
+        operationId: operation.id,
+        changeSetId: operation.changeSetId,
+        userId: session.user.id,
+      },
+      { workflowId: `external-write-retry-${operation.id}-${Date.now()}` }
+    );
+    return NextResponse.json({ ok: true, ...result, status: "running" }, { status: 202 });
   } catch (error) {
-    if (error instanceof IntegrationSyncError) {
-      return NextResponse.json(
-        { error: error.code, message: error.message, metadata: error.metadata },
-        { status: error.status }
-      );
-    }
     return NextResponse.json(
-      { error: "PROVIDER_API_FAILED", message: error instanceof Error ? error.message : "External write failed." },
-      { status: 502 }
+      { error: "TEMPORAL_UNAVAILABLE", message: error instanceof Error ? error.message : "Workflow engine is unavailable." },
+      { status: 503 }
     );
   }
 }
