@@ -26,6 +26,7 @@ NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
 REQUIRE_INTEGRATIONS_HEALTH=true
+REQUIRE_INTEGRATION_PROVIDERS=github
 AI_ENABLED=true
 GEMINI_API_KEY=
 OPENAI_API_KEY=
@@ -44,6 +45,8 @@ AI_MAX_STEPS_PER_WORKFLOW=5
 ```
 
 `GEMINI_API_KEY` is required for AI chat and workflows. `OPENAI_API_KEY` is only required for embeddings/RAG search. `TAVILY_API_KEY` is optional; web research returns a clear not-configured response when it is absent.
+
+`REQUIRE_INTEGRATION_PROVIDERS=github` keeps the production health check strict for the GitHub App while Linear OAuth is deferred. Use `github,linear` only after Linear credentials are configured and you want missing Linear env to fail health.
 
 `DEMO_ACCESS_CODE` is optional. For a recruiter-facing CV demo, keep it empty and rely on the `AI_DEMO_*` plus global limits. If abuse starts or you want a private demo link, set `DEMO_ACCESS_CODE` and also set `NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=true` so the login screen explains the code requirement up front.
 

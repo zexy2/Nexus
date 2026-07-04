@@ -4,6 +4,28 @@ import { and, desc, inArray, lt, sql } from "drizzle-orm";
 import { getAiProviderStatus } from "@/lib/production-guardrails";
 import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 
+type IntegrationProviderName = "github" | "linear";
+
+const INTEGRATION_PROVIDERS: IntegrationProviderName[] = ["github", "linear"];
+
+function parseRequiredIntegrationProviders(): IntegrationProviderName[] {
+  const explicitProviders = process.env.REQUIRE_INTEGRATION_PROVIDERS;
+
+  if (explicitProviders !== undefined) {
+    return explicitProviders
+      .split(",")
+      .map((provider) => provider.trim().toLowerCase())
+      .filter((provider): provider is IntegrationProviderName =>
+        INTEGRATION_PROVIDERS.includes(provider as IntegrationProviderName)
+      );
+  }
+
+  // Backward compatibility: the old boolean meant "production should verify
+  // integrations". Linear is still deferred, so GitHub is the only required
+  // provider unless REQUIRE_INTEGRATION_PROVIDERS explicitly includes Linear.
+  return process.env.REQUIRE_INTEGRATIONS_HEALTH === "true" ? ["github"] : [];
+}
+
 // GET - Health check endpoint
 export async function GET() {
   try {
@@ -43,10 +65,17 @@ export async function GET() {
     const ai = getAiProviderStatus();
     const githubIntegration = getIntegrationProviderConfig("github");
     const linearIntegration = getIntegrationProviderConfig("linear");
-    const integrationsConfigured =
-      githubIntegration.configured && linearIntegration.configured;
-    const integrationsRequired =
-      process.env.REQUIRE_INTEGRATIONS_HEALTH === "true";
+    const requiredIntegrationProviders = parseRequiredIntegrationProviders();
+    const integrationsRequired = requiredIntegrationProviders.length > 0;
+    const integrationConfigByProvider = {
+      github: githubIntegration,
+      linear: linearIntegration,
+    } satisfies Record<IntegrationProviderName, typeof githubIntegration>;
+    const requiredIntegrationsConfigured = requiredIntegrationProviders.every(
+      (provider) => integrationConfigByProvider[provider].configured
+    );
+    const anyIntegrationConfigured =
+      githubIntegration.configured || linearIntegration.configured;
     const externalWriteStaleAfterMinutes = 5;
     let externalWriteStatus: "healthy" | "stale" | "unavailable" = "unavailable";
     let pendingExternalWrites = 0;
@@ -141,7 +170,7 @@ export async function GET() {
       workerStatus === "healthy" &&
       collaborationStatus === "healthy" &&
       externalWriteStatus !== "stale" &&
-      (!integrationsRequired || integrationsConfigured)
+      (!integrationsRequired || requiredIntegrationsConfigured)
         ? "healthy"
         : "degraded";
 
@@ -185,19 +214,25 @@ export async function GET() {
         },
         integrations: {
           status:
-            integrationsConfigured
+            integrationsRequired && requiredIntegrationsConfigured
               ? "configured"
-              : githubIntegration.configured || linearIntegration.configured
+              : !integrationsRequired && anyIntegrationConfigured
+              ? "configured"
+              : anyIntegrationConfigured
               ? "partially_configured"
               : "not_configured",
           required: integrationsRequired,
+          requiredProviders: requiredIntegrationProviders,
           github: {
             configured: githubIntegration.configured,
             missing: githubIntegration.missing,
+            required: requiredIntegrationProviders.includes("github"),
           },
           linear: {
             configured: linearIntegration.configured,
             missing: linearIntegration.missing,
+            required: requiredIntegrationProviders.includes("linear"),
+            deferred: !requiredIntegrationProviders.includes("linear"),
           },
           externalWrites: {
             status: externalWriteStatus,
