@@ -56,7 +56,9 @@ const {
 
 const {
   executeExternalWriteOperation,
+  syncGitHubIntegrationAfterExternalWrite,
   finalizeExternalWriteOperations,
+  listRunnableExternalWriteOperationIds,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "90 seconds",
   retry: {
@@ -70,6 +72,12 @@ const {
 
 export const resolvePlanChangeSignal =
   defineSignal<[PlanChangeDecision]>("resolvePlanChange");
+
+type PlanChangeApplyInput = {
+  changeSetId: string;
+  selectedProposalIds: string[];
+  userId: string;
+};
 
 type ParsedTask = {
   title: string;
@@ -177,6 +185,37 @@ export function parseTaskBreakdown(output: string): ParsedTask[] {
   }
 
   return tasks;
+}
+
+async function applyChangeSetAndExternalWrites(input: PlanChangeApplyInput) {
+  const applied = await applyPlanChangeSet(
+    input.changeSetId,
+    input.selectedProposalIds,
+    input.userId
+  );
+
+  for (const operationId of applied.externalOperationIds) {
+    try {
+      await executeExternalWriteAndSync(operationId);
+    } catch {
+      // The activity persists its terminal state. Continue so one provider
+      // failure cannot hide successful internal or external operations.
+    }
+  }
+
+  const external = applied.externalOperationIds.length > 0
+    ? await finalizeExternalWriteOperations(input.changeSetId, input.userId)
+    : null;
+
+  return { ...applied, external };
+}
+
+async function executeExternalWriteAndSync(operationId: string) {
+  const result = await executeExternalWriteOperation(operationId);
+  if (result.status === "succeeded") {
+    await syncGitHubIntegrationAfterExternalWrite(operationId);
+  }
+  return result;
 }
 
 /**
@@ -369,24 +408,11 @@ export async function planImpactWorkflow(
     };
   }
 
-  const applied = await applyPlanChangeSet(
-    persisted.changeSetId,
-    decision.selectedProposalIds || [],
-    decision.userId
-  );
-
-  for (const operationId of applied.externalOperationIds) {
-    try {
-      await executeExternalWriteOperation(operationId);
-    } catch {
-      // The activity persists its terminal state. Continue so one provider
-      // failure cannot hide successful internal or external operations.
-    }
-  }
-
-  const external = applied.externalOperationIds.length > 0
-    ? await finalizeExternalWriteOperations(persisted.changeSetId, decision.userId)
-    : null;
+  const applied = await applyChangeSetAndExternalWrites({
+    changeSetId: persisted.changeSetId,
+    selectedProposalIds: decision.selectedProposalIds || [],
+    userId: decision.userId,
+  });
 
   return {
     changeSetId: persisted.changeSetId,
@@ -395,8 +421,17 @@ export async function planImpactWorkflow(
     decision: "applied",
     summary: persisted.summary,
     stats: persisted.stats,
-    applied: { ...applied, external },
+    applied,
     steps: persisted.steps,
+  };
+}
+
+export async function applyPlanChangeSetWorkflow(input: PlanChangeApplyInput) {
+  const applied = await applyChangeSetAndExternalWrites(input);
+  return {
+    changeSetId: input.changeSetId,
+    decision: "applied" as const,
+    applied,
   };
 }
 
@@ -406,11 +441,29 @@ export async function externalWriteRetryWorkflow(input: {
   userId: string;
 }) {
   try {
-    await executeExternalWriteOperation(input.operationId);
+    await executeExternalWriteAndSync(input.operationId);
   } catch {
     // The activity persisted the provider failure. Finalize the parent change
     // set so the UI always reaches a truthful terminal state.
   }
+  return finalizeExternalWriteOperations(input.changeSetId, input.userId);
+}
+
+export async function runExternalWriteOperationsWorkflow(input: {
+  changeSetId: string;
+  userId: string;
+}) {
+  const operationIds = await listRunnableExternalWriteOperationIds(input.changeSetId);
+
+  for (const operationId of operationIds) {
+    try {
+      await executeExternalWriteAndSync(operationId);
+    } catch {
+      // The activity persisted the provider failure. Continue draining the
+      // queue so one bad operation does not hide successful writes.
+    }
+  }
+
   return finalizeExternalWriteOperations(input.changeSetId, input.userId);
 }
 

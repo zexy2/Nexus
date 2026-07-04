@@ -15,6 +15,16 @@ describe("GitHub impact linking", () => {
     ).toEqual(["#12", "#18", "#15"]);
   });
 
+  it("deduplicates closing references before loose issue mentions", () => {
+    expect(
+      extractPullRequestReferences({
+        title: "Close checkout gap #44",
+        body: "Closes #44\nFixes #12\nRelated to #12",
+        branch: "fix/REQ-004-checkout",
+      })
+    ).toEqual(["#44", "#12", "REQ-004"]);
+  });
+
   it("extracts requirement keys from title, body, and branch", () => {
     expect(
       extractPullRequestReferences({
@@ -31,11 +41,12 @@ describe("GitHub impact linking", () => {
         id: "issue-1",
         externalKey: "#12",
         title: "[REQ-001] Implement login",
-        description: null,
+        description: "Covers req-002 acceptance criteria.",
       },
     ]);
 
     expect(map.get("#12")).toBe("issue-1");
     expect(map.get("REQ-001")).toBe("issue-1");
+    expect(map.get("REQ-002")).toBe("issue-1");
   });
 });

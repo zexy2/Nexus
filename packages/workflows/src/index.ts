@@ -26,6 +26,8 @@ export {
   persistPlanImpact,
   applyPlanChangeSet,
   executeExternalWriteOperation,
+  syncGitHubIntegrationAfterExternalWrite,
+  listRunnableExternalWriteOperationIds,
   finalizeExternalWriteOperations,
   rejectPlanChangeSet,
   expirePlanChangeSet,

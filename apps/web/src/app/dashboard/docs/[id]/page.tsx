@@ -68,6 +68,7 @@ interface Document {
   iconEmoji: string | null;
   content: BlockNoteContent;
   createdBy: string | null;
+  isAiGenerated: boolean;
   updatedAt: string;
 }
 
@@ -548,6 +549,13 @@ export default function DocDetailPage() {
               </>
             ) : null}
           </div>
+
+          {doc.isAiGenerated && (
+            <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
+              <Sparkles className="size-3" />
+              {t("docs.detail.aiGenerated")}
+            </div>
+          )}
 
           <Button variant="outline" size="sm" className="gap-1" onClick={handleShare}>
             <Share2 className="size-3" />

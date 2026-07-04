@@ -83,6 +83,7 @@ const statusStyles: Record<string, string> = {
   pending: "border-amber-400/30 bg-amber-400/10 text-amber-200",
   pending_external: "border-purple-400/30 bg-purple-400/10 text-purple-200",
   external_pending: "border-purple-400/30 bg-purple-400/10 text-purple-200",
+  running: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
   applied: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   failed_retryable: "border-red-400/30 bg-red-400/10 text-red-200",
   failed_terminal: "border-red-400/30 bg-red-400/10 text-red-200",
@@ -149,6 +150,17 @@ export default function ChangesPage() {
     return pair ? pair[locale === "tr" ? 0 : 1] : status;
   }, [locale]);
 
+  const operationPassiveLabel = useCallback((status: string) => {
+    const labels: Record<string, [string, string]> = {
+      pending: ["Otomatik uygulanacak", "Will run automatically"],
+      running: ["Uygulanıyor", "Running"],
+      succeeded: ["Tamamlandı", "Completed"],
+      failed_terminal: ["Tekrar denenemez", "Cannot retry"],
+    };
+    const pair = labels[status];
+    return pair ? pair[locale === "tr" ? 0 : 1] : operationStatusLabel(status);
+  }, [locale, operationStatusLabel]);
+
   const actionLabel = useCallback((action: string) => {
     const fallback: Record<string, string> = {
       linear_create_issue: locale === "tr" ? "Linear issue oluştur" : "Create Linear issue",
@@ -214,14 +226,19 @@ export default function ChangesPage() {
     const hasPending = changeSets.some((changeSet) =>
       changeSet.status === "pending" || changeSet.status === "external_pending"
     );
-    if (!hasPending && !resolving) return;
+    const hasPendingOperation = detail?.proposals.some((proposal) =>
+      proposal.externalOperations.some((operation) =>
+        operation.status === "pending" || operation.status === "running"
+      )
+    ) ?? false;
+    if (!hasPending && !hasPendingOperation && !resolving) return;
 
     const timer = window.setInterval(() => {
       void fetchChangeSets();
       if (selectedId) void fetchDetail(selectedId);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [changeSets, fetchChangeSets, fetchDetail, resolving, selectedId]);
+  }, [changeSets, detail, fetchChangeSets, fetchDetail, resolving, selectedId]);
 
   const pendingProposals = useMemo(
     () => detail?.proposals.filter((proposal) => proposal.status === "pending") || [],
@@ -301,18 +318,35 @@ export default function ChangesPage() {
       const body = await response.json().catch(() => null);
       if (!response.ok) {
         if (body?.error === "CHANGE_SET_ALREADY_RESOLVED" || body?.error === "CHANGE_SET_NOT_PENDING") {
-          throw new Error(
+          showToast.success(
             locale === "tr"
               ? "Bu plan sürümü daha önce sonuçlandırıldı."
               : "This plan version has already been resolved."
           );
+          await fetchChangeSets();
+          await fetchDetail(detail.id);
+          return;
         }
         throw new Error(body?.message || body?.error || t("changes.resolveError"));
       }
+      if (body?.alreadyResolved) {
+        showToast.success(
+          locale === "tr"
+            ? "Bu plan sürümü daha önce sonuçlandırıldı."
+            : "This plan version has already been resolved."
+        );
+        await fetchChangeSets();
+        await fetchDetail(detail.id);
+        return;
+      }
       showToast.success(
-        decision === "apply"
-          ? t("changes.appliedToast")
-          : t("changes.rejectedToast")
+        decision === "apply" && (body?.status === "applying" || body?.recovery || body?.status === "external_pending")
+          ? locale === "tr"
+            ? "Uygulama başlatıldı. Terminal durum bekleniyor."
+            : "Apply started. Waiting for the terminal state."
+          : decision === "apply"
+            ? t("changes.appliedToast")
+            : t("changes.rejectedToast")
       );
       await fetchChangeSets();
       await fetchDetail(detail.id);
@@ -595,8 +629,7 @@ export default function ChangesPage() {
                                       <p className="mt-1 text-red-300">{operation.error}</p>
                                     )}
                                   </div>
-                                  {(operation.status === "pending" ||
-                                    operation.status === "failed_retryable") && (
+                                  {operation.status === "failed_retryable" ? (
                                     <Button
                                       type="button"
                                       variant="outline"
@@ -607,8 +640,12 @@ export default function ChangesPage() {
                                         void retryExternalOperation(operation.id);
                                       }}
                                     >
-                                      {locale === "tr" ? "Yazmayı dene" : "Run write"}
+                                      {locale === "tr" ? "Yeniden dene" : "Retry"}
                                     </Button>
+                                  ) : (
+                                    <span className="text-right text-[11px] text-white/35">
+                                      {operationPassiveLabel(operation.status)}
+                                    </span>
                                   )}
                                 </div>
                               ))}

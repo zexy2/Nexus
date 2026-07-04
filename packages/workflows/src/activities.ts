@@ -1553,6 +1553,9 @@ export async function applyPlanChangeSet(
       if (unknownSelectedIds.length > 0) {
         throw new Error("Selected proposal does not belong to this pending change set");
       }
+      const selectedCreateTaskCount = proposals.filter(
+        (proposal) => selectedProposalIdSet.has(proposal.id) && proposal.action === "create_task"
+      ).length;
 
       const selected = selectedProposalIdSet;
       const createdTaskIds: string[] = [];
@@ -1824,6 +1827,26 @@ export async function applyPlanChangeSet(
         applied++;
       }
 
+      if (selectedCreateTaskCount > 0 && createdTaskIds.length !== selectedCreateTaskCount) {
+        await tx`
+          INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+          VALUES (
+            ${userId},
+            ${changeSet.workspace_id}::uuid,
+            ${"plan.change_apply_incomplete"},
+            ${"error"},
+            ${JSON.stringify({
+              changeSetId,
+              expectedCreatedTasks: selectedCreateTaskCount,
+              createdTaskIds,
+            })}::jsonb
+          )
+        `;
+        throw new Error(
+          `Expected ${selectedCreateTaskCount} created tasks but only created ${createdTaskIds.length}`
+        );
+      }
+
       await tx`
         UPDATE plan_versions
         SET status = 'superseded'
@@ -2026,6 +2049,256 @@ function selectedGitHubRepository(metadata: Record<string, unknown>) {
   const repo = typeof metadata.repositoryName === "string" ? metadata.repositoryName : null;
   if (!owner || !repo) throw new Error("Select a GitHub repository before applying writes");
   return { owner, repo };
+}
+
+type GitHubSyncOperationRow = {
+  id: string;
+  workspace_id: string;
+  integration_id: string;
+  provider: string;
+  status: string;
+  installation_id: string | null;
+  integration_metadata: Record<string, unknown> | null;
+  created_by: string | null;
+};
+
+type GitHubSyncRepository = {
+  id: number;
+  full_name: string;
+  html_url: string;
+  default_branch: string;
+  owner?: { login?: string };
+  name: string;
+};
+
+type GitHubSyncIssue = {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  html_url: string;
+  labels?: Array<string | { name?: string }>;
+  pull_request?: unknown;
+  updated_at?: string;
+};
+
+type GitHubSyncPullRequest = {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  html_url: string;
+  head?: { ref?: string; sha?: string };
+  base?: { ref?: string };
+  merged_at?: string | null;
+};
+
+type GitHubSyncFile = { filename?: string };
+
+type GitHubSyncCheckRun = {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  html_url?: string;
+  details_url?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+};
+
+type GitHubSyncedPullRequest = GitHubSyncPullRequest & {
+  changedFiles: string[];
+  checkRuns: GitHubSyncCheckRun[];
+};
+
+const GITHUB_CLOSING_ISSUE_REFERENCE =
+  /\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s+#(\d+)\b/gi;
+const GITHUB_ISSUE_REFERENCE = /(^|[^\w])#(\d+)\b/g;
+const GITHUB_REQUIREMENT_REFERENCE = /\bREQ-\d+\b/gi;
+
+function normalizeIntegrationText(value: string | null | undefined) {
+  return (value || "")
+    .toLocaleLowerCase("tr-TR")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractGitHubPullRequestReferences(input: {
+  title: string;
+  body?: string | null;
+  branch?: string | null;
+}) {
+  const text = `${input.title || ""}\n${input.body || ""}`;
+  const issueNumbers = new Set<string>();
+  const requirementKeys = new Set<string>();
+
+  for (const match of text.matchAll(GITHUB_CLOSING_ISSUE_REFERENCE)) {
+    if (match[1]) issueNumbers.add(`#${match[1]}`);
+  }
+  for (const match of text.matchAll(GITHUB_ISSUE_REFERENCE)) {
+    if (match[2]) issueNumbers.add(`#${match[2]}`);
+  }
+  for (const source of [text, input.branch || ""]) {
+    for (const match of source.matchAll(GITHUB_REQUIREMENT_REFERENCE)) {
+      requirementKeys.add(match[0].toUpperCase());
+    }
+  }
+
+  return { issueNumbers: [...issueNumbers], requirementKeys: [...requirementKeys] };
+}
+
+function githubIssueLabels(issue: GitHubSyncIssue) {
+  return (issue.labels || [])
+    .map((label) => {
+      if (typeof label === "string") return label;
+      return typeof label.name === "string" ? label.name : "";
+    })
+    .filter(Boolean);
+}
+
+function githubIssueReferenceMap(
+  issues: Array<{ id: string; external_key: string | null; title: string; description: string | null }>
+) {
+  const map = new Map<string, string>();
+  for (const issue of issues) {
+    if (issue.external_key) map.set(issue.external_key.toUpperCase(), issue.id);
+    const haystack = `${issue.title}\n${issue.description || ""}`;
+    for (const match of haystack.matchAll(GITHUB_REQUIREMENT_REFERENCE)) {
+      map.set(match[0].toUpperCase(), issue.id);
+    }
+  }
+  return map;
+}
+
+async function fetchGitHubRepositorySyncData(
+  token: string,
+  owner: string,
+  repo: string
+) {
+  const encodedOwner = encodeURIComponent(owner);
+  const encodedRepo = encodeURIComponent(repo);
+  const base = `https://api.github.com/repos/${encodedOwner}/${encodedRepo}`;
+  const repository = await providerFetch<GitHubSyncRepository>(base, token);
+  const rawIssues = await providerFetch<GitHubSyncIssue[]>(
+    `${base}/issues?state=all&per_page=100`,
+    token
+  );
+  const issues = rawIssues.filter((issue) => !issue.pull_request);
+  const pulls = await providerFetch<GitHubSyncPullRequest[]>(
+    `${base}/pulls?state=all&per_page=100`,
+    token
+  );
+  const pullRequests: GitHubSyncedPullRequest[] = [];
+
+  for (const pull of pulls) {
+    const files = await providerFetch<GitHubSyncFile[]>(
+      `${base}/pulls/${pull.number}/files?per_page=100`,
+      token
+    );
+    let checkRuns: GitHubSyncCheckRun[] = [];
+    const sha = pull.head?.sha;
+    if (sha) {
+      try {
+        const checks = await providerFetch<{ check_runs?: GitHubSyncCheckRun[] }>(
+          `${base}/commits/${sha}/check-runs?per_page=100`,
+          token
+        );
+        checkRuns = checks.check_runs || [];
+      } catch {
+        checkRuns = [];
+      }
+    }
+    pullRequests.push({
+      ...pull,
+      changedFiles: files.map((file) => file.filename || "").filter(Boolean),
+      checkRuns,
+    });
+  }
+
+  return { repository, issues, pullRequests };
+}
+
+async function autoLinkGitHubRequirements(sql: SqlExecutor, workspaceId: string) {
+  const requirements = await sql<Array<{
+    id: string;
+    stable_key: string;
+    title: string;
+  }>>`
+    SELECT id, stable_key, title
+    FROM requirements
+    WHERE workspace_id = ${workspaceId}::uuid
+      AND status <> 'removed'
+  `;
+  const issues = await sql<Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    external_key: string | null;
+  }>>`
+    SELECT id, title, description, external_key
+    FROM external_issues
+    WHERE workspace_id = ${workspaceId}::uuid
+      AND provider = 'github'
+  `;
+
+  let linked = 0;
+  for (const requirement of requirements) {
+    const requirementTitle = normalizeIntegrationText(requirement.title);
+    for (const issue of issues) {
+      const haystack = `${issue.title}\n${issue.description || ""}`.toUpperCase();
+      const normalizedIssue = normalizeIntegrationText(`${issue.title}\n${issue.description || ""}`);
+      const stableKeyMatch = haystack.includes(requirement.stable_key.toUpperCase());
+      const titleMatch = requirementTitle.length >= 8 && normalizedIssue.includes(requirementTitle);
+      if (!stableKeyMatch && !titleMatch) continue;
+
+      const rows = await sql<Array<{ id: string }>>`
+        INSERT INTO requirement_external_links (
+          workspace_id, requirement_id, external_issue_id, confidence, source, created_by
+        ) VALUES (
+          ${workspaceId}::uuid,
+          ${requirement.id}::uuid,
+          ${issue.id}::uuid,
+          ${stableKeyMatch ? 95 : 70},
+          ${stableKeyMatch ? "sync" : "ai"},
+          NULL
+        )
+        ON CONFLICT (requirement_id, external_issue_id) DO NOTHING
+        RETURNING id
+      `;
+      if (rows[0]?.id) linked += 1;
+    }
+  }
+
+  return linked;
+}
+
+async function recordGitHubSyncFailure(
+  sql: SqlExecutor,
+  operation: GitHubSyncOperationRow,
+  message: string
+) {
+  await sql`
+    INSERT INTO integration_sync_runs (
+      workspace_id, integration_id, provider, status, completed_at, error, stats, metadata
+    ) VALUES (
+      ${operation.workspace_id}::uuid,
+      ${operation.integration_id}::uuid,
+      ${"github"},
+      ${"failed"},
+      now(),
+      ${message},
+      ${JSON.stringify({})}::jsonb,
+      ${JSON.stringify({ source: "external_write", operationId: operation.id })}::jsonb
+    )
+  `;
+  await sql`
+    UPDATE workspace_integrations
+    SET last_error = ${message}, updated_at = now()
+    WHERE id = ${operation.integration_id}::uuid
+  `;
 }
 
 function withNexusMarker(body: string, key: string) {
@@ -2366,13 +2639,27 @@ export async function executeExternalWriteOperation(operationId: string) {
     if (operation.status === "succeeded") {
       return { operationId, status: "succeeded" as const, alreadyCompleted: true };
     }
+    if (operation.status !== "pending" && operation.status !== "failed_retryable") {
+      return { operationId, status: operation.status, skipped: true };
+    }
 
-    await sql`
+    const claimedRows = await sql<Array<{ id: string }>>`
       UPDATE external_write_operations
       SET status = 'running', attempt_count = attempt_count + 1,
           attempted_at = now(), error = NULL, updated_at = now()
       WHERE id = ${operation.id}::uuid
+        AND status IN ('pending', 'failed_retryable')
+      RETURNING id
     `;
+    if (!claimedRows[0]?.id) {
+      const currentRows = await sql<Array<{ status: string }>>`
+        SELECT status
+        FROM external_write_operations
+        WHERE id = ${operation.id}::uuid
+        LIMIT 1
+      `;
+      return { operationId, status: currentRows[0]?.status || "unknown", skipped: true };
+    }
 
     let response: unknown;
     if (operation.provider === "github") {
@@ -2455,6 +2742,306 @@ export async function executeExternalWriteOperation(operationId: string) {
       throw ApplicationFailure.nonRetryable(message, "ExternalWriteTerminalError");
     }
     throw error;
+  } finally {
+    await sql.end();
+  }
+}
+
+export async function syncGitHubIntegrationAfterExternalWrite(operationId: string) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl, { max: 1 });
+  let operation: GitHubSyncOperationRow | null = null;
+
+  try {
+    const rows = await sql<GitHubSyncOperationRow[]>`
+      SELECT
+        o.id, o.workspace_id, o.integration_id, o.provider, o.status,
+        i.installation_id, i.metadata AS integration_metadata, i.created_by
+      FROM external_write_operations o
+      INNER JOIN workspace_integrations i ON i.id = o.integration_id
+      WHERE o.id = ${operationId}::uuid
+      LIMIT 1
+    `;
+    operation = rows[0] || null;
+    if (!operation || operation.provider !== "github" || operation.status !== "succeeded") {
+      return { synced: false as const, skipped: true as const };
+    }
+    if (!operation.installation_id) {
+      throw new Error("GitHub installation is missing");
+    }
+
+    const metadata = operation.integration_metadata || {};
+    const { owner, repo } = selectedGitHubRepository(metadata);
+    const token = await githubInstallationToken(operation.installation_id);
+    const { repository, issues, pullRequests } = await fetchGitHubRepositorySyncData(
+      token,
+      owner,
+      repo
+    );
+    const repositoryOwner = repository.owner?.login || owner;
+    const repositoryName = repository.name || repo;
+    const fullName = repository.full_name || `${repositoryOwner}/${repositoryName}`;
+
+    const repositoryRows = await sql<Array<{ id: string }>>`
+      INSERT INTO workspace_repositories (
+        workspace_id, provider, repository_url, repository_owner,
+        repository_name, default_branch, created_by
+      ) VALUES (
+        ${operation.workspace_id}::uuid,
+        ${"github"},
+        ${repository.html_url || `https://github.com/${fullName}`},
+        ${repositoryOwner},
+        ${repositoryName},
+        ${repository.default_branch || "main"},
+        ${operation.created_by}
+      )
+      ON CONFLICT (workspace_id)
+      DO UPDATE SET
+        provider = excluded.provider,
+        repository_url = excluded.repository_url,
+        repository_owner = excluded.repository_owner,
+        repository_name = excluded.repository_name,
+        default_branch = excluded.default_branch,
+        updated_at = now()
+      RETURNING id
+    `;
+    const repositoryId = repositoryRows[0]?.id;
+
+    for (const issue of issues) {
+      await sql`
+        INSERT INTO external_issues (
+          workspace_id, integration_id, provider, external_id, external_key,
+          title, description, status, url, labels, metadata, synced_at
+        ) VALUES (
+          ${operation.workspace_id}::uuid,
+          ${operation.integration_id}::uuid,
+          ${"github"},
+          ${String(issue.id)},
+          ${`#${issue.number}`},
+          ${(issue.title || `Issue #${issue.number}`).slice(0, 500)},
+          ${issue.body || null},
+          ${issue.state || "open"},
+          ${issue.html_url || null},
+          ${JSON.stringify(githubIssueLabels(issue))}::jsonb,
+          ${JSON.stringify({
+            number: issue.number,
+            repository: fullName,
+            stale: false,
+            syncedFrom: "external_write",
+            updatedAt: issue.updated_at || null,
+          })}::jsonb,
+          now()
+        )
+        ON CONFLICT (workspace_id, provider, external_id)
+        DO UPDATE SET
+          integration_id = excluded.integration_id,
+          external_key = excluded.external_key,
+          title = excluded.title,
+          description = excluded.description,
+          status = excluded.status,
+          url = excluded.url,
+          labels = excluded.labels,
+          metadata = external_issues.metadata || excluded.metadata,
+          synced_at = now(),
+          updated_at = now()
+      `;
+    }
+
+    const syncedIssues = await sql<Array<{
+      id: string;
+      external_key: string | null;
+      title: string;
+      description: string | null;
+    }>>`
+      SELECT id, external_key, title, description
+      FROM external_issues
+      WHERE workspace_id = ${operation.workspace_id}::uuid
+        AND provider = 'github'
+    `;
+    const issueReferenceMap = githubIssueReferenceMap(syncedIssues);
+    let checkRunCount = 0;
+
+    for (const pullRequest of pullRequests) {
+      const references = extractGitHubPullRequestReferences({
+        title: pullRequest.title,
+        body: pullRequest.body,
+        branch: pullRequest.head?.ref || null,
+      });
+      const linkedExternalIssueIds = [
+        ...references.issueNumbers,
+        ...references.requirementKeys,
+      ]
+        .map((reference) => issueReferenceMap.get(reference.toUpperCase()))
+        .filter((id): id is string => Boolean(id));
+      const uniqueLinkedIssueIds = [...new Set(linkedExternalIssueIds)];
+      const status = pullRequest.merged_at
+        ? "merged"
+        : pullRequest.state || "open";
+      const prRows = await sql<Array<{ id: string }>>`
+        INSERT INTO external_pull_requests (
+          workspace_id, integration_id, repository_id, external_id, number,
+          title, status, url, branch, base_branch, latest_commit_sha,
+          linked_external_issue_ids, changed_files, metadata, synced_at
+        ) VALUES (
+          ${operation.workspace_id}::uuid,
+          ${operation.integration_id}::uuid,
+          ${repositoryId || null}::uuid,
+          ${String(pullRequest.id)},
+          ${pullRequest.number},
+          ${(pullRequest.title || `PR #${pullRequest.number}`).slice(0, 500)},
+          ${status},
+          ${pullRequest.html_url || null},
+          ${pullRequest.head?.ref || null},
+          ${pullRequest.base?.ref || null},
+          ${pullRequest.head?.sha || null},
+          ${JSON.stringify(uniqueLinkedIssueIds)}::jsonb,
+          ${JSON.stringify(pullRequest.changedFiles)}::jsonb,
+          ${JSON.stringify({
+            repository: fullName,
+            references,
+            syncedFrom: "external_write",
+          })}::jsonb,
+          now()
+        )
+        ON CONFLICT (workspace_id, external_id)
+        DO UPDATE SET
+          integration_id = excluded.integration_id,
+          repository_id = excluded.repository_id,
+          number = excluded.number,
+          title = excluded.title,
+          status = excluded.status,
+          url = excluded.url,
+          branch = excluded.branch,
+          base_branch = excluded.base_branch,
+          latest_commit_sha = excluded.latest_commit_sha,
+          linked_external_issue_ids = excluded.linked_external_issue_ids,
+          changed_files = excluded.changed_files,
+          metadata = external_pull_requests.metadata || excluded.metadata,
+          synced_at = now(),
+          updated_at = now()
+        RETURNING id
+      `;
+      const pullRequestId = prRows[0]?.id;
+      if (!pullRequestId) continue;
+
+      await sql`
+        DELETE FROM external_check_runs
+        WHERE pull_request_id = ${pullRequestId}::uuid
+      `;
+      for (const checkRun of pullRequest.checkRuns) {
+        checkRunCount += 1;
+        await sql`
+          INSERT INTO external_check_runs (
+            workspace_id, pull_request_id, external_id, name, status,
+            conclusion, url, started_at, completed_at, metadata
+          ) VALUES (
+            ${operation.workspace_id}::uuid,
+            ${pullRequestId}::uuid,
+            ${String(checkRun.id)},
+            ${(checkRun.name || "GitHub check").slice(0, 255)},
+            ${checkRun.status || "unknown"},
+            ${checkRun.conclusion || null},
+            ${checkRun.html_url || checkRun.details_url || null},
+            ${checkRun.started_at ? new Date(checkRun.started_at) : null},
+            ${checkRun.completed_at ? new Date(checkRun.completed_at) : null},
+            ${JSON.stringify({ repository: fullName, pullRequestNumber: pullRequest.number })}::jsonb
+          )
+        `;
+      }
+    }
+
+    const autoLinkedIssues = await autoLinkGitHubRequirements(
+      sql as unknown as SqlExecutor,
+      operation.workspace_id
+    );
+    const stats = {
+      issues: issues.length,
+      pullRequests: pullRequests.length,
+      checkRuns: checkRunCount,
+      autoLinkedIssues,
+    };
+
+    await sql`
+      UPDATE workspace_integrations
+      SET status = 'connected',
+          external_account_name = ${repositoryOwner},
+          metadata = metadata || ${JSON.stringify({
+            selectedRepository: fullName,
+            repositoryOwner,
+            repositoryName,
+          })}::jsonb,
+          last_sync_at = now(),
+          last_error = NULL,
+          updated_at = now()
+      WHERE id = ${operation.integration_id}::uuid
+    `;
+    await sql`
+      INSERT INTO integration_sync_runs (
+        workspace_id, integration_id, provider, status, completed_at, stats, metadata
+      ) VALUES (
+        ${operation.workspace_id}::uuid,
+        ${operation.integration_id}::uuid,
+        ${"github"},
+        ${"completed"},
+        now(),
+        ${JSON.stringify(stats)}::jsonb,
+        ${JSON.stringify({ source: "external_write", operationId, repository: fullName })}::jsonb
+      )
+    `;
+    await sql`
+      INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+      VALUES (
+        ${operation.created_by},
+        ${operation.workspace_id}::uuid,
+        ${"integration.github_sync_completed"},
+        ${"success"},
+        ${JSON.stringify({ operationId, ...stats })}::jsonb
+      )
+    `;
+
+    return { synced: true as const, stats };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "GitHub sync failed";
+    if (operation) {
+      await recordGitHubSyncFailure(
+        sql as unknown as SqlExecutor,
+        operation,
+        message
+      );
+      await sql`
+        INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+        VALUES (
+          ${operation.created_by},
+          ${operation.workspace_id}::uuid,
+          ${"integration.github_sync_failed"},
+          ${"error"},
+          ${JSON.stringify({ operationId, error: message })}::jsonb
+        )
+      `;
+    }
+    return { synced: false as const, error: message };
+  } finally {
+    await sql.end();
+  }
+}
+
+export async function listRunnableExternalWriteOperationIds(changeSetId: string) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl, { max: 1 });
+
+  try {
+    const rows = await sql<Array<{ id: string }>>`
+      SELECT id
+      FROM external_write_operations
+      WHERE change_set_id = ${changeSetId}::uuid
+        AND status IN ('pending', 'failed_retryable')
+      ORDER BY created_at ASC, id ASC
+    `;
+    return rows.map((row) => row.id);
   } finally {
     await sql.end();
   }

@@ -40,8 +40,10 @@ vi.mock("@/lib/production-guardrails", () => ({
 }));
 
 const signalWorkflow = vi.fn();
+const startWorkflow = vi.fn();
 vi.mock("@nexus/workflows/client", () => ({
   signalWorkflow: (...a: unknown[]) => signalWorkflow(...a),
+  startWorkflow: (...a: unknown[]) => startWorkflow(...a),
 }));
 
 import { POST as applyChangeSet } from "@/app/api/change-sets/[id]/apply/route";
@@ -77,6 +79,7 @@ beforeEach(() => {
   selectPendingProposals.mockResolvedValue([{ id: "cp-1" }, { id: "cp-2" }]);
   writeAuditLog.mockResolvedValue(undefined);
   signalWorkflow.mockResolvedValue(undefined);
+  startWorkflow.mockResolvedValue({ workflowId: "recovery-workflow-1" });
 });
 
 describe("POST /api/change-sets/:id/apply", () => {
@@ -120,10 +123,65 @@ describe("POST /api/change-sets/:id/apply", () => {
     expect(signalWorkflow).not.toHaveBeenCalled();
   });
 
-  it("returns 409 when the change set is not pending", async () => {
+  it("returns an idempotent response when the change set is already terminal", async () => {
     findChangeSet.mockResolvedValue({ ...pendingChangeSet, status: "applied" });
     const res = await applyChangeSet(req({ selectedProposalIds: ["cp-1"] }), params);
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      status: "applied",
+      alreadyResolved: true,
+    });
+    expect(signalWorkflow).not.toHaveBeenCalled();
+    expect(startWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 for non-terminal non-pending change sets", async () => {
+    findChangeSet.mockResolvedValue({ ...pendingChangeSet, status: "applying" });
+    const res = await applyChangeSet(req({ selectedProposalIds: ["cp-1"] }), params);
     expect(res.status).toBe(409);
+    expect(signalWorkflow).not.toHaveBeenCalled();
+    expect(startWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("starts a recovery workflow when the original Temporal workflow is closed", async () => {
+    signalWorkflow.mockRejectedValue(new Error("workflow execution already completed"));
+
+    const res = await applyChangeSet(req({ selectedProposalIds: ["cp-1"] }), params);
+
+    expect(res.status).toBe(202);
+    expect(startWorkflow).toHaveBeenCalledWith(
+      "applyPlanChangeSetWorkflow",
+      {
+        changeSetId: "cs-1",
+        selectedProposalIds: ["cp-1"],
+        userId: "user-1",
+      },
+      expect.objectContaining({
+        taskQueue: "nexus-agents",
+      })
+    );
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "plan.change_apply_recovery_started", workspaceId: "ws-1" })
+    );
+  });
+
+  it("starts an external write recovery workflow for external_pending change sets", async () => {
+    findChangeSet.mockResolvedValue({ ...pendingChangeSet, status: "external_pending" });
+
+    const res = await applyChangeSet(req({ selectedProposalIds: ["cp-1"] }), params);
+
+    expect(res.status).toBe(202);
+    expect(startWorkflow).toHaveBeenCalledWith(
+      "runExternalWriteOperationsWorkflow",
+      {
+        changeSetId: "cs-1",
+        userId: "user-1",
+      },
+      expect.objectContaining({
+        taskQueue: "nexus-agents",
+      })
+    );
     expect(signalWorkflow).not.toHaveBeenCalled();
   });
 });

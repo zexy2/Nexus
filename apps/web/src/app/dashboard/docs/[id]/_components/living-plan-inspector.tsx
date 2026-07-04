@@ -256,17 +256,90 @@ export function LivingPlanInspector({
     [impactGraph]
   );
 
-  const graphDiagnosticCopy = useMemo(() => {
+  const graphDiagnostic = useMemo(() => {
     const code = impactGraph?.diagnostics?.[0];
-    const copy = {
-      NO_INTEGRATION: ["GitHub veya Linear bağlantısı yok.", "No GitHub or Linear integration is connected."],
-      NO_SYNCED_ISSUES: ["Bağlantı hazır ancak henüz senkronize issue bulunamadı.", "The integration is connected, but no synced issues were found."],
-      NO_REQUIREMENT_MATCHES: ["Issue'lar senkronize edildi ancak bu plandaki gereksinimlerle eşleşmedi.", "Issues are synced, but none match this plan's requirements."],
-      NO_LINKED_PRS: ["Issue bağlantıları var; PR'ların issue numarasına veya REQ anahtarına referans vermesi gerekiyor.", "Issue links exist; PRs must reference the issue number or requirement key."],
-      NO_CHECK_RUNS: ["PR bağlantısı bulundu ancak henüz check run sonucu yok.", "A PR is linked, but no check run result is available yet."],
+    const copy: Record<
+      NonNullable<typeof code>,
+      {
+        title: [string, string];
+        body: [string, string];
+        tips: [string[], string[]];
+      }
+    > = {
+      NO_INTEGRATION: {
+        title: ["GitHub veya Linear bağlantısı yok.", "No GitHub or Linear integration is connected."],
+        body: [
+          "Etki grafiği gerçek issue, PR ve test kanıtı göstermek için önce bir dış sistem bağlantısına ihtiyaç duyar.",
+          "The impact graph needs an external system connection before it can show real issues, PRs, and test evidence.",
+        ],
+        tips: [
+          ["Ayarlar > Bağlantılar bölümünden GitHub App'i bağlayın.", "Bağlantı sonrası kaynakları getirip senkronize edin."],
+          ["Connect the GitHub App from Settings > Integrations.", "Fetch resources and sync after connecting."],
+        ],
+      },
+      NO_SYNCED_ISSUES: {
+        title: [
+          "GitHub bağlı, fakat senkronize issue yok.",
+          "GitHub is connected, but no synced issues were found.",
+        ],
+        body: [
+          "Repo seçilmiş olsa bile Nexus grafiği ancak senkronize edilmiş issue kayıtlarıyla kurabilir.",
+          "Even with a selected repository, Nexus can build the graph only after issues are synced.",
+        ],
+        tips: [
+          ["Ayarlar > Bağlantılar bölümünde Kaynakları getir ve Senkronize et adımlarını çalıştırın.", "Repo'da en az bir issue olduğundan emin olun."],
+          ["Run Fetch resources and Sync from Settings > Integrations.", "Make sure the repository has at least one issue."],
+        ],
+      },
+      NO_REQUIREMENT_MATCHES: {
+        title: [
+          "Issue var, ama bu planın gereksinimleriyle eşleşmiyor.",
+          "Issues exist, but none match this plan's requirements.",
+        ],
+        body: [
+          "Nexus güvenilir bağlantı için issue başlığı veya açıklamasında REQ-001 gibi gereksinim anahtarlarını arar.",
+          "Nexus looks for requirement keys like REQ-001 in issue titles or descriptions to create reliable links.",
+        ],
+        tips: [
+          ["Issue başlığına veya açıklamasına REQ-001 ekleyin.", "Alternatif olarak değişiklik önerilerinden GitHub issue oluşturun."],
+          ["Add REQ-001 to the issue title or description.", "Alternatively create GitHub issues from change proposals."],
+        ],
+      },
+      NO_LINKED_PRS: {
+        title: [
+          "Issue eşleşti, fakat bağlı PR yok.",
+          "Issues are matched, but no linked PR was found.",
+        ],
+        body: [
+          "PR grafiğe girmek için issue numarasına veya gereksinim anahtarına açıkça referans vermeli.",
+          "A PR must explicitly reference the issue number or requirement key before it appears in the graph.",
+        ],
+        tips: [
+          ["PR açıklamasına Fixes #123 veya Closes #123 ekleyin.", "Branch veya PR başlığında REQ-001 kullanabilirsiniz."],
+          ["Add Fixes #123 or Closes #123 to the PR body.", "You can also use REQ-001 in the branch name or PR title."],
+        ],
+      },
+      NO_CHECK_RUNS: {
+        title: ["PR bağlı, fakat check sonucu yok.", "A PR is linked, but no check result is available."],
+        body: [
+          "GitHub Actions veya başka bir check run tamamlandığında Nexus test kanıtını grafiğe ekleyebilir.",
+          "When GitHub Actions or another check run completes, Nexus can attach the test evidence to the graph.",
+        ],
+        tips: [
+          ["PR üzerinde CI çalıştırın.", "Check tamamlandıktan sonra GitHub senkronizasyonunu yenileyin."],
+          ["Run CI on the PR.", "Refresh the GitHub sync after checks complete."],
+        ],
+      },
     } as const;
-    const pair = code ? copy[code] : null;
-    return pair ? pair[locale === "tr" ? 0 : 1] : null;
+    const item = code ? copy[code] : null;
+    const index = locale === "tr" ? 0 : 1;
+    return item
+      ? {
+          title: item.title[index],
+          body: item.body[index],
+          tips: item.tips[index],
+        }
+      : null;
   }, [impactGraph, locale]);
 
   const startAnalysis = async () => {
@@ -521,9 +594,24 @@ export function LivingPlanInspector({
           </div>
         ) : (
           <div className="mt-4 border border-white/10 bg-white/[0.02] p-4 text-xs leading-5 text-white/35">
-            {graphDiagnosticCopy || (locale === "tr"
-              ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
-              : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist.")}
+            {graphDiagnostic ? (
+              <div>
+                <div className="text-sm font-medium text-white/75">{graphDiagnostic.title}</div>
+                <p className="mt-2">{graphDiagnostic.body}</p>
+                <ul className="mt-3 space-y-1.5">
+                  {graphDiagnostic.tips.map((tip) => (
+                    <li key={tip} className="flex gap-2">
+                      <span className="mt-2 size-1 shrink-0 rounded-full bg-cyan-300/70" />
+                      <span>{tip}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              locale === "tr"
+                ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
+                : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist."
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href="/dashboard/settings?tab=integrations">

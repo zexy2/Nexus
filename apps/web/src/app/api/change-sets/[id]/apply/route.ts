@@ -8,6 +8,49 @@ import { writeAuditLog } from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
 
+const TERMINAL_CHANGE_SET_STATUSES = new Set([
+  "applied",
+  "partially_applied",
+  "external_failed",
+  "rejected",
+  "expired",
+]);
+
+function isClosedWorkflowError(message: string) {
+  return /already completed|not found|closed|completed workflow|workflow execution already completed/i.test(message);
+}
+
+async function startApplyRecoveryWorkflow(input: {
+  changeSetId: string;
+  selectedProposalIds: string[];
+  userId: string;
+}) {
+  const temporal = await import("@nexus/workflows/client");
+  return temporal.startWorkflow(
+    "applyPlanChangeSetWorkflow",
+    input,
+    {
+      workflowId: `change-set-apply-${input.changeSetId}-${Date.now()}`,
+      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
+    }
+  );
+}
+
+async function startExternalWriteRecoveryWorkflow(input: {
+  changeSetId: string;
+  userId: string;
+}) {
+  const temporal = await import("@nexus/workflows/client");
+  return temporal.startWorkflow(
+    "runExternalWriteOperationsWorkflow",
+    input,
+    {
+      workflowId: `change-set-external-${input.changeSetId}-${Date.now()}`,
+      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
+    }
+  );
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -29,7 +72,54 @@ export async function POST(
   if (!access.ok) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  if (changeSet.status !== "pending" || !changeSet.temporalWorkflowId) {
+  if (TERMINAL_CHANGE_SET_STATUSES.has(changeSet.status)) {
+    return NextResponse.json({
+      ok: true,
+      changeSetId: id,
+      status: changeSet.status,
+      alreadyResolved: true,
+    });
+  }
+  if (changeSet.status === "external_pending") {
+    try {
+      const recovery = await startExternalWriteRecoveryWorkflow({
+        changeSetId: id,
+        userId: session.user.id,
+      });
+
+      await writeAuditLog({
+        userId: session.user.id,
+        workspaceId: changeSet.workspaceId,
+        event: "plan.external_write_recovery_started",
+        metadata: {
+          changeSetId: id,
+          recoveryWorkflowId: recovery.workflowId,
+        },
+        request,
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          changeSetId: id,
+          workflowId: recovery.workflowId,
+          status: "external_pending",
+          recovery: true,
+        },
+        { status: 202 }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Workflow engine is unavailable";
+      return NextResponse.json(
+        {
+          error: "TEMPORAL_UNAVAILABLE",
+          message,
+        },
+        { status: 503 }
+      );
+    }
+  }
+  if (changeSet.status !== "pending") {
     return NextResponse.json(
       { error: "CHANGE_SET_NOT_PENDING", message: "This change set cannot be applied." },
       { status: 409 }
@@ -71,12 +161,46 @@ export async function POST(
   }
 
   try {
+    if (!changeSet.temporalWorkflowId) {
+      const recovery = await startApplyRecoveryWorkflow({
+        changeSetId: id,
+        selectedProposalIds,
+        userId: session.user.id,
+      });
+
+      await writeAuditLog({
+        userId: session.user.id,
+        workspaceId: changeSet.workspaceId,
+        event: "plan.change_apply_recovery_started",
+        metadata: {
+          changeSetId: id,
+          selectedProposalIds,
+          recoveryWorkflowId: recovery.workflowId,
+          reason: "missing_temporal_workflow_id",
+        },
+        request,
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          changeSetId: id,
+          workflowId: recovery.workflowId,
+          status: "applying",
+          recovery: true,
+        },
+        { status: 202 }
+      );
+    }
+
     const temporal = await import("@nexus/workflows/client");
-    await temporal.signalWorkflow(changeSet.temporalWorkflowId, "resolvePlanChange", [{
-      decision: "approve",
-      selectedProposalIds,
-      userId: session.user.id,
-    }]);
+    await temporal.signalWorkflow(changeSet.temporalWorkflowId, "resolvePlanChange", [
+      {
+        decision: "approve",
+        selectedProposalIds,
+        userId: session.user.id,
+      },
+    ]);
 
     await writeAuditLog({
       userId: session.user.id,
@@ -97,13 +221,62 @@ export async function POST(
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Workflow engine is unavailable";
-    if (/already completed|not found|closed/i.test(message)) {
+    if (isClosedWorkflowError(message)) {
+      try {
+        const recovery = await startApplyRecoveryWorkflow({
+          changeSetId: id,
+          selectedProposalIds,
+          userId: session.user.id,
+        });
+
+        await writeAuditLog({
+          userId: session.user.id,
+          workspaceId: changeSet.workspaceId,
+          event: "plan.change_apply_recovery_started",
+          metadata: {
+            changeSetId: id,
+            selectedProposalIds,
+            previousWorkflowId: changeSet.temporalWorkflowId,
+            recoveryWorkflowId: recovery.workflowId,
+            reason: message,
+          },
+          request,
+        });
+
+        return NextResponse.json(
+          {
+            ok: true,
+            changeSetId: id,
+            previousWorkflowId: changeSet.temporalWorkflowId,
+            workflowId: recovery.workflowId,
+            status: "applying",
+            recovery: true,
+          },
+          { status: 202 }
+        );
+      } catch (recoveryError) {
+        const recoveryMessage =
+          recoveryError instanceof Error ? recoveryError.message : "Workflow engine is unavailable";
+
+        return NextResponse.json(
+          {
+            error: "TEMPORAL_UNAVAILABLE",
+            message: recoveryMessage,
+          },
+          { status: 503 }
+        );
+      }
+    }
+    if (message.includes("Change set has already been resolved")) {
       return NextResponse.json(
         {
-          error: "CHANGE_SET_ALREADY_RESOLVED",
+          ok: true,
+          changeSetId: id,
+          status: "already_resolved",
+          alreadyResolved: true,
           message: "This plan version has already been resolved.",
         },
-        { status: 409 }
+        { status: 200 }
       );
     }
     return NextResponse.json(
