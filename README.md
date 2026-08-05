@@ -78,6 +78,8 @@ For the owner-only coding-agent flow:
 
 Temporary public demo sessions cannot create MCP tokens or dispatch new coding-agent jobs. Each session receives an isolated workspace and a read-only completed Codex run backed by a real merged pull request.
 
+Verification scope: the complete MCP handoff has been exercised with the Codex CLI, including claim, immutable context read, progress, PR submission, and human approval. Claude Code and Cursor use the same MCP endpoint and tool contract, but have not been independently smoke-tested in this repository.
+
 ## Current Demo Status
 
 Nexus is built for a controlled public demo on a Docker VPS.
