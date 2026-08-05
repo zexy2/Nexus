@@ -5,6 +5,7 @@ import {
   agentJobs,
   agentJobSubmissions,
   tasks,
+  workspaceIntegrations,
   workspaceRepositories,
 } from "@nexus/database/schema";
 import { db } from "@/lib/db";
@@ -13,6 +14,10 @@ import {
   pullRequestBelongsToRepository,
 } from "@/lib/agent-handoff";
 import { checkPersistentRateLimit, writeAuditLog } from "@/lib/production-guardrails";
+import {
+  GitHubVerificationError,
+  verifyGitHubPullRequestSubmission,
+} from "@/lib/integrations/providers/github-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -272,9 +277,48 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
     if (!pullRequestUrl || !commitSha || !summary || !/^[0-9a-f]{7,64}$/i.test(commitSha) || testsInput.length === 0) {
       return toolResult({ error: "PR, commit SHA, summary and at least one test result are required." }, true);
     }
-    const repository = await db.query.workspaceRepositories.findFirst({ where: eq(workspaceRepositories.id, job.repositoryId) });
+    const repository = await db.query.workspaceRepositories.findFirst({
+      where: and(
+        eq(workspaceRepositories.id, job.repositoryId),
+        eq(workspaceRepositories.workspaceId, token.workspaceId)
+      ),
+    });
     if (!repository || !pullRequestBelongsToRepository(pullRequestUrl, repository)) {
       return toolResult({ error: "PULL_REQUEST_REPOSITORY_MISMATCH" }, true);
+    }
+    const githubIntegration = await db.query.workspaceIntegrations.findFirst({
+      where: and(
+        eq(workspaceIntegrations.workspaceId, token.workspaceId),
+        eq(workspaceIntegrations.provider, "github"),
+        eq(workspaceIntegrations.status, "connected")
+      ),
+    });
+    if (!githubIntegration?.installationId) {
+      return toolResult({
+        error: "GITHUB_VERIFICATION_NOT_CONFIGURED",
+        message: "A connected GitHub App is required before submitting a pull request.",
+        retryable: false,
+      }, true);
+    }
+    let githubVerification;
+    try {
+      githubVerification = await verifyGitHubPullRequestSubmission({
+        installationId: githubIntegration.installationId,
+        owner: repository.repositoryOwner,
+        repo: repository.repositoryName,
+        defaultBranch: repository.defaultBranch,
+        pullRequestUrl,
+        commitSha,
+      });
+    } catch (error) {
+      if (error instanceof GitHubVerificationError) {
+        return toolResult({
+          error: error.code,
+          message: error.message,
+          retryable: error.retryable,
+        }, true);
+      }
+      throw error;
     }
     const tests = testsInput.flatMap((value) => {
       if (!value || typeof value !== "object") return [];
@@ -325,7 +369,17 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
         workspaceId: token.workspaceId,
         type: "submitted",
         message: "Pull request submitted for human review.",
-        metadata: { submissionId: created.id, pullRequestUrl, revision: created.revision },
+        metadata: {
+          submissionId: created.id,
+          pullRequestUrl,
+          revision: created.revision,
+          githubVerification: {
+            pullRequestNumber: githubVerification.number,
+            headSha: githubVerification.headSha,
+            headBranch: githubVerification.headBranch,
+            baseBranch: githubVerification.baseBranch,
+          },
+        },
       });
       return created;
     });
@@ -333,9 +387,30 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
       userId: token.userId,
       workspaceId: token.workspaceId,
       event: "agent.result_submitted",
-      metadata: { jobId, submissionId: submission.id, pullRequestUrl, revision: submission.revision },
+      metadata: {
+        jobId,
+        submissionId: submission.id,
+        pullRequestUrl,
+        revision: submission.revision,
+        githubVerification: {
+          pullRequestNumber: githubVerification.number,
+          headSha: githubVerification.headSha,
+          baseBranch: githubVerification.baseBranch,
+        },
+      },
     });
-    return toolResult({ jobId, status: "submitted", submissionId: submission.id, humanApprovalRequired: true });
+    return toolResult({
+      jobId,
+      status: "submitted",
+      submissionId: submission.id,
+      humanApprovalRequired: true,
+      githubVerification: {
+        pullRequestNumber: githubVerification.number,
+        pullRequestUrl: githubVerification.url,
+        headSha: githubVerification.headSha,
+        baseBranch: githubVerification.baseBranch,
+      },
+    });
   }
 
   return toolResult({ error: `Unknown tool: ${name}` }, true);

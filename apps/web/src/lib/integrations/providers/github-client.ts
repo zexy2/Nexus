@@ -1,6 +1,26 @@
 import { createSign } from "node:crypto";
 
-type GitHubApiError = Error & { status?: number; body?: unknown };
+export type GitHubApiError = Error & { status?: number; body?: unknown };
+
+export type GitHubVerificationErrorCode =
+  | "GITHUB_PR_URL_INVALID"
+  | "GITHUB_PR_REPOSITORY_MISMATCH"
+  | "GITHUB_PR_NOT_FOUND"
+  | "GITHUB_PR_NOT_OPEN"
+  | "GITHUB_PR_COMMIT_MISMATCH"
+  | "GITHUB_PR_BASE_BRANCH_MISMATCH"
+  | "GITHUB_VERIFICATION_UNAVAILABLE";
+
+export class GitHubVerificationError extends Error {
+  constructor(
+    public readonly code: GitHubVerificationErrorCode,
+    message: string,
+    public readonly retryable: boolean
+  ) {
+    super(message);
+    this.name = "GitHubVerificationError";
+  }
+}
 
 export type GitHubRepository = {
   id: number;
@@ -37,6 +57,15 @@ export type GitHubPullRequest = {
   updated_at: string;
 };
 
+export type GitHubPullRequestVerification = {
+  number: number;
+  url: string;
+  state: string;
+  headSha: string;
+  headBranch: string;
+  baseBranch: string;
+};
+
 export type GitHubCheckRun = {
   id: number;
   name: string;
@@ -46,6 +75,109 @@ export type GitHubCheckRun = {
   started_at: string | null;
   completed_at: string | null;
 };
+
+type GitHubPullRequestUrl = { owner: string; repo: string; number: number };
+
+export function parseGitHubPullRequestUrl(value: string): GitHubPullRequestUrl | null {
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== "github.com" ||
+      parts.length !== 4 ||
+      parts[2] !== "pull" ||
+      !/^\d+$/.test(parts[3] || "")
+    ) {
+      return null;
+    }
+    const number = Number(parts[3]);
+    if (!Number.isSafeInteger(number) || number <= 0) return null;
+    return { owner: parts[0]!, repo: parts[1]!, number };
+  } catch {
+    return null;
+  }
+}
+
+function verificationFailure(
+  code: GitHubVerificationErrorCode,
+  message: string
+): never {
+  throw new GitHubVerificationError(code, message, false);
+}
+
+export function validateGitHubPullRequestSubmission(input: {
+  pullRequestUrl: string;
+  expectedOwner: string;
+  expectedRepo: string;
+  expectedBaseBranch: string;
+  expectedCommitSha: string;
+  pullRequest: Pick<GitHubPullRequest, "number" | "html_url" | "state" | "head" | "base">;
+}): GitHubPullRequestVerification {
+  const requested = parseGitHubPullRequestUrl(input.pullRequestUrl);
+  if (!requested) {
+    verificationFailure("GITHUB_PR_URL_INVALID", "GitHub pull request URL is invalid.");
+  }
+
+  if (
+    requested.owner.toLowerCase() !== input.expectedOwner.toLowerCase() ||
+    requested.repo.toLowerCase() !== input.expectedRepo.toLowerCase()
+  ) {
+    verificationFailure("GITHUB_PR_REPOSITORY_MISMATCH", "Pull request does not belong to the configured repository.");
+  }
+
+  if (
+    typeof input.pullRequest.html_url !== "string" ||
+    typeof input.pullRequest.number !== "number" ||
+    !input.pullRequest.head ||
+    typeof input.pullRequest.head.ref !== "string" ||
+    typeof input.pullRequest.head.sha !== "string" ||
+    !input.pullRequest.base ||
+    typeof input.pullRequest.base.ref !== "string" ||
+    typeof input.pullRequest.state !== "string"
+  ) {
+    verificationFailure("GITHUB_VERIFICATION_UNAVAILABLE", "GitHub returned incomplete pull request data.");
+  }
+
+  const actual = parseGitHubPullRequestUrl(input.pullRequest.html_url);
+  if (
+    !actual ||
+    actual.owner.toLowerCase() !== input.expectedOwner.toLowerCase() ||
+    actual.repo.toLowerCase() !== input.expectedRepo.toLowerCase() ||
+    actual.number !== requested.number ||
+    input.pullRequest.number !== requested.number
+  ) {
+    verificationFailure("GITHUB_PR_REPOSITORY_MISMATCH", "GitHub returned a different pull request than submitted.");
+  }
+
+  if (input.pullRequest.state.toLowerCase() !== "open") {
+    verificationFailure("GITHUB_PR_NOT_OPEN", "Pull request must be open when the agent submits its result.");
+  }
+
+  if (input.pullRequest.base.ref !== input.expectedBaseBranch) {
+    verificationFailure(
+      "GITHUB_PR_BASE_BRANCH_MISMATCH",
+      "Pull request targets a different base branch than the configured repository branch."
+    );
+  }
+
+  const expectedSha = input.expectedCommitSha.toLowerCase();
+  const actualSha = typeof input.pullRequest.head?.sha === "string"
+    ? input.pullRequest.head.sha.toLowerCase()
+    : "";
+  if (!/^[0-9a-f]{7,64}$/.test(expectedSha) || !/^[0-9a-f]{40}$/.test(actualSha) || !actualSha.startsWith(expectedSha)) {
+    verificationFailure("GITHUB_PR_COMMIT_MISMATCH", "Submitted commit is not the current pull request head commit.");
+  }
+
+  return {
+    number: input.pullRequest.number,
+    url: input.pullRequest.html_url,
+    state: input.pullRequest.state,
+    headSha: input.pullRequest.head.sha,
+    headBranch: input.pullRequest.head.ref,
+    baseBranch: input.pullRequest.base.ref,
+  };
+}
 
 function base64Url(value: Buffer | string) {
   return Buffer.from(value)
@@ -242,6 +374,65 @@ export async function getGitHubRepositoryData(input: {
     issues,
     pullDetails,
   };
+}
+
+function mapGitHubVerificationProviderError(error: unknown) {
+  const rawStatus = error && typeof error === "object" && "status" in error
+    ? Number((error as { status?: unknown }).status)
+    : NaN;
+  const status = Number.isFinite(rawStatus) ? rawStatus : undefined;
+  const retryable = status === undefined || status === 408 || status === 429 || status >= 500;
+  return new GitHubVerificationError(
+    status === 404 ? "GITHUB_PR_NOT_FOUND" : "GITHUB_VERIFICATION_UNAVAILABLE",
+    status === 404
+      ? "GitHub pull request was not found in the configured repository."
+      : "GitHub pull request could not be verified right now.",
+    retryable
+  );
+}
+
+export async function verifyGitHubPullRequestSubmission(input: {
+  installationId: string;
+  owner: string;
+  repo: string;
+  defaultBranch: string;
+  pullRequestUrl: string;
+  commitSha: string;
+}) {
+  const requested = parseGitHubPullRequestUrl(input.pullRequestUrl);
+  if (!requested) {
+    verificationFailure("GITHUB_PR_URL_INVALID", "GitHub pull request URL is invalid.");
+  }
+  if (
+    requested.owner.toLowerCase() !== input.owner.toLowerCase() ||
+    requested.repo.toLowerCase() !== input.repo.toLowerCase()
+  ) {
+    verificationFailure("GITHUB_PR_REPOSITORY_MISMATCH", "Pull request does not belong to the configured repository.");
+  }
+
+  let token: string;
+  try {
+    token = await createInstallationAccessToken(input.installationId);
+  } catch (error) {
+    throw mapGitHubVerificationProviderError(error);
+  }
+
+  const base = `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}`;
+  let pullRequest: GitHubPullRequest;
+  try {
+    pullRequest = await githubFetch<GitHubPullRequest>(`${base}/pulls/${requested.number}`, token);
+  } catch (error) {
+    throw mapGitHubVerificationProviderError(error);
+  }
+
+  return validateGitHubPullRequestSubmission({
+    pullRequestUrl: input.pullRequestUrl,
+    expectedOwner: input.owner,
+    expectedRepo: input.repo,
+    expectedBaseBranch: input.defaultBranch,
+    expectedCommitSha: input.commitSha,
+    pullRequest,
+  });
 }
 
 export async function performGitHubIssueWrite(input: {

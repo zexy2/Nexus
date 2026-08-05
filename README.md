@@ -73,9 +73,12 @@ For the owner-only coding-agent flow:
 2. Create a scoped MCP token and connect a local Codex, Claude Code, or Cursor client.
 3. Open a task and choose **Send to agent**.
 4. Let the local agent claim the immutable brief, implement the change, run tests, and open a PR with the user's own `gh` session.
-5. Review the PR and submitted evidence in Nexus. Only explicit human approval moves the task to Done.
+5. Nexus verifies the PR against the connected GitHub App before accepting the submission: repository, open state, base branch, and current remote head SHA must match.
+6. Review the PR and submitted evidence in Nexus. Only explicit human approval moves the task to Done.
 
 Temporary public demo sessions cannot create MCP tokens or dispatch new coding-agent jobs. Each session receives an isolated workspace and a read-only completed Codex run backed by a real merged pull request.
+
+Verification scope: the complete MCP handoff has been exercised with the Codex CLI, including claim, immutable context read, progress, PR submission, and human approval. Claude Code and Cursor use the same MCP endpoint and tool contract, but have not been independently smoke-tested in this repository.
 
 ## Current Demo Status
 

@@ -1,6 +1,6 @@
 # Project Status
 
-- **Last updated:** June 2026
+- **Last updated:** August 2026
 - **Positioning:** Portfolio demo, not full SaaS
 - **Primary promise:** Change the plan once. Nexus keeps the work aligned.
 
@@ -20,6 +20,7 @@
 | Collaboration         | Implemented                     | Yjs updates and snapshots persist through a custom WebSocket service.|
 | Embeddings/RAG        | Optional                        | pgvector when configured; scoped keyword fallback otherwise.         |
 | Coding-agent handoff  | Implemented                     | MCP brief, PR/test evidence, stale-context guard, human review.       |
+| MCP PR verification   | Implemented on current branch   | GitHub App verifies repository, open state, base branch, and remote head SHA before submission is persisted. |
 | GitHub integration    | Implemented with env dependency | GitHub App sync, impact links, approved writes, webhook refresh.     |
 | Linear integration    | Implemented with env dependency | OAuth, team/project sync, approved writes; credentials required.     |
 | External writes       | Implemented                     | Temporal retries approved writes and records terminal outcomes.      |
@@ -39,6 +40,9 @@ Public demo is considered ready only when all of these are true:
 - `pnpm smoke:integrations` passes after GitHub App and Linear OAuth environment values are configured.
 - Demo login creates a separate expiring identity and workspace without exposing a password.
 - The workflow center shows a read-only completed Codex run backed by a merged PR.
+- The seeded proof points to merged GitHub PR #33 and its matching merge commit.
+- A real Codex MCP run created PR #39 and reached human-approved task completion; the current remote-PR verification hardening is on the `codex/verify-mcp-github-submission` branch and must be deployed before it is a production guarantee.
+- Claude Code and Cursor are protocol-compatible clients, but have not had independent end-to-end smoke runs recorded yet.
 
 ## Main User Flow
 
