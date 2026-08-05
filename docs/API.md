@@ -101,7 +101,7 @@ Gemini-only planning is model analysis, not sourced web research. Source URLs ar
 
 MCP tools: `list_available_jobs`, `claim_job`, `get_job_context`, `report_progress`, `submit_result`, and `report_failure`.
 
-Submission requires a PR URL for the configured repository, commit SHA, test results, and acceptance-criteria evidence. Submission moves the task to `in_review`; only human approval moves it to `done`.
+Submission requires a PR URL for the configured repository, commit SHA, test results, and acceptance-criteria evidence. Before writing any submission record, Nexus verifies the PR through the connected GitHub App: repository, PR number and URL, open state, base branch, and current remote head SHA. Nexus does not trust client-supplied PR metadata alone. Submission moves the task to `in_review`; only human approval moves it to `done`.
 
 ## GitHub / Linear impact graph
 
