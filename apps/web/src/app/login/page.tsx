@@ -9,8 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { signIn } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n/provider";
-import { Github, Sparkles } from "lucide-react";
+import { Github } from "lucide-react";
 import { useAuthProviders } from "@/lib/use-auth-providers";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -119,7 +120,7 @@ export default function LoginPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 mb-10">
             <div className="size-8 rounded-lg bg-foreground flex items-center justify-center">
-              <Sparkles className="size-4 text-background" />
+              <NexusMark size={19} className="text-background" />
             </div>
             <span className="text-lg font-semibold tracking-tight">Nexus</span>
           </Link>

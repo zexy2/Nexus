@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { CommandPalette } from '@/components/shared/command-palette';
 import { CommandInput } from '@/components/shared/command-input';
+import { NexusMark } from '@/components/shared/nexus-mark';
 
 // Navigation items
 const navItems = [
@@ -155,8 +156,8 @@ function MobileMenu({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
             {/* Logo */}
             <div className="mb-8">
               <Link href="/dashboard" className="flex items-center gap-2" onClick={onClose}>
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-foreground to-foreground/80 flex items-center justify-center">
-                  <span className="text-background font-bold text-lg">N</span>
+                <div className="h-10 w-10 rounded-xl bg-foreground flex items-center justify-center">
+                  <NexusMark size={24} className="text-background" />
                 </div>
                 <span className="font-semibold text-lg">Nexus</span>
               </Link>
@@ -285,10 +286,9 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             <Link href="/dashboard" className="flex items-center gap-2">
               <motion.div
                 suppressHydrationWarning
-                className="relative h-9 w-9 rounded-lg bg-gradient-to-br from-foreground to-foreground/80 flex items-center justify-center"
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-foreground"
               >
-                <div suppressHydrationWarning className="absolute inset-[2px] rounded-[6px] bg-background" />
-                <span className="relative text-foreground font-bold text-sm">N</span>
+                <NexusMark size={22} className="text-background" />
               </motion.div>
               <span className="hidden md:inline font-semibold text-sm">Nexus</span>
             </Link>

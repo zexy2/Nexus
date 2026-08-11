@@ -18,8 +18,9 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { signUp, signIn } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n/provider";
-import { Loader2, Github, Sparkles, Check } from "lucide-react";
+import { Loader2, Github, Check } from "lucide-react";
 import { useAuthProviders } from "@/lib/use-auth-providers";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -103,7 +104,7 @@ export default function RegisterPage() {
         <div className="max-w-md">
           <div className="flex items-center gap-2 mb-8">
             <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-              <Sparkles className="size-6 text-primary-foreground" />
+              <NexusMark size={24} className="text-primary-foreground" />
             </div>
             <span className="text-2xl font-bold">Nexus</span>
           </div>
@@ -153,7 +154,7 @@ export default function RegisterPage() {
           {/* Mobile Logo */}
           <div className="flex items-center justify-center gap-2 mb-8 lg:hidden">
             <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-              <Sparkles className="size-6 text-primary-foreground" />
+              <NexusMark size={24} className="text-primary-foreground" />
             </div>
             <span className="text-2xl font-bold">Nexus</span>
           </div>
