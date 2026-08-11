@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Sparkles, ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft, Shield } from "lucide-react";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 export default function PrivacyPolicyPage() {
   return (
@@ -10,7 +11,7 @@ export default function PrivacyPolicyPage() {
         <nav className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-              <Sparkles className="size-5 text-primary-foreground" />
+              <NexusMark size={19} className="text-primary-foreground" />
             </div>
             <span className="text-xl font-bold">Nexus</span>
           </Link>

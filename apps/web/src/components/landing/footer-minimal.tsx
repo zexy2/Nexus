@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Github, ShieldCheck } from "lucide-react";
 import { ScrollReveal } from "@/components/animations/scroll-reveal";
 import { MagneticButton } from "@/components/animations/magnetic-button";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 const footerLinks = [
   { href: "#proof", label: "Proof" },
@@ -68,7 +69,7 @@ export function FooterMinimal() {
           <div>
             <Link href="/" className="inline-flex items-center gap-3">
               <div className="flex size-9 items-center justify-center bg-white text-black">
-                <span className="font-semibold">N</span>
+                <NexusMark size={21} />
               </div>
               <span className="text-2xl font-semibold">Nexus</span>
             </Link>

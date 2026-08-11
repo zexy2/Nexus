@@ -54,6 +54,10 @@ export const metadata: Metadata = {
     description:
       "Change the plan once. Nexus finds the impact, proposes task updates, waits for approval, and keeps delivery work aligned.",
   },
+  icons: {
+    icon: [{ url: "/brand/nexus-mark.svg", type: "image/svg+xml" }],
+    apple: "/brand/nexus-mark.svg",
+  },
 };
 
 export default function RootLayout({

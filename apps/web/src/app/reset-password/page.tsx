@@ -14,7 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/lib/i18n/provider";
-import { ArrowLeft, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 export default function ResetPasswordPage() {
   const { t } = useLocale();
@@ -73,7 +74,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center justify-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80">
-            <Sparkles className="size-6 text-primary-foreground" />
+            <NexusMark size={24} className="text-primary-foreground" />
           </div>
           <span className="text-2xl font-bold">Nexus</span>
         </div>
