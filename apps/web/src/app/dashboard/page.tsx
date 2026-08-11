@@ -362,8 +362,9 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      <div className="grid gap-8 xl:grid-cols-2">
-        <section className="min-w-0">
+      <div className="grid gap-8 xl:grid-cols-2 xl:items-start">
+        <div className="contents xl:block xl:space-y-8">
+        <section className="order-1 min-w-0">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
@@ -383,7 +384,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="min-w-0">
+        <section className="order-3 min-w-0">
           <div className="mb-4">
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
               {t('dashboard.bentoWorkspace')}
@@ -406,8 +407,10 @@ export default function DashboardPage() {
             </div>
           )}
         </section>
+        </div>
 
-        <section className="min-w-0">
+        <div className="contents xl:block xl:space-y-8">
+        <section className="order-2 min-w-0">
           <div className="mb-4">
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
               {t('dashboard.bentoToday')}
@@ -431,7 +434,7 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="min-w-0">
+        <section className="order-4 min-w-0">
           <h2 className="mb-4 text-xl font-semibold text-white">{t('dashboard.bentoQuickActions')}</h2>
           <div className="grid grid-cols-2 gap-px border border-white/10 bg-white/10">
             {([
@@ -480,6 +483,7 @@ export default function DashboardPage() {
             })}
           </div>
         </section>
+        </div>
       </div>
     </div>
   );
