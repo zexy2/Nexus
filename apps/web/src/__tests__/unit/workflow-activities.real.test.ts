@@ -87,6 +87,9 @@ describe("external write policy", () => {
   it("does not retry provider validation or permission errors", () => {
     expect(externalErrorIsRetryable(Object.assign(new Error("invalid"), { status: 400 }))).toBe(false);
     expect(externalErrorIsRetryable(Object.assign(new Error("forbidden"), { status: 403 }))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("GitHub installation is missing"))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("GitHub issue create requires payload.title"))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("Unsupported external provider: github"))).toBe(false);
   });
 
   it("calculates truthful terminal change-set states", () => {

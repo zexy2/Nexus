@@ -2495,6 +2495,17 @@ async function runLinearExternalWrite(operation: ExternalOperationRow) {
 
 export function externalErrorIsRetryable(error: unknown) {
   const status = (error as ProviderHttpError | null)?.status;
+  const message = error instanceof Error ? error.message : String(error);
+
+  // Local validation and configuration failures cannot succeed on retry.
+  if (
+    /installation is missing|requires payload\.|requires payload |OAuth token is missing|unsupported external provider/i.test(
+      message
+    )
+  ) {
+    return false;
+  }
+
   return typeof status !== "number" || status === 408 || status === 429 || status >= 500;
 }
 
