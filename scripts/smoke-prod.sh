@@ -16,8 +16,9 @@ COOKIE_JAR="$(mktemp)"
 ISOLATION_COOKIE_JAR="$(mktemp)"
 WORKFLOW_STATUS_FILE="$(mktemp)"
 CHANGE_SET_STATUS_FILE="$(mktemp)"
+APPLY_RESPONSE_FILE="$(mktemp)"
 cleanup() {
-  rm -f "$COOKIE_JAR" "$ISOLATION_COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE"
+  rm -f "$COOKIE_JAR" "$ISOLATION_COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE" "$APPLY_RESPONSE_FILE"
 }
 trap cleanup EXIT
 
@@ -97,6 +98,31 @@ poll_pending_change_set() {
   done
 
   echo "Plan impact workflow did not create a pending change set before timeout." >&2
+  cat "$output_file" >&2 || true
+  exit 1
+}
+
+poll_change_set_terminal() {
+  local change_set_id="$1"
+  local output_file="$2"
+  local deadline=$((SECONDS + ${SMOKE_WORKFLOW_TIMEOUT_SECONDS:-180}))
+
+  while (( SECONDS < deadline )); do
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$output_file"
+    local status
+    status="$(json_get status < "$output_file")"
+    echo "Change set status: $status"
+
+    case "$status" in
+      applied|partially_applied|external_failed|already_resolved)
+        return 0
+        ;;
+    esac
+
+    sleep 5
+  done
+
+  echo "Change set did not resolve before timeout." >&2
   cat "$output_file" >&2 || true
   exit 1
 }
@@ -246,9 +272,11 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
     -H "Content-Type: application/json" \
     -b "$COOKIE_JAR" \
     "$BASE_URL/api/change-sets/$change_set_id/apply" \
-    --data "{\"selectedProposalIds\":$proposal_ids_json}" > /dev/null
+    --data "{\"selectedProposalIds\":$proposal_ids_json}" > "$APPLY_RESPONSE_FILE"
 
-  poll_workflow "$plan_workflow_id" "Plan impact" "$WORKFLOW_STATUS_FILE"
+  echo "Apply response: $(cat \"$APPLY_RESPONSE_FILE\")"
+
+  poll_change_set_terminal "$change_set_id" "$CHANGE_SET_STATUS_FILE"
   curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
   change_set_status="$(json_get status < "$CHANGE_SET_STATUS_FILE")"
   if [[ "$change_set_status" != "applied" && "$change_set_status" != "partially_applied" ]]; then

@@ -7,6 +7,7 @@
 
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
+import { getCollaborationUrl } from "./collaboration-url";
 
 // Store for active documents
 const activeDocuments = new Map<string, Y.Doc>();
@@ -56,7 +57,7 @@ export function connectToCollaborationServer(
   const ydoc = getYDoc(docId);
 
   // Get collaboration server URL from environment
-  const serverUrl = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
+  const serverUrl = getCollaborationUrl();
 
   try {
     const provider = new WebsocketProvider(serverUrl, docId, ydoc);

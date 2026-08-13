@@ -35,6 +35,19 @@ export async function POST(
     );
   }
 
+  const retryable =
+    operation.status === "failed_retryable" ||
+    (operation.status === "succeeded" && operation.syncStatus === "failed_retryable");
+  if (!retryable) {
+    return NextResponse.json(
+      {
+        error: "OPERATION_NOT_RETRYABLE",
+        message: "Only failed retryable operations can be retried.",
+      },
+      { status: 409 }
+    );
+  }
+
   try {
     const temporal = await import("@nexus/workflows/client");
     const result = await temporal.startWorkflow(

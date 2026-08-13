@@ -30,6 +30,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Wifi, WifiOff, Users, Circle, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n/provider";
+import { getCollaborationUrl } from "@/lib/sync/collaboration-url";
 
 interface CollaborativeEditorProps {
   documentId: string;
@@ -96,18 +97,26 @@ function CollaborativeEditorInner({
 }) {
   const t = useT();
   const [contentLoaded, setContentLoaded] = useState(false);
+  const editorPlaceholder = t("docs.detail.editorPlaceholder");
   
   // Create BlockNote editor WITH provider ready
-  const editor = useCreateBlockNote({
-    collaboration: {
-      provider: provider,
-      fragment: fragment,
-      user: {
-        name: userName,
-        color: userColor,
+  const editor = useCreateBlockNote(
+    {
+      collaboration: {
+        provider: provider,
+        fragment: fragment,
+        user: {
+          name: userName,
+          color: userColor,
+        },
+      },
+      placeholders: {
+        default: editorPlaceholder,
+        emptyDocument: editorPlaceholder,
       },
     },
-  });
+    [editorPlaceholder]
+  );
 
   // Load initial content into Yjs if the document is empty after sync
   useEffect(() => {
@@ -364,7 +373,7 @@ export function CollaborativeEditor({
   // pass it to the collaboration server, which rejects connections without a
   // valid token. This keeps realtime access aligned with the REST authorization.
   useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
+    const wsUrl = getCollaborationUrl();
     let wsProvider: WebsocketProvider | null = null;
     let handleDocumentUpdate:
       | ((_update: Uint8Array, origin: unknown) => void)

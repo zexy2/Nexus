@@ -39,7 +39,7 @@ interface DocUpdateData {
   title?: string;
   content?: Record<string, unknown> | unknown[];
   iconEmoji?: string | null;
-  isArchived?: number; // 0 or 1 - integer in DB for Zero Sync compatibility
+  isArchived?: number; // 0 or 1 - integer storage format
 }
 
 async function getUserId() {

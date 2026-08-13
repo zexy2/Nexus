@@ -41,7 +41,7 @@ Public demo is considered ready only when all of these are true:
 - Demo login creates a separate expiring identity and workspace without exposing a password.
 - The workflow center shows a read-only completed Codex run backed by a merged PR.
 - The seeded proof points to merged GitHub PR #33 and its matching merge commit.
-- A real Codex MCP run created PR #39 and reached human-approved task completion; the current remote-PR verification hardening is on the `codex/verify-mcp-github-submission` branch and must be deployed before it is a production guarantee.
+- A real Codex MCP run created PR #39 and reached human-approved task completion; repository/head verification is included in merged main commit `889c84b`.
 - Claude Code and Cursor are protocol-compatible clients, but have not had independent end-to-end smoke runs recorded yet.
 
 ## Main User Flow

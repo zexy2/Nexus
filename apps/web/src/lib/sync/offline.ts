@@ -2,7 +2,7 @@
  * Offline-First Data Layer
  * 
  * Provides optimistic UI updates and local caching using IndexedDB.
- * This is a simplified local-first implementation inspired by Zero Sync.
+ * This is a simplified local-first implementation backed by the Nexus API.
  */
 
 const DB_NAME = "nexus-offline";

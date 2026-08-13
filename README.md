@@ -89,7 +89,7 @@ Nexus is built for a controlled public demo on a Docker VPS.
 - AI uses a server-managed Gemini key with daily quotas and rate limits.
 - If AI is disabled or the provider key is missing, endpoints return clear `503` unavailable states instead of mock output.
 - If quota is exceeded, endpoints return `429 RATE_LIMIT_EXCEEDED`.
-- The current deployment runs on an Oracle Free Tier VPS at [nexus.129-154-244-110.sslip.io](https://nexus.129-154-244-110.sslip.io).
+- The current deployment runs on an Oracle Free Tier VPS at [nexus.zekiakgul.dev](https://nexus.zekiakgul.dev) (the sslip.io URL remains a temporary fallback during domain migration).
 
 Do not commit real `.env.production`, API keys, demo passwords, or access codes.
 

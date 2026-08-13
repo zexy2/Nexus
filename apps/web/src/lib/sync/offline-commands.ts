@@ -7,7 +7,7 @@
  * 1. User writes a natural language command (even offline)
  * 2. Command is stored in IndexedDB with "pending" status
  * 3. When online, commands are synced and processed by Nexus
- * 4. Results are synced back via Zero Sync
+ * 4. Results are synced back through the server sync layer
  */
 
 // ==========================================

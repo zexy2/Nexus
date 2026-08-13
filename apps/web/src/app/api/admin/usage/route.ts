@@ -8,7 +8,7 @@ import {
   externalWriteOperations,
   rateLimitBuckets,
 } from "@nexus/database/schema";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { getAuditUsageSummary, isAdminEmail } from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
@@ -57,13 +57,21 @@ export async function GET() {
       provider: externalWriteOperations.provider,
       operationType: externalWriteOperations.operationType,
       status: externalWriteOperations.status,
+      syncStatus: externalWriteOperations.syncStatus,
+      syncError: externalWriteOperations.syncError,
       error: externalWriteOperations.error,
       updatedAt: externalWriteOperations.updatedAt,
     })
     .from(externalWriteOperations)
     .where(
       and(
-        inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+        or(
+          inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+          and(
+            eq(externalWriteOperations.status, "succeeded"),
+            inArray(externalWriteOperations.syncStatus, ["pending", "running", "failed_retryable"])
+          )
+        ),
         lt(externalWriteOperations.updatedAt, staleExternalWriteCutoff)
       )
     )

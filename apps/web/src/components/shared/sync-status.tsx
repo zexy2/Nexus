@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import * as React from "react";
+import { useLocale } from "@/lib/i18n/provider";
 
 interface SyncStatusProps {
   className?: string;
@@ -28,6 +29,7 @@ interface SyncStatusProps {
 
 export function SyncStatus({ className, showLabel = true }: SyncStatusProps) {
   const { status, isOnline, isSyncing, lastSyncedAt, pendingMutations } = useZeroStatus();
+  const { t, locale } = useLocale();
 
   const getStatusIcon = () => {
     if (!isOnline) {
@@ -49,12 +51,12 @@ export function SyncStatus({ className, showLabel = true }: SyncStatusProps) {
   };
 
   const getStatusText = () => {
-    if (!isOnline) return "Offline";
-    if (isSyncing) return "Syncing...";
-    if (pendingMutations > 0) return `${pendingMutations} pending`;
-    if (status === "connected") return "Synced";
-    if (status === "error") return "Sync error";
-    return "Connecting...";
+    if (!isOnline) return t("syncStatus.offline");
+    if (isSyncing) return t("syncStatus.syncing");
+    if (pendingMutations > 0) return `${pendingMutations} ${t("syncStatus.pending")}`;
+    if (status === "connected") return t("syncStatus.synced");
+    if (status === "error") return t("syncStatus.error");
+    return t("syncStatus.connecting");
   };
 
   const getStatusColor = () => {
@@ -67,13 +69,12 @@ export function SyncStatus({ className, showLabel = true }: SyncStatusProps) {
   };
 
   const formatLastSynced = React.useCallback(() => {
-    if (!lastSyncedAt) return "Never";
-    const now = typeof window !== 'undefined' ? performance.now() : 0;
-    const diff = (now > 0 ? Date.now() : Date.now()) - lastSyncedAt.getTime();
-    if (diff < 60000) return "Just now";
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-    return lastSyncedAt.toLocaleTimeString();
-  }, [lastSyncedAt]);
+    if (!lastSyncedAt) return t("syncStatus.never");
+    const diff = Date.now() - lastSyncedAt.getTime();
+    if (diff < 60000) return t("syncStatus.justNow");
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} ${t("syncStatus.minutesAgo")}`;
+    return lastSyncedAt.toLocaleTimeString(locale === "tr" ? "tr-TR" : "en-US");
+  }, [lastSyncedAt, locale, t]);
 
   return (
     <TooltipProvider>
@@ -94,21 +95,21 @@ export function SyncStatus({ className, showLabel = true }: SyncStatusProps) {
         <TooltipContent>
           <div className="space-y-1 text-xs">
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Status:</span>
+              <span className="text-muted-foreground">{t("syncStatus.status")}:</span>
               <span className="font-medium">{getStatusText()}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Network:</span>
-              <span className="font-medium">{isOnline ? "Online" : "Offline"}</span>
+              <span className="text-muted-foreground">{t("syncStatus.network")}:</span>
+              <span className="font-medium">{isOnline ? t("syncStatus.online") : t("syncStatus.offline")}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Last sync:</span>
+              <span className="text-muted-foreground">{t("syncStatus.lastSync")}:</span>
               <span className="font-medium">{formatLastSynced()}</span>
             </div>
             {pendingMutations > 0 && (
               <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Pending:</span>
-                <span className="font-medium">{pendingMutations} changes</span>
+                <span className="text-muted-foreground">{t("syncStatus.pendingLabel")}:</span>
+                <span className="font-medium">{pendingMutations} {t("syncStatus.changes")}</span>
               </div>
             )}
           </div>
@@ -123,6 +124,7 @@ export function SyncStatus({ className, showLabel = true }: SyncStatusProps) {
  */
 export function SyncDot({ className }: { className?: string }) {
   const { status, isOnline, isSyncing, pendingMutations } = useZeroStatus();
+  const { t } = useLocale();
 
   const getColor = () => {
     if (!isOnline) return "bg-gray-400";
@@ -147,11 +149,11 @@ export function SyncDot({ className }: { className?: string }) {
         </TooltipTrigger>
         <TooltipContent>
           <span className="text-xs">
-            {!isOnline ? "Offline mode" :
-             isSyncing ? "Syncing..." :
-             pendingMutations > 0 ? `${pendingMutations} pending changes` :
-             status === "connected" ? "All changes synced" :
-             status === "error" ? "Sync error" : "Connecting..."}
+            {!isOnline ? t("syncStatus.offlineMode") :
+             isSyncing ? t("syncStatus.syncing") :
+             pendingMutations > 0 ? `${pendingMutations} ${t("syncStatus.pending")} ${t("syncStatus.changes")}` :
+             status === "connected" ? t("syncStatus.allChangesSynced") :
+             status === "error" ? t("syncStatus.error") : t("syncStatus.connecting")}
           </span>
         </TooltipContent>
       </Tooltip>
