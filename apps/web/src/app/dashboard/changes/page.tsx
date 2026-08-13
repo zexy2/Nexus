@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -57,6 +57,8 @@ type ChangeProposal = {
     provider: string;
     operationType: string;
     status: string;
+    syncStatus: string;
+    syncError: string | null;
     error: string | null;
     attemptCount: number;
     attemptedAt: string | null;
@@ -81,9 +83,11 @@ type ChangeSetDetail = Omit<ChangeSetSummary, "proposals"> & {
 
 const statusStyles: Record<string, string> = {
   pending: "border-amber-400/30 bg-amber-400/10 text-amber-200",
+  applying: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
   pending_external: "border-purple-400/30 bg-purple-400/10 text-purple-200",
   external_pending: "border-purple-400/30 bg-purple-400/10 text-purple-200",
   running: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+  succeeded: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   applied: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
   failed_retryable: "border-red-400/30 bg-red-400/10 text-red-200",
   failed_terminal: "border-red-400/30 bg-red-400/10 text-red-200",
@@ -102,6 +106,7 @@ export default function ChangesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ChangeSetDetail | null>(null);
   const [selectedProposalIds, setSelectedProposalIds] = useState<Set<string>>(new Set());
+  const selectionInitializedFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<"apply" | "reject" | null>(null);
 
@@ -119,6 +124,9 @@ export default function ChangesPage() {
   const statusLabel = useCallback((status: string) => {
     if (
       status === "pending" ||
+      status === "applying" ||
+      status === "running" ||
+      status === "succeeded" ||
       status === "applied" ||
       status === "partially_applied" ||
       status === "rejected" ||
@@ -127,39 +135,50 @@ export default function ChangesPage() {
       return t(`changes.status.${status}`);
     }
     if (status === "external_pending") {
-      return locale === "tr" ? "dış yazım bekliyor" : "external pending";
+      return t("changes.status.external_pending");
     }
     if (status === "pending_external") {
-      return locale === "tr" ? "dış yazım kuyruğunda" : "external queued";
+      return t("changes.status.pending_external");
     }
     if (status === "external_failed") {
-      return locale === "tr" ? "dış yazım başarısız" : "external write failed";
+      return t("changes.status.external_failed");
     }
     return status;
-  }, [locale, t]);
+  }, [t]);
 
   const operationStatusLabel = useCallback((status: string) => {
-    const labels: Record<string, [string, string]> = {
-      pending: ["Kuyrukta", "Queued"],
-      running: ["Uygulanıyor", "Running"],
-      succeeded: ["Tamamlandı", "Completed"],
-      failed_retryable: ["Yeniden denenebilir", "Retryable failure"],
-      failed_terminal: ["Uygulanamadı", "Terminal failure"],
+    const labels: Record<string, string> = {
+      pending: "changes.operationStatus.pending",
+      running: "changes.operationStatus.running",
+      succeeded: "changes.operationStatus.succeeded",
+      failed_retryable: "changes.operationStatus.failed_retryable",
+      failed_terminal: "changes.operationStatus.failed_terminal",
     };
-    const pair = labels[status];
-    return pair ? pair[locale === "tr" ? 0 : 1] : status;
-  }, [locale]);
+    const key = labels[status];
+    return key ? t(key) : status;
+  }, [t]);
 
   const operationPassiveLabel = useCallback((status: string) => {
-    const labels: Record<string, [string, string]> = {
-      pending: ["Otomatik uygulanacak", "Will run automatically"],
-      running: ["Uygulanıyor", "Running"],
-      succeeded: ["Tamamlandı", "Completed"],
-      failed_terminal: ["Tekrar denenemez", "Cannot retry"],
+    const labels: Record<string, string> = {
+      pending: "changes.operationPassive.pending",
+      running: "changes.operationPassive.running",
+      succeeded: "changes.operationPassive.succeeded",
+      failed_terminal: "changes.operationPassive.failed_terminal",
     };
-    const pair = labels[status];
-    return pair ? pair[locale === "tr" ? 0 : 1] : operationStatusLabel(status);
-  }, [locale, operationStatusLabel]);
+    const key = labels[status];
+    return key ? t(key) : operationStatusLabel(status);
+  }, [operationStatusLabel, t]);
+
+  const operationUiStatus = useCallback((operation: ChangeProposal["externalOperations"][number]) => {
+    if (
+      operation.status === "succeeded" &&
+      operation.syncStatus !== "not_required" &&
+      operation.syncStatus !== "succeeded"
+    ) {
+      return operation.syncStatus;
+    }
+    return operation.status;
+  }, []);
 
   const actionLabel = useCallback((action: string) => {
     const fallback: Record<string, string> = {
@@ -197,13 +216,18 @@ export default function ChangesPage() {
     if (!response.ok) throw new Error(t("changes.detailLoadError"));
     const next = await response.json() as ChangeSetDetail;
     setDetail(next);
-    setSelectedProposalIds(
-      new Set(
-        next.proposals
-          .filter((proposal) => proposal.status === "pending")
-          .map((proposal) => proposal.id)
-      )
-    );
+    const pendingIds = next.proposals
+      .filter((proposal) => proposal.status === "pending")
+      .map((proposal) => proposal.id);
+    if (selectionInitializedFor.current !== id) {
+      selectionInitializedFor.current = id;
+      setSelectedProposalIds(new Set(pendingIds));
+    } else {
+      const pendingIdSet = new Set(pendingIds);
+      setSelectedProposalIds((current) =>
+        new Set([...current].filter((proposalId) => pendingIdSet.has(proposalId)))
+      );
+    }
   }, [t]);
 
   useEffect(() => {
@@ -215,6 +239,7 @@ export default function ChangesPage() {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      selectionInitializedFor.current = null;
       return;
     }
     void fetchDetail(selectedId).catch((error) =>
@@ -224,11 +249,17 @@ export default function ChangesPage() {
 
   useEffect(() => {
     const hasPending = changeSets.some((changeSet) =>
-      changeSet.status === "pending" || changeSet.status === "external_pending"
+      changeSet.status === "pending" ||
+      changeSet.status === "applying" ||
+      changeSet.status === "running" ||
+      changeSet.status === "pending_external" ||
+      changeSet.status === "external_pending"
     );
     const hasPendingOperation = detail?.proposals.some((proposal) =>
       proposal.externalOperations.some((operation) =>
-        operation.status === "pending" || operation.status === "running"
+        operationUiStatus(operation) === "pending" ||
+        operationUiStatus(operation) === "running" ||
+        operationUiStatus(operation) === "failed_retryable"
       )
     ) ?? false;
     if (!hasPending && !hasPendingOperation && !resolving) return;
@@ -238,7 +269,7 @@ export default function ChangesPage() {
       if (selectedId) void fetchDetail(selectedId);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [changeSets, detail, fetchChangeSets, fetchDetail, resolving, selectedId]);
+  }, [changeSets, detail, fetchChangeSets, fetchDetail, operationUiStatus, resolving, selectedId]);
 
   const pendingProposals = useMemo(
     () => detail?.proposals.filter((proposal) => proposal.status === "pending") || [],
@@ -247,6 +278,16 @@ export default function ChangesPage() {
 
   const resolutionCopy = useMemo(() => {
     if (!detail || detail.status === "pending") return null;
+    if (detail.status === "applying" || detail.status === "running") {
+      return {
+        title: locale === "tr" ? "Değişiklikler uygulanıyor" : "Changes are being applied",
+        description:
+          locale === "tr"
+            ? "Görevler ve dış sistem yazımları tamamlanana kadar durum otomatik yenileniyor."
+            : "Status updates automatically until tasks and external writes finish.",
+        className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+      };
+    }
     if (detail.status === "partially_applied") {
       return {
         title: t("changes.resolution.partialTitle"),
@@ -276,8 +317,8 @@ export default function ChangesPage() {
         title: locale === "tr" ? "Dış sistem güncellemesi başarısız" : "External update failed",
         description:
           locale === "tr"
-            ? "Internal değişiklik yapılmadı veya dış yazımlar tamamlanamadı. Aşağıdaki hata ayrıntısını inceleyip operasyonu yeniden deneyin."
-            : "No internal change was applied or the external writes could not complete. Review the error and retry the failed operation.",
+            ? "İç görevler ayrı uygulanmış olabilir. Başarısız dış operasyonları inceleyip yalnızca onları yeniden deneyin."
+            : "Internal tasks may have been applied separately. Review the failed external operations and retry only those.",
         className: "border-red-400/20 bg-red-400/10 text-red-100",
       };
     }
@@ -364,17 +405,17 @@ export default function ChangesPage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(body?.message || body?.error || "External write failed");
+        throw new Error(body?.message || body?.error || t("changes.externalWriteFailed"));
       }
       showToast.success(locale === "tr" ? "Dış sistem yazımı yeniden kuyruğa alındı" : "External write queued again");
       if (detail) await fetchDetail(detail.id);
     } catch (error) {
-      showToast.error(error instanceof Error ? error.message : "External write failed");
+      showToast.error(error instanceof Error ? error.message : t("changes.externalWriteFailed"));
     }
   };
 
   const appliedTaskCount = detail?.proposals.filter(
-    (proposal) => proposal.status === "applied" && proposal.task?.id
+    (proposal) => proposal.action === "create_task" && proposal.status === "applied" && proposal.task?.id
   ).length || 0;
 
   if (loading) {
@@ -606,49 +647,53 @@ export default function ChangesPage() {
                           )}
                           {proposal.externalOperations.length > 0 && (
                             <div className="mt-3 space-y-2">
-                              {proposal.externalOperations.map((operation) => (
-                                <div
-                                  key={operation.id}
-                                  className="flex flex-col gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between"
-                                >
-                                  <div>
-                                    <span className="font-mono uppercase text-white/35">
-                                      {operation.provider}
-                                    </span>{" "}
-                                    <span>{actionLabel(operation.operationType)}</span>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn("ml-2", statusStyles[operation.status] || "border-white/10 bg-white/5")}
-                                    >
-                                      {operationStatusLabel(operation.status)}
-                                    </Badge>
-                                    <span className="ml-2 text-white/35">
-                                      {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
-                                    </span>
-                                    {operation.error && (
-                                      <p className="mt-1 text-red-300">{operation.error}</p>
+                              {proposal.externalOperations.map((operation) => {
+                                const operationStatus = operationUiStatus(operation);
+                                const operationError = operation.error || operation.syncError;
+                                return (
+                                  <div
+                                    key={operation.id}
+                                    className="flex flex-col gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between"
+                                  >
+                                    <div>
+                                      <span className="font-mono uppercase text-white/35">
+                                        {operation.provider}
+                                      </span>{" "}
+                                      <span>{actionLabel(operation.operationType)}</span>
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("ml-2", statusStyles[operationStatus] || "border-white/10 bg-white/5")}
+                                      >
+                                        {operationStatusLabel(operationStatus)}
+                                      </Badge>
+                                      <span className="ml-2 text-white/35">
+                                        {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
+                                      </span>
+                                      {operationError && (
+                                        <p className="mt-1 text-red-300">{operationError}</p>
+                                      )}
+                                    </div>
+                                    {operationStatus === "failed_retryable" ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={(event) => {
+                                          event.preventDefault();
+                                          void retryExternalOperation(operation.id);
+                                        }}
+                                      >
+                                        {locale === "tr" ? "Yeniden dene" : "Retry"}
+                                      </Button>
+                                    ) : (
+                                      <span className="text-right text-[11px] text-white/35">
+                                        {operationPassiveLabel(operationStatus)}
+                                      </span>
                                     )}
                                   </div>
-                                  {operation.status === "failed_retryable" ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2 text-xs"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        void retryExternalOperation(operation.id);
-                                      }}
-                                    >
-                                      {locale === "tr" ? "Yeniden dene" : "Retry"}
-                                    </Button>
-                                  ) : (
-                                    <span className="text-right text-[11px] text-white/35">
-                                      {operationPassiveLabel(operation.status)}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>

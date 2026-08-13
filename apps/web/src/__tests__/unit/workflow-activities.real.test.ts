@@ -73,6 +73,7 @@ vi.mock("postgres", () => ({
 import {
   applyPlanChangeSet,
   externalErrorIsRetryable,
+  externalWriteOperationNeedsWork,
   resolveExternalChangeSetStatus,
 } from "../../../../../packages/workflows/src/activities";
 
@@ -97,6 +98,13 @@ describe("external write policy", () => {
     expect(resolveExternalChangeSetStatus({ succeeded: 1, failed: 1, internalApplied: 0 })).toBe("partially_applied");
     expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 1, internalApplied: 2 })).toBe("partially_applied");
     expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 2, internalApplied: 0 })).toBe("external_failed");
+  });
+
+  it("reruns pending sync after provider write already succeeded", () => {
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "pending" })).toBe(true);
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "running" })).toBe(true);
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "succeeded" })).toBe(false);
+    expect(externalWriteOperationNeedsWork({ status: "failed_retryable", syncStatus: "not_required" })).toBe(true);
   });
 });
 

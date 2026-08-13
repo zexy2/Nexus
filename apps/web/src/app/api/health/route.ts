@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { externalWriteOperations, workerHeartbeats } from "@nexus/database/schema";
-import { and, desc, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { getAiProviderStatus } from "@/lib/production-guardrails";
 import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 
@@ -88,13 +88,27 @@ export async function GET() {
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(externalWriteOperations)
-            .where(inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"])),
+            .where(
+              or(
+                inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                and(
+                  eq(externalWriteOperations.status, "succeeded"),
+                  inArray(externalWriteOperations.syncStatus, ["pending", "running", "failed_retryable"])
+                )
+              )
+            ),
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(externalWriteOperations)
             .where(
               and(
-                inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                or(
+                  inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                  and(
+                    eq(externalWriteOperations.status, "succeeded"),
+                    inArray(externalWriteOperations.syncStatus, ["pending", "running", "failed_retryable"])
+                  )
+                ),
                 lt(externalWriteOperations.updatedAt, staleBefore)
               )
             ),

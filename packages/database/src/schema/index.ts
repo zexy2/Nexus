@@ -201,7 +201,7 @@ export const docs = pgTable(
     content: jsonb("content").$type<Record<string, unknown> | unknown[]>(), // BlockNote JSON formatı
     iconEmoji: varchar("icon_emoji", { length: 10 }),
     coverUrl: text("cover_url"),
-    isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer (Zero Sync uyumluluğu)
+    isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer, sync serialization ile uyumlu
     isAiGenerated: integer("is_ai_generated").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
     // pgvector embedding for semantic search
@@ -938,6 +938,8 @@ export const externalWriteOperations = pgTable(
     operationType: varchar("operation_type", { length: 80 }).notNull(),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
     status: varchar("status", { length: 40 }).notNull().default("pending"),
+    syncStatus: varchar("sync_status", { length: 40 }).notNull().default("not_required"),
+    syncError: text("sync_error"),
     response: jsonb("response").$type<Record<string, unknown>>(),
     error: text("error"),
     idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
@@ -957,6 +959,7 @@ export const externalWriteOperations = pgTable(
     index("external_write_operations_change_set_idx").on(table.changeSetId),
     index("external_write_operations_proposal_idx").on(table.changeProposalId),
     index("external_write_operations_status_idx").on(table.status),
+    index("external_write_operations_sync_status_idx").on(table.syncStatus),
   ]
 );
 

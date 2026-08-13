@@ -6,6 +6,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
 import dynamic from "next/dynamic";
 import { useCallback } from "react";
+import { useT } from "@/lib/i18n/provider";
 
 interface EditorProps {
   initialContent?: PartialBlock[];
@@ -14,14 +15,23 @@ interface EditorProps {
 }
 
 function EditorComponent({ initialContent, onChange, editable = true }: EditorProps) {
-  const editor = useCreateBlockNote({
-    initialContent: initialContent || [
-      {
-        type: "paragraph",
-        content: [],
+  const t = useT();
+  const editorPlaceholder = t("docs.detail.editorPlaceholder");
+  const editor = useCreateBlockNote(
+    {
+      initialContent: initialContent || [
+        {
+          type: "paragraph",
+          content: [],
+        },
+      ],
+      placeholders: {
+        default: editorPlaceholder,
+        emptyDocument: editorPlaceholder,
       },
-    ],
-  });
+    },
+    [editorPlaceholder]
+  );
 
   const handleChange = useCallback(() => {
     if (onChange) {

@@ -1931,6 +1931,8 @@ type ExternalOperationRow = {
   operation_type: string;
   payload: Record<string, unknown> | null;
   status: string;
+  sync_status: string;
+  sync_error: string | null;
   idempotency_key: string;
   created_by: string | null;
   installation_id: string | null;
@@ -2057,6 +2059,8 @@ type GitHubSyncOperationRow = {
   integration_id: string;
   provider: string;
   status: string;
+  sync_status: string;
+  sync_error: string | null;
   installation_id: string | null;
   integration_metadata: Record<string, unknown> | null;
   created_by: string | null;
@@ -2509,6 +2513,18 @@ export function externalErrorIsRetryable(error: unknown) {
   return typeof status !== "number" || status === 408 || status === 429 || status >= 500;
 }
 
+export function externalWriteOperationNeedsWork(operation: {
+  status: string;
+  syncStatus: string;
+}) {
+  return (
+    operation.status === "pending" ||
+    operation.status === "failed_retryable" ||
+    (operation.status === "succeeded" &&
+      ["pending", "running", "failed_retryable"].includes(operation.syncStatus))
+  );
+}
+
 export function resolveExternalChangeSetStatus(input: {
   succeeded: number;
   failed: number;
@@ -2634,6 +2650,7 @@ export async function executeExternalWriteOperation(operationId: string) {
       SELECT
         o.id, o.workspace_id, o.change_set_id, o.change_proposal_id,
         o.integration_id, o.provider, o.operation_type, o.payload, o.status,
+        o.sync_status, o.sync_error,
         o.idempotency_key, o.created_by, i.installation_id,
         i.token_ciphertext, i.metadata AS integration_metadata,
         p.requirement_id
@@ -2700,7 +2717,11 @@ export async function executeExternalWriteOperation(operationId: string) {
       await tx`
         UPDATE external_write_operations
         SET status = 'succeeded', response = ${JSON.stringify(response)}::jsonb,
-            error = NULL, completed_at = now(), updated_at = now()
+            error = NULL, sync_status = CASE
+              WHEN ${currentOperation.provider} = 'github' THEN 'pending'
+              ELSE 'not_required'
+            END,
+            sync_error = NULL, completed_at = now(), updated_at = now()
         WHERE id = ${currentOperation.id}::uuid
       `;
       await tx`
@@ -2769,6 +2790,7 @@ export async function syncGitHubIntegrationAfterExternalWrite(operationId: strin
     const rows = await sql<GitHubSyncOperationRow[]>`
       SELECT
         o.id, o.workspace_id, o.integration_id, o.provider, o.status,
+        o.sync_status, o.sync_error,
         i.installation_id, i.metadata AS integration_metadata, i.created_by
       FROM external_write_operations o
       INNER JOIN workspace_integrations i ON i.id = o.integration_id
@@ -2779,9 +2801,18 @@ export async function syncGitHubIntegrationAfterExternalWrite(operationId: strin
     if (!operation || operation.provider !== "github" || operation.status !== "succeeded") {
       return { synced: false as const, skipped: true as const };
     }
+    if (operation.sync_status === "succeeded") {
+      return { synced: true as const, skipped: true as const };
+    }
     if (!operation.installation_id) {
       throw new Error("GitHub installation is missing");
     }
+
+    await sql`
+      UPDATE external_write_operations
+      SET sync_status = 'running', sync_error = NULL, updated_at = now()
+      WHERE id = ${operation.id}::uuid
+    `;
 
     const metadata = operation.integration_metadata || {};
     const { owner, repo } = selectedGitHubRepository(metadata);
@@ -3011,11 +3042,23 @@ export async function syncGitHubIntegrationAfterExternalWrite(operationId: strin
         ${JSON.stringify({ operationId, ...stats })}::jsonb
       )
     `;
+    await sql`
+      UPDATE external_write_operations
+      SET sync_status = 'succeeded', sync_error = NULL, updated_at = now()
+      WHERE id = ${operation.id}::uuid
+    `;
 
     return { synced: true as const, stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : "GitHub sync failed";
     if (operation) {
+      const retryable = externalErrorIsRetryable(error);
+      await sql`
+        UPDATE external_write_operations
+        SET sync_status = ${retryable ? "failed_retryable" : "failed_terminal"},
+            sync_error = ${message}, updated_at = now()
+        WHERE id = ${operation.id}::uuid
+      `;
       await recordGitHubSyncFailure(
         sql as unknown as SqlExecutor,
         operation,
@@ -3028,7 +3071,7 @@ export async function syncGitHubIntegrationAfterExternalWrite(operationId: strin
           ${operation.workspace_id}::uuid,
           ${"integration.github_sync_failed"},
           ${"error"},
-          ${JSON.stringify({ operationId, error: message })}::jsonb
+          ${JSON.stringify({ operationId, error: message, retryable })}::jsonb
         )
       `;
     }
@@ -3049,7 +3092,13 @@ export async function listRunnableExternalWriteOperationIds(changeSetId: string)
       SELECT id
       FROM external_write_operations
       WHERE change_set_id = ${changeSetId}::uuid
-        AND status IN ('pending', 'failed_retryable')
+        AND (
+          status IN ('pending', 'failed_retryable')
+          OR (
+            status = 'succeeded'
+            AND sync_status IN ('pending', 'running', 'failed_retryable')
+          )
+        )
       ORDER BY created_at ASC, id ASC
     `;
     return rows.map((row) => row.id);
@@ -3064,19 +3113,31 @@ export async function finalizeExternalWriteOperations(changeSetId: string, userI
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const rows = await sql<Array<{ status: string; count: number }>>`
-      SELECT status, count(*)::int AS count
+    const rows = await sql<Array<{ status: string; sync_status: string; count: number }>>`
+      SELECT status, sync_status, count(*)::int AS count
       FROM external_write_operations
       WHERE change_set_id = ${changeSetId}::uuid
-      GROUP BY status
+      GROUP BY status, sync_status
     `;
-    const succeeded = rows.find((row) => row.status === "succeeded")?.count || 0;
-    const failed = rows
-      .filter((row) => row.status === "failed_retryable" || row.status === "failed_terminal")
-      .reduce((sum, row) => sum + row.count, 0);
-    const remaining = rows
-      .filter((row) => row.status === "pending" || row.status === "running")
-      .reduce((sum, row) => sum + row.count, 0);
+    let succeeded = 0;
+    let failed = 0;
+    let remaining = 0;
+    for (const row of rows) {
+      const count = Number(row.count);
+      if (row.status === "pending" || row.status === "running") {
+        remaining += count;
+      } else if (row.status === "succeeded") {
+        if (row.sync_status === "pending" || row.sync_status === "running") {
+          remaining += count;
+        } else if (row.sync_status === "failed_retryable" || row.sync_status === "failed_terminal") {
+          failed += count;
+        } else {
+          succeeded += count;
+        }
+      } else if (row.status === "failed_retryable" || row.status === "failed_terminal") {
+        failed += count;
+      }
+    }
     if (remaining > 0) throw new Error("External operations are not terminal");
 
     const internalRows = await sql<Array<{ count: number }>>`

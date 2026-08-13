@@ -94,7 +94,7 @@ export default function LoginPage() {
         callbackURL: "/dashboard"
       });
     } catch {
-      setError("GitHub login failed");
+      setError(t("auth.githubLoginFailed"));
       setIsLoading(false);
     }
   };
@@ -107,7 +107,7 @@ export default function LoginPage() {
         callbackURL: "/dashboard"
       });
     } catch {
-      setError("Google login failed");
+      setError(t("auth.googleLoginFailed"));
       setIsLoading(false);
     }
   };
