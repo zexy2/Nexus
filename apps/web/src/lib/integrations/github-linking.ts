@@ -1,4 +1,5 @@
-const CLOSING_ISSUE_REFERENCE = /\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)\s+#(\d+)\b/gi;
+const CLOSING_ISSUE_REFERENCE =
+  /\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)(?:\s*[:,-]?\s*|\/\s*)#(\d+)\b/gi;
 const ISSUE_REFERENCE = /(^|[^\w])#(\d+)\b/g;
 const REQUIREMENT_REFERENCE = /\bREQ-\d+\b/gi;
 
@@ -20,6 +21,7 @@ export function extractPullRequestReferences(input: {
 }) {
   const ordered = new Set<string>();
 
+  collectMatches(ordered, input.title, CLOSING_ISSUE_REFERENCE, (match) => `#${match[1]}`);
   collectMatches(ordered, input.body, CLOSING_ISSUE_REFERENCE, (match) => `#${match[1]}`);
   collectMatches(ordered, input.title, ISSUE_REFERENCE, (match) => `#${match[2]}`);
   collectMatches(ordered, input.body, ISSUE_REFERENCE, (match) => `#${match[2]}`);

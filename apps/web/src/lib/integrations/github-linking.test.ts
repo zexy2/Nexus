@@ -25,6 +25,16 @@ describe("GitHub impact linking", () => {
     ).toEqual(["#44", "#12", "REQ-004"]);
   });
 
+  it("recognizes punctuated closing references from PR text", () => {
+    expect(
+      extractPullRequestReferences({
+        title: "Fixes: #123",
+        body: "closes - #456 and resolves/#789",
+        branch: "feature/REQ-002",
+      })
+    ).toEqual(["#123", "#456", "#789", "REQ-002"]);
+  });
+
   it("extracts requirement keys from title, body, and branch", () => {
     expect(
       extractPullRequestReferences({
