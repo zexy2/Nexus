@@ -35,6 +35,11 @@ export type LinearIssue = {
   updatedAt: string;
 };
 
+/** Per-request timeout for Linear API and OAuth calls. */
+export const LINEAR_FETCH_TIMEOUT_MS = 15_000;
+/** Upper bound on issue pages followed per sync (100 issues per page). */
+export const LINEAR_MAX_PAGES = 10;
+
 export function getLinearConfig() {
   const clientId = process.env.LINEAR_CLIENT_ID;
   const clientSecret = process.env.LINEAR_CLIENT_SECRET;
@@ -47,6 +52,7 @@ export function getLinearConfig() {
 export async function exchangeLinearOAuthCode(code: string, redirectUri: string) {
   const { clientId, clientSecret } = getLinearConfig();
   const response = await fetch("https://api.linear.app/oauth/token", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -72,6 +78,7 @@ export async function exchangeLinearOAuthCode(code: string, redirectUri: string)
 async function refreshLinearOAuthToken(refreshToken: string) {
   const { clientId, clientSecret } = getLinearConfig();
   const response = await fetch("https://api.linear.app/oauth/token", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -110,6 +117,7 @@ export async function linearGraphql<T>(
   variables?: Record<string, unknown>
 ): Promise<T> {
   const response = await fetch("https://api.linear.app/graphql", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -178,10 +186,8 @@ export async function listLinearIssues(
     variables.projectId = input.projectId;
   }
   const filter = filters.length > 0 ? `filter: { ${filters.join(", ")} },` : "";
-  const data = await linearGraphql<{ issues: { nodes: LinearIssue[] } }>(
-    accessToken,
-    `query NexusLinearIssues($teamId: String, $projectId: String) {
-      issues(first: 100, ${filter} orderBy: updatedAt) {
+  const query = `query NexusLinearIssues($teamId: String, $projectId: String, $after: String) {
+      issues(first: 100, after: $after, ${filter} orderBy: updatedAt) {
         nodes {
           id
           identifier
@@ -195,11 +201,21 @@ export async function listLinearIssues(
           project { id name }
           labels { nodes { name } }
         }
+        pageInfo { hasNextPage endCursor }
       }
-    }`,
-    variables
-  );
-  return data.issues.nodes;
+    }`;
+  const issues: LinearIssue[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < LINEAR_MAX_PAGES; page += 1) {
+    const data: {
+      issues: { nodes: LinearIssue[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } };
+    } = await linearGraphql(accessToken, query, { ...variables, after });
+    issues.push(...data.issues.nodes);
+    const pageInfo = data.issues.pageInfo;
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) break;
+    after = pageInfo.endCursor;
+  }
+  return issues;
 }
 
 export async function performLinearWrite(
