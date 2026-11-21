@@ -2928,6 +2928,71 @@ export function externalWriteOperationNeedsWork(operation: {
   );
 }
 
+/**
+ * Lease on a claimed (`running`) external write. Once it lapses, the claim is
+ * treated as abandoned (worker crash, redeploy, or activity timeout) and the
+ * row can be reclaimed or finalized. It must exceed the external-write
+ * activity `startToCloseTimeout` (90 s in workflows.ts) so a live attempt is
+ * never stolen.
+ */
+export const EXTERNAL_WRITE_CLAIM_LEASE_SECONDS = 120;
+
+export const EXTERNAL_WRITE_INTERRUPTED_MESSAGE =
+  "External write was interrupted before the provider confirmed it. Retry to check the provider and finish it.";
+export const EXTERNAL_SYNC_INTERRUPTED_MESSAGE =
+  "Provider refresh was interrupted after the external write succeeded. Retry to refresh it.";
+
+export type ExternalFinalizeRow = {
+  id: string;
+  status: string;
+  sync_status: string;
+  /** True when the row's last activity (claim, or update for pending/sync) is older than the lease. */
+  stale: boolean;
+  /** Seconds until the lease lapses (0 when already stale). */
+  lease_remaining_seconds: number | null;
+};
+
+export function summarizeExternalOperationsForFinalize(rows: ExternalFinalizeRow[]) {
+  let succeeded = 0;
+  let failed = 0;
+  let inFlight = 0;
+  let retryAfterSeconds = 0;
+  const interruptedWriteIds: string[] = [];
+  const interruptedSyncIds: string[] = [];
+
+  for (const row of rows) {
+    const waitFor = () => {
+      inFlight += 1;
+      retryAfterSeconds = Math.max(retryAfterSeconds, Number(row.lease_remaining_seconds) || 0);
+    };
+    if (row.status === "pending" || row.status === "running") {
+      if (row.stale) {
+        interruptedWriteIds.push(row.id);
+        failed += 1;
+      } else {
+        waitFor();
+      }
+    } else if (row.status === "succeeded") {
+      if (row.sync_status === "pending" || row.sync_status === "running") {
+        if (row.stale) {
+          interruptedSyncIds.push(row.id);
+          failed += 1;
+        } else {
+          waitFor();
+        }
+      } else if (row.sync_status === "failed_retryable" || row.sync_status === "failed_terminal") {
+        failed += 1;
+      } else {
+        succeeded += 1;
+      }
+    } else if (row.status === "failed_retryable" || row.status === "failed_terminal") {
+      failed += 1;
+    }
+  }
+
+  return { succeeded, failed, inFlight, retryAfterSeconds, interruptedWriteIds, interruptedSyncIds };
+}
+
 export function resolveExternalChangeSetStatus(input: {
   succeeded: number;
   failed: number;
@@ -3047,6 +3112,10 @@ export async function executeExternalWriteOperation(operationId: string) {
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl, { max: 1 });
   let operation: ExternalOperationRow | null = null;
+  // Fencing token: the attempt_count this attempt claimed. Writes of the
+  // outcome are guarded by it so a timed-out zombie attempt cannot overwrite
+  // the state recorded by the attempt that reclaimed the row.
+  let claimedAttempt: number | null = null;
 
   try {
     const rows = await sql<ExternalOperationRow[]>`
@@ -3070,27 +3139,64 @@ export async function executeExternalWriteOperation(operationId: string) {
     if (operation.status === "succeeded") {
       return { operationId, status: "succeeded" as const, alreadyCompleted: true };
     }
-    if (operation.status !== "pending" && operation.status !== "failed_retryable") {
+    if (
+      operation.status !== "pending" &&
+      operation.status !== "failed_retryable" &&
+      operation.status !== "running"
+    ) {
       return { operationId, status: operation.status, skipped: true };
     }
 
-    const claimedRows = await sql<Array<{ id: string }>>`
+    // A `running` row whose lease lapsed was claimed by an attempt that died
+    // (worker crash/redeploy or activity timeout) and is reclaimable. The
+    // provider-side marker dedupe in runGitHubExternalWrite prevents a second
+    // write if the dead attempt actually reached the provider.
+    const claimedRows = await sql<Array<{ id: string; attempt_count: number }>>`
       UPDATE external_write_operations
       SET status = 'running', attempt_count = attempt_count + 1,
           attempted_at = now(), error = NULL, updated_at = now()
       WHERE id = ${operation.id}::uuid
-        AND status IN ('pending', 'failed_retryable')
-      RETURNING id
+        AND (
+          status IN ('pending', 'failed_retryable')
+          OR (
+            status = 'running'
+            AND (
+              attempted_at IS NULL
+              OR attempted_at < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8)
+            )
+          )
+        )
+      RETURNING id, attempt_count
     `;
     if (!claimedRows[0]?.id) {
-      const currentRows = await sql<Array<{ status: string }>>`
-        SELECT status
+      const currentRows = await sql<Array<{ status: string; lease_remaining_seconds: number | null }>>`
+        SELECT status,
+               GREATEST(
+                 0,
+                 EXTRACT(EPOCH FROM (
+                   COALESCE(attempted_at, now()) + make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) - now()
+                 ))
+               )::float8 AS lease_remaining_seconds
         FROM external_write_operations
         WHERE id = ${operation.id}::uuid
         LIMIT 1
       `;
-      return { operationId, status: currentRows[0]?.status || "unknown", skipped: true };
+      const current = currentRows[0];
+      if (current?.status === "succeeded") {
+        return { operationId, status: "succeeded" as const, alreadyCompleted: true };
+      }
+      if (current?.status === "running") {
+        // Another live attempt holds the lease. Retry once it lapses instead of
+        // returning early and leaving finalize with a non-terminal row.
+        throw ApplicationFailure.create({
+          message: "External write is in progress in another attempt",
+          type: "ExternalWriteInProgress",
+          nextRetryDelay: `${Math.ceil(Number(current.lease_remaining_seconds) || 0) + 1}s`,
+        });
+      }
+      return { operationId, status: current?.status || "unknown", skipped: true };
     }
+    claimedAttempt = Number(claimedRows[0].attempt_count);
 
     let response: unknown;
     if (operation.provider === "github") {
@@ -3110,14 +3216,10 @@ export async function executeExternalWriteOperation(operationId: string) {
     }
 
     const currentOperation = operation;
-    await sql.begin(async (transaction) => {
+    const fence = claimedAttempt;
+    const recorded = await sql.begin(async (transaction) => {
       const tx = transaction as unknown as typeof sql;
-      await upsertExternalIssueFromWrite(
-        tx as unknown as SqlExecutor,
-        currentOperation,
-        response
-      );
-      await tx`
+      const updatedRows = await tx<Array<{ id: string }>>`
         UPDATE external_write_operations
         SET status = 'succeeded', response = ${JSON.stringify(response)}::jsonb,
             error = NULL, sync_status = CASE
@@ -3126,7 +3228,16 @@ export async function executeExternalWriteOperation(operationId: string) {
             END,
             sync_error = NULL, completed_at = now(), updated_at = now()
         WHERE id = ${currentOperation.id}::uuid
+          AND status = 'running'
+          AND attempt_count = ${fence}
+        RETURNING id
       `;
+      if (!updatedRows[0]?.id) return false;
+      await upsertExternalIssueFromWrite(
+        tx as unknown as SqlExecutor,
+        currentOperation,
+        response
+      );
       await tx`
         UPDATE change_proposals
         SET status = 'applied', applied_at = now()
@@ -3142,21 +3253,34 @@ export async function executeExternalWriteOperation(operationId: string) {
           ${JSON.stringify({ operationId, provider: currentOperation.provider, operationType: currentOperation.operation_type })}::jsonb
         )
       `;
+      return true;
     });
+    if (!recorded) {
+      // This attempt's lease lapsed and another attempt reclaimed the row;
+      // that attempt owns the outcome (and dedupes against the provider).
+      return { operationId, status: "running" as const, skipped: true, superseded: true };
+    }
     return { operationId, status: "succeeded" as const, alreadyCompleted: false };
   } catch (error) {
-    if (!operation) throw error;
+    // Errors before this attempt claimed the row (including the in-progress
+    // signal above) must not overwrite the state owned by another attempt.
+    if (!operation || claimedAttempt === null) throw error;
     const currentOperation = operation;
+    const fence = claimedAttempt;
     const retryable = externalErrorIsRetryable(error);
     const message = error instanceof Error ? error.message : "External write failed";
-    await sql.begin(async (transaction) => {
+    const recorded = await sql.begin(async (transaction) => {
       const tx = transaction as unknown as typeof sql;
-      await tx`
+      const updatedRows = await tx<Array<{ id: string }>>`
         UPDATE external_write_operations
         SET status = ${retryable ? "failed_retryable" : "failed_terminal"},
             error = ${message}, updated_at = now()
         WHERE id = ${currentOperation.id}::uuid
+          AND status = 'running'
+          AND attempt_count = ${fence}
+        RETURNING id
       `;
+      if (!updatedRows[0]?.id) return false;
       await tx`
         UPDATE change_proposals
         SET status = ${retryable ? "failed_retryable" : "failed_terminal"}
@@ -3172,7 +3296,11 @@ export async function executeExternalWriteOperation(operationId: string) {
           ${JSON.stringify({ operationId, provider: currentOperation.provider, retryable, error: message })}::jsonb
         )
       `;
+      return true;
     });
+    if (!recorded) {
+      return { operationId, status: "running" as const, skipped: true, superseded: true };
+    }
     if (!retryable) {
       throw ApplicationFailure.nonRetryable(message, "ExternalWriteTerminalError");
     }
@@ -3498,6 +3626,13 @@ export async function listRunnableExternalWriteOperationIds(changeSetId: string)
         AND (
           status IN ('pending', 'failed_retryable')
           OR (
+            status = 'running'
+            AND (
+              attempted_at IS NULL
+              OR attempted_at < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8)
+            )
+          )
+          OR (
             status = 'succeeded'
             AND sync_status IN ('pending', 'running', 'failed_retryable')
           )
@@ -3516,56 +3651,117 @@ export async function finalizeExternalWriteOperations(changeSetId: string, userI
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const rows = await sql<Array<{ status: string; sync_status: string; count: number }>>`
-      SELECT status, sync_status, count(*)::int AS count
-      FROM external_write_operations
-      WHERE change_set_id = ${changeSetId}::uuid
-      GROUP BY status, sync_status
-    `;
-    let succeeded = 0;
-    let failed = 0;
-    let remaining = 0;
-    for (const row of rows) {
-      const count = Number(row.count);
-      if (row.status === "pending" || row.status === "running") {
-        remaining += count;
-      } else if (row.status === "succeeded") {
-        if (row.sync_status === "pending" || row.sync_status === "running") {
-          remaining += count;
-        } else if (row.sync_status === "failed_retryable" || row.sync_status === "failed_terminal") {
-          failed += count;
-        } else {
-          succeeded += count;
-        }
-      } else if (row.status === "failed_retryable" || row.status === "failed_terminal") {
-        failed += count;
-      }
-    }
-    if (remaining > 0) throw new Error("External operations are not terminal");
+    const outcome = await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof sql;
+      // Lock the operations so a concurrent reclaim cannot race the
+      // interrupted -> failed_retryable transition below.
+      const rows = await tx<ExternalFinalizeRow[]>`
+        SELECT
+          id, status, sync_status,
+          (
+            CASE WHEN status = 'running' THEN COALESCE(attempted_at, updated_at) ELSE updated_at END
+          ) < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) AS stale,
+          GREATEST(
+            0,
+            EXTRACT(EPOCH FROM (
+              (CASE WHEN status = 'running' THEN COALESCE(attempted_at, updated_at) ELSE updated_at END)
+              + make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) - now()
+            ))
+          )::float8 AS lease_remaining_seconds
+        FROM external_write_operations
+        WHERE change_set_id = ${changeSetId}::uuid
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const summary = summarizeExternalOperationsForFinalize(rows);
+      if (summary.inFlight > 0) return { summary, status: null };
 
-    const internalRows = await sql<Array<{ count: number }>>`
-      SELECT count(*)::int AS count
-      FROM change_proposals
-      WHERE change_set_id = ${changeSetId}::uuid
-        AND status = 'applied'
-        AND action IN ('create_task', 'update_task', 'archive_task', 'relink_task', 'mark_agent_job_outdated')
-    `;
-    const internalApplied = internalRows[0]?.count || 0;
-    const status = resolveExternalChangeSetStatus({ succeeded, failed, internalApplied });
-    await sql`
-      UPDATE change_sets
-      SET status = ${status}, updated_at = now()
-      WHERE id = ${changeSetId}::uuid
-    `;
-    await sql`
-      INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
-      SELECT
-        ${userId}, workspace_id, ${"plan.external_writes_completed"},
-        ${failed === 0 ? "success" : "error"},
-        ${JSON.stringify({ changeSetId, succeeded, failed, status })}::jsonb
-      FROM change_sets WHERE id = ${changeSetId}::uuid
-    `;
-    return { succeeded, failed, status: status as "applied" | "partially_applied" | "external_failed" };
+      if (summary.interruptedWriteIds.length > 0) {
+        // The claiming attempt died without recording an outcome. Surface it
+        // as retryable so the UI shows it and the retry endpoint accepts it;
+        // a retry re-checks the provider marker before writing again.
+        await tx`
+          UPDATE external_write_operations
+          SET status = 'failed_retryable',
+              error = ${EXTERNAL_WRITE_INTERRUPTED_MESSAGE},
+              updated_at = now()
+          WHERE id IN ${tx(summary.interruptedWriteIds)}
+            AND status IN ('pending', 'running')
+        `;
+        await tx`
+          UPDATE change_proposals
+          SET status = 'failed_retryable'
+          WHERE id IN (
+            SELECT change_proposal_id
+            FROM external_write_operations
+            WHERE id IN ${tx(summary.interruptedWriteIds)}
+              AND change_proposal_id IS NOT NULL
+          )
+        `;
+        await tx`
+          INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+          SELECT
+            ${userId}, workspace_id, ${"integration.write_interrupted"}, ${"error"},
+            ${JSON.stringify({ changeSetId, operationIds: summary.interruptedWriteIds })}::jsonb
+          FROM change_sets WHERE id = ${changeSetId}::uuid
+        `;
+      }
+      if (summary.interruptedSyncIds.length > 0) {
+        await tx`
+          UPDATE external_write_operations
+          SET sync_status = 'failed_retryable',
+              sync_error = ${EXTERNAL_SYNC_INTERRUPTED_MESSAGE},
+              updated_at = now()
+          WHERE id IN ${tx(summary.interruptedSyncIds)}
+            AND sync_status IN ('pending', 'running')
+        `;
+      }
+
+      const internalRows = await tx<Array<{ count: number }>>`
+        SELECT count(*)::int AS count
+        FROM change_proposals
+        WHERE change_set_id = ${changeSetId}::uuid
+          AND status = 'applied'
+          AND action IN ('create_task', 'update_task', 'archive_task', 'relink_task', 'mark_agent_job_outdated')
+      `;
+      const internalApplied = internalRows[0]?.count || 0;
+      const status = resolveExternalChangeSetStatus({
+        succeeded: summary.succeeded,
+        failed: summary.failed,
+        internalApplied,
+      });
+      await tx`
+        UPDATE change_sets
+        SET status = ${status}, updated_at = now()
+        WHERE id = ${changeSetId}::uuid
+      `;
+      await tx`
+        INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+        SELECT
+          ${userId}, workspace_id, ${"plan.external_writes_completed"},
+          ${summary.failed === 0 ? "success" : "error"},
+          ${JSON.stringify({ changeSetId, succeeded: summary.succeeded, failed: summary.failed, status })}::jsonb
+        FROM change_sets WHERE id = ${changeSetId}::uuid
+      `;
+      return { summary, status };
+    });
+
+    if (outcome.status === null) {
+      // Another live attempt still holds a lease. Leases are bounded, so ask
+      // Temporal to retry just after the longest one lapses; by then every
+      // row is terminal or reclassified as interrupted, and finalize returns.
+      throw ApplicationFailure.create({
+        message: "External operations are not terminal",
+        type: "ExternalWritesInFlight",
+        nextRetryDelay: `${Math.max(5, Math.ceil(outcome.summary.retryAfterSeconds) + 1)}s`,
+      });
+    }
+
+    return {
+      succeeded: outcome.summary.succeeded,
+      failed: outcome.summary.failed,
+      status: outcome.status as "applied" | "partially_applied" | "external_failed",
+    };
   } finally {
     await sql.end();
   }

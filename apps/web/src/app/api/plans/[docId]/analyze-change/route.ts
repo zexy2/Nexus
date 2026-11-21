@@ -6,6 +6,7 @@ import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { POST as startWorkflow } from "@/app/api/workflows/route";
 import { aiUnavailableResponse, getAiProviderStatus } from "@/lib/production-guardrails";
+import { expirePendingChangeSetIfOrphaned } from "@/lib/change-set-recovery";
 
 export const runtime = "nodejs";
 
@@ -40,7 +41,12 @@ export async function POST(
     where: and(eq(changeSets.docId, docId), eq(changeSets.status, "pending")),
     orderBy: [desc(changeSets.createdAt)],
   });
-  if (existing) {
+  // A pending review whose workflow died (or whose 72 h window passed with no
+  // expiry) would otherwise lock this doc forever.
+  const existingIsLive =
+    existing &&
+    !(await expirePendingChangeSetIfOrphaned(existing, { userId: session.user.id }));
+  if (existing && existingIsLive) {
     return NextResponse.json(
       {
         error: "CHANGE_REVIEW_PENDING",

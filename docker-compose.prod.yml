@@ -133,7 +133,11 @@ services:
       postgres:
         condition: service_healthy
     command: ["pnpm", "--filter", "@nexus/workflows", "worker"]
+    # SIGTERM drains the worker; in-flight activities get WORKER_SHUTDOWN_GRACE_TIME
+    # to finish, so the container stop timeout must be longer than that.
+    stop_grace_period: 60s
     environment:
+      WORKER_SHUTDOWN_GRACE_TIME: ${WORKER_SHUTDOWN_GRACE_TIME:-45 seconds}
       NODE_ENV: production
       APP_COMMIT_SHA: ${APP_COMMIT_SHA:-unknown}
       DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexus}

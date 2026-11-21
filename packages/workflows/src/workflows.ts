@@ -6,6 +6,7 @@
  */
 
 import {
+  ApplicationFailure,
   condition,
   defineSignal,
   proxyActivities,
@@ -91,9 +92,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Errors raised by workflow code itself must be Temporal failures. A plain
+ * `Error` fails the *workflow task* instead of the workflow, so Temporal
+ * retries the task forever and the execution looks RUNNING indefinitely.
+ * Changing the thrown type adds no commands, so it is replay-safe for
+ * executions already stuck on such an error: they fail cleanly on replay.
+ */
+export const WORKFLOW_PARSE_ERROR_TYPE = "WorkflowOutputParseError";
+
+function workflowFailure(message: string, type = WORKFLOW_PARSE_ERROR_TYPE) {
+  return ApplicationFailure.nonRetryable(message, type);
+}
+
 function normalizeTaskItem(item: unknown, index: number): ParsedTask | null {
   if (!isRecord(item)) {
-    throw new Error(`Task item ${index + 1} is invalid`);
+    throw workflowFailure(`Task item ${index + 1} is invalid`);
   }
 
   const title = typeof item.title === "string" ? item.title.trim() : "";
@@ -181,7 +195,7 @@ export function parseTaskBreakdown(output: string): ParsedTask[] {
     .filter((item): item is ParsedTask => item !== null);
 
   if (tasks.length === 0) {
-    throw new Error("Task agent did not return parseable tasks");
+    throw workflowFailure("Task agent did not return parseable tasks");
   }
 
   return tasks;
@@ -392,7 +406,7 @@ export async function planImpactWorkflow(
 
   const decision = resolution.value;
   if (!decision) {
-    throw new Error("Plan change resolution was not recorded");
+    throw workflowFailure("Plan change resolution was not recorded", "WorkflowStateError");
   }
 
   if (decision.decision === "reject") {
