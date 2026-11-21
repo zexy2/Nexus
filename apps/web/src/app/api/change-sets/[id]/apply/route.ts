@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { writeAuditLog } from "@/lib/production-guardrails";
+import { loadTemporalClient, startWorkflowOnce } from "@/lib/temporal-start";
 
 export const runtime = "nodejs";
 
@@ -20,35 +21,36 @@ function isClosedWorkflowError(message: string) {
   return /already completed|not found|closed|completed workflow|workflow execution already completed/i.test(message);
 }
 
+// Recovery workflow ids are deterministic per change set, so concurrent clicks
+// attach to the run already in flight instead of starting duplicates (see
+// startWorkflowOnce). Once a run closes, the same id can be started again.
+function applyRecoveryWorkflowId(changeSetId: string) {
+  return `change-set-apply-${changeSetId}`;
+}
+
+function externalWriteRecoveryWorkflowId(changeSetId: string) {
+  return `change-set-external-${changeSetId}`;
+}
+
 async function startApplyRecoveryWorkflow(input: {
   changeSetId: string;
   selectedProposalIds: string[];
   userId: string;
 }) {
-  const temporal = await import("@nexus/workflows/client");
-  return temporal.startWorkflow(
-    "applyPlanChangeSetWorkflow",
-    input,
-    {
-      workflowId: `change-set-apply-${input.changeSetId}-${Date.now()}`,
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
-    }
-  );
+  return startWorkflowOnce("applyPlanChangeSetWorkflow", input, {
+    workflowId: applyRecoveryWorkflowId(input.changeSetId),
+    taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
+  });
 }
 
 async function startExternalWriteRecoveryWorkflow(input: {
   changeSetId: string;
   userId: string;
 }) {
-  const temporal = await import("@nexus/workflows/client");
-  return temporal.startWorkflow(
-    "runExternalWriteOperationsWorkflow",
-    input,
-    {
-      workflowId: `change-set-external-${input.changeSetId}-${Date.now()}`,
-      taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
-    }
-  );
+  return startWorkflowOnce("runExternalWriteOperationsWorkflow", input, {
+    workflowId: externalWriteRecoveryWorkflowId(input.changeSetId),
+    taskQueue: process.env.TEMPORAL_TASK_QUEUE || "nexus-agents",
+  });
 }
 
 export async function POST(
@@ -87,16 +89,18 @@ export async function POST(
         userId: session.user.id,
       });
 
-      await writeAuditLog({
-        userId: session.user.id,
-        workspaceId: changeSet.workspaceId,
-        event: "plan.external_write_recovery_started",
-        metadata: {
-          changeSetId: id,
-          recoveryWorkflowId: recovery.workflowId,
-        },
-        request,
-      });
+      if (!recovery.alreadyRunning) {
+        await writeAuditLog({
+          userId: session.user.id,
+          workspaceId: changeSet.workspaceId,
+          event: "plan.external_write_recovery_started",
+          metadata: {
+            changeSetId: id,
+            recoveryWorkflowId: recovery.workflowId,
+          },
+          request,
+        });
+      }
 
       return NextResponse.json(
         {
@@ -105,6 +109,7 @@ export async function POST(
           workflowId: recovery.workflowId,
           status: "external_pending",
           recovery: true,
+          alreadyRunning: recovery.alreadyRunning,
         },
         { status: 202 }
       );
@@ -168,18 +173,20 @@ export async function POST(
         userId: session.user.id,
       });
 
-      await writeAuditLog({
-        userId: session.user.id,
-        workspaceId: changeSet.workspaceId,
-        event: "plan.change_apply_recovery_started",
-        metadata: {
-          changeSetId: id,
-          selectedProposalIds,
-          recoveryWorkflowId: recovery.workflowId,
-          reason: "missing_temporal_workflow_id",
-        },
-        request,
-      });
+      if (!recovery.alreadyRunning) {
+        await writeAuditLog({
+          userId: session.user.id,
+          workspaceId: changeSet.workspaceId,
+          event: "plan.change_apply_recovery_started",
+          metadata: {
+            changeSetId: id,
+            selectedProposalIds,
+            recoveryWorkflowId: recovery.workflowId,
+            reason: "missing_temporal_workflow_id",
+          },
+          request,
+        });
+      }
 
       return NextResponse.json(
         {
@@ -188,12 +195,13 @@ export async function POST(
           workflowId: recovery.workflowId,
           status: "applying",
           recovery: true,
+          alreadyRunning: recovery.alreadyRunning,
         },
         { status: 202 }
       );
     }
 
-    const temporal = await import("@nexus/workflows/client");
+    const temporal = await loadTemporalClient();
     await temporal.signalWorkflow(changeSet.temporalWorkflowId, "resolvePlanChange", [
       {
         decision: "approve",
@@ -229,19 +237,21 @@ export async function POST(
           userId: session.user.id,
         });
 
-        await writeAuditLog({
-          userId: session.user.id,
-          workspaceId: changeSet.workspaceId,
-          event: "plan.change_apply_recovery_started",
-          metadata: {
-            changeSetId: id,
-            selectedProposalIds,
-            previousWorkflowId: changeSet.temporalWorkflowId,
-            recoveryWorkflowId: recovery.workflowId,
-            reason: message,
-          },
-          request,
-        });
+        if (!recovery.alreadyRunning) {
+          await writeAuditLog({
+            userId: session.user.id,
+            workspaceId: changeSet.workspaceId,
+            event: "plan.change_apply_recovery_started",
+            metadata: {
+              changeSetId: id,
+              selectedProposalIds,
+              previousWorkflowId: changeSet.temporalWorkflowId,
+              recoveryWorkflowId: recovery.workflowId,
+              reason: message,
+            },
+            request,
+          });
+        }
 
         return NextResponse.json(
           {
@@ -251,6 +261,7 @@ export async function POST(
             workflowId: recovery.workflowId,
             status: "applying",
             recovery: true,
+            alreadyRunning: recovery.alreadyRunning,
           },
           { status: 202 }
         );
