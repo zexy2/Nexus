@@ -14,7 +14,7 @@ import {
   bigint,
   bigserial,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ==========================================
 // CUSTOM TYPES (pgvector support)
@@ -583,6 +583,11 @@ export const agentJobs = pgTable(
     index("agent_jobs_workspace_idx").on(table.workspaceId),
     index("agent_jobs_task_idx").on(table.taskId),
     index("agent_jobs_status_idx").on(table.status),
+    // At most one active job per task. Keep the status list in sync with
+    // ACTIVE_AGENT_JOB_STATUSES in apps/web/src/lib/agent-handoff.ts.
+    uniqueIndex("agent_jobs_task_active_idx")
+      .on(table.taskId)
+      .where(sql`${table.status} in ('queued', 'claimed', 'running', 'submitted')`),
   ]
 );
 
@@ -905,6 +910,9 @@ export const integrationWebhookEvents = pgTable(
     rawMetadataHash: varchar("raw_metadata_hash", { length: 128 }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    // Set each time a delivery is claimed for processing (first delivery or a
+    // redelivery of a failed/stale one). Used to detect abandoned claims.
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1016,6 +1024,9 @@ export const agentExecutions = pgTable(
     errorMessage: text("error_message"),
     temporalWorkflowId: varchar("temporal_workflow_id", { length: 255 }),
     startedAt: timestamp("started_at", { withTimezone: true }),
+    // Lease heartbeat for in-process (non-Temporal) runs. A "running" row whose
+    // heartbeat is older than the lease TTL is treated as abandoned.
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
