@@ -4,6 +4,7 @@ import { externalWriteOperations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceOwner } from "@/lib/workspace-auth";
+import { startWorkflowOnce } from "@/lib/temporal-start";
 
 export const runtime = "nodejs";
 
@@ -49,15 +50,16 @@ export async function POST(
   }
 
   try {
-    const temporal = await import("@nexus/workflows/client");
-    const result = await temporal.startWorkflow(
+    // Deterministic id: a second click while the retry is running attaches to
+    // it instead of starting a duplicate retry of the same operation.
+    const result = await startWorkflowOnce(
       "externalWriteRetryWorkflow",
       {
         operationId: operation.id,
         changeSetId: operation.changeSetId,
         userId: session.user.id,
       },
-      { workflowId: `external-write-retry-${operation.id}-${Date.now()}` }
+      { workflowId: `external-write-retry-${operation.id}` }
     );
     return NextResponse.json({ ok: true, ...result, status: "running" }, { status: 202 });
   } catch (error) {
