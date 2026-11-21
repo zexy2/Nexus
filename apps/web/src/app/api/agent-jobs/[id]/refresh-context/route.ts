@@ -4,7 +4,11 @@ import { agentJobEvents, agentJobs, agentJobSubmissions } from "@nexus/database/
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
-import { buildAgentContext } from "@/lib/agent-handoff";
+import {
+  AGENT_JOB_ACTIVE_UNIQUE_INDEX,
+  buildAgentContext,
+  isUniqueViolation,
+} from "@/lib/agent-handoff";
 import { writeAuditLog } from "@/lib/production-guardrails";
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -19,39 +23,52 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: "JOB_NOT_OUTDATED" }, { status: 409 });
   }
   const fresh = await buildAgentContext(job.taskId, job.workspaceId);
-  const updated = await db.transaction(async (tx) => {
-    await tx.update(agentJobSubmissions).set({
-      reviewStatus: "superseded",
-      reviewNote: "The plan context changed before review.",
-      reviewedBy: session.user.id,
-      reviewedAt: new Date(),
-    }).where(and(
-      eq(agentJobSubmissions.jobId, id),
-      eq(agentJobSubmissions.reviewStatus, "pending")
-    ));
-    const [row] = await tx.update(agentJobs).set({
-      status: "queued",
-      contextVersion: job.contextVersion + 1,
-      contextHash: fresh.contextHash,
-      contextSnapshot: fresh.snapshot,
-      planVersionId: fresh.planVersionId,
-      repositoryId: fresh.repository.id,
-      claimedByClient: null,
-      claimedByTokenId: null,
-      claimedAt: null,
-      startedAt: null,
-      submittedAt: null,
-      updatedAt: new Date(),
-    }).where(eq(agentJobs.id, id)).returning();
-    await tx.insert(agentJobEvents).values({
-      jobId: id,
-      workspaceId: job.workspaceId,
-      type: "context_refreshed",
-      message: "The user approved a refreshed agent brief.",
-      metadata: { contextVersion: row.contextVersion, contextHash: row.contextHash },
+  let updated: typeof agentJobs.$inferSelect | null;
+  try {
+    updated = await db.transaction(async (tx) => {
+      // Re-queue only if the job is still outdated (a concurrent cancel or
+      // refresh wins); the partial unique index rejects re-queueing while another
+      // active job exists for the same task.
+      const [row] = await tx.update(agentJobs).set({
+        status: "queued",
+        contextVersion: job.contextVersion + 1,
+        contextHash: fresh.contextHash,
+        contextSnapshot: fresh.snapshot,
+        planVersionId: fresh.planVersionId,
+        repositoryId: fresh.repository.id,
+        claimedByClient: null,
+        claimedByTokenId: null,
+        claimedAt: null,
+        startedAt: null,
+        submittedAt: null,
+        updatedAt: new Date(),
+      }).where(and(eq(agentJobs.id, id), eq(agentJobs.status, "outdated"))).returning();
+      if (!row) return null;
+      await tx.update(agentJobSubmissions).set({
+        reviewStatus: "superseded",
+        reviewNote: "The plan context changed before review.",
+        reviewedBy: session.user.id,
+        reviewedAt: new Date(),
+      }).where(and(
+        eq(agentJobSubmissions.jobId, id),
+        eq(agentJobSubmissions.reviewStatus, "pending")
+      ));
+      await tx.insert(agentJobEvents).values({
+        jobId: id,
+        workspaceId: job.workspaceId,
+        type: "context_refreshed",
+        message: "The user approved a refreshed agent brief.",
+        metadata: { contextVersion: row.contextVersion, contextHash: row.contextHash },
+      });
+      return row;
     });
-    return row;
-  });
+  } catch (error) {
+    if (isUniqueViolation(error, AGENT_JOB_ACTIVE_UNIQUE_INDEX)) {
+      return NextResponse.json({ error: "ACTIVE_AGENT_JOB_EXISTS" }, { status: 409 });
+    }
+    throw error;
+  }
+  if (!updated) return NextResponse.json({ error: "JOB_NOT_OUTDATED" }, { status: 409 });
   await writeAuditLog({
     userId: session.user.id,
     workspaceId: job.workspaceId,
