@@ -1300,6 +1300,33 @@ export const workerHeartbeats = pgTable(
 );
 
 // ==========================================
+// WORKFLOW ACTIVITY RECEIPTS (Idempotent activity retries)
+// ==========================================
+
+// One row per (workflow, activity) side effect. The worker inserts the
+// receipt in the same transaction as the side effect; a Temporal retry that
+// finds the receipt returns the stored result instead of writing again.
+export const workflowActivityReceipts = pgTable(
+  "workflow_activity_receipts",
+  {
+    idempotencyKey: varchar("idempotency_key", { length: 512 }).primaryKey(),
+    workflowId: varchar("workflow_id", { length: 255 }).notNull(),
+    activityType: varchar("activity_type", { length: 80 }).notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    result: jsonb("result").$type<unknown>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("workflow_activity_receipts_workflow_idx").on(table.workflowId),
+    index("workflow_activity_receipts_created_idx").on(table.createdAt),
+  ]
+);
+
+// ==========================================
 // USER SETTINGS (Kullanıcı Ayarları)
 // ==========================================
 

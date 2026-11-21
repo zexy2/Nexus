@@ -18,6 +18,10 @@ type StateRow = {
 const store = vi.hoisted(() => ({
   rows: [] as StateRow[],
   integrationInserts: [] as Array<Record<string, unknown>>,
+  integrationUpdates: [] as Array<Record<string, unknown>>,
+  existingIntegration: undefined as
+    | { installationId: string | null; metadata: Record<string, unknown> }
+    | undefined,
   verifySession: vi.fn(),
   requireWorkspaceOwner: vi.fn(),
 }));
@@ -31,6 +35,9 @@ vi.mock("@/lib/db", () => ({
     query: {
       integrationConnectStates: {
         findFirst: async () => findByHashAndProvider(),
+      },
+      workspaceIntegrations: {
+        findFirst: async () => store.existingIntegration,
       },
     },
     update: () => ({
@@ -54,8 +61,9 @@ vi.mock("@/lib/db", () => ({
     }),
     insert: () => ({
       values: (values: Record<string, unknown>) => ({
-        onConflictDoUpdate: async () => {
+        onConflictDoUpdate: async (config?: { set?: Record<string, unknown> }) => {
           store.integrationInserts.push(values);
+          if (config?.set) store.integrationUpdates.push(config.set);
         },
       }),
     }),
@@ -83,12 +91,14 @@ const github = vi.hoisted(() => ({
   exchange: vi.fn(),
   verify: vi.fn(),
   list: vi.fn(),
+  repos: vi.fn(),
 }));
 vi.mock("@/lib/integrations/providers/github-client", () => ({
   getGitHubAppConfig: () => ({ appId: "1", appSlug: "nexus-app", clientId: "client" }),
   exchangeGitHubOAuthCode: (...a: unknown[]) => github.exchange(...a),
   verifyGitHubInstallationForUser: (...a: unknown[]) => github.verify(...a),
   listGitHubInstallationsForUser: (...a: unknown[]) => github.list(...a),
+  listInstallationRepositories: (...a: unknown[]) => github.repos(...a),
 }));
 
 import { GET as linearCallback } from "@/app/api/integrations/linear/callback/route";
@@ -136,6 +146,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   store.rows = [];
   store.integrationInserts = [];
+  store.integrationUpdates = [];
+  store.existingIntegration = undefined;
+  github.repos.mockResolvedValue([]);
   store.requireWorkspaceOwner.mockResolvedValue({ ok: true, workspaceId: "ws-attacker" });
   github.exchange.mockResolvedValue("gh-user-token");
   github.verify.mockResolvedValue({ id: 42, account: { login: "victim-org" } });
@@ -253,6 +266,84 @@ describe("GitHub OAuth callback state binding", () => {
 
     expect(response.status).toBe(403);
     expect(store.rows[0].metadata).toEqual({});
+  });
+});
+
+describe("GitHub reconnect keeps the repository selection", () => {
+  const repo = (fullName: string) => ({
+    id: 1,
+    fullName,
+    owner: fullName.split("/")[0],
+    name: fullName.split("/")[1],
+    private: false,
+    defaultBranch: "main",
+    url: `https://github.com/${fullName}`,
+  });
+
+  it("reconnect keeps repo when the installation still has access", async () => {
+    seedState({ provider: "github", metadata: { githubInstallationId: "42" } });
+    sessionFor("user-owner");
+    store.existingIntegration = {
+      installationId: "41",
+      metadata: { selectedRepository: "victim-org/app", accountLogin: "victim-org" },
+    };
+    github.repos.mockResolvedValue([repo("victim-org/app"), repo("victim-org/other")]);
+
+    const response = await githubCallback(callbackRequest("github"));
+
+    expect(new URL(response.headers.get("location")!).searchParams.get("connected")).toBe("true");
+    expect(github.repos).toHaveBeenCalledWith("42");
+    for (const written of [store.integrationInserts[0], store.integrationUpdates[0]]) {
+      expect(written.metadata).toMatchObject({
+        selectedRepository: "victim-org/app",
+        connectMode: "setup_callback",
+        availableRepositories: [
+          expect.objectContaining({ fullName: "victim-org/app" }),
+          expect.objectContaining({ fullName: "victim-org/other" }),
+        ],
+      });
+    }
+  });
+
+  it("reconnect drops the repo when the new installation can no longer access it", async () => {
+    seedState({ provider: "github", metadata: { githubInstallationId: "42" } });
+    sessionFor("user-owner");
+    store.existingIntegration = {
+      installationId: "41",
+      metadata: { selectedRepository: "victim-org/app" },
+    };
+    github.repos.mockResolvedValue([repo("victim-org/other")]);
+
+    await githubCallback(callbackRequest("github"));
+
+    expect(store.integrationUpdates[0].metadata).not.toHaveProperty("selectedRepository");
+  });
+
+  it("reconnect keeps repo for the same installation when access cannot be listed", async () => {
+    seedState({ provider: "github", metadata: { githubInstallationId: "42" } });
+    sessionFor("user-owner");
+    store.existingIntegration = {
+      installationId: "42",
+      metadata: { repositoryOwner: "victim-org", repositoryName: "app" },
+    };
+    github.repos.mockRejectedValue(new Error("GitHub unavailable"));
+
+    await githubCallback(callbackRequest("github"));
+
+    expect(store.integrationUpdates[0].metadata).toMatchObject({
+      repositoryOwner: "victim-org",
+      repositoryName: "app",
+    });
+  });
+
+  it("does not list repositories on a first connect", async () => {
+    seedState({ provider: "github", metadata: { githubInstallationId: "42" } });
+    sessionFor("user-owner");
+
+    await githubCallback(callbackRequest("github"));
+
+    expect(github.repos).not.toHaveBeenCalled();
+    expect(store.integrationInserts[0].metadata).not.toHaveProperty("selectedRepository");
   });
 });
 
