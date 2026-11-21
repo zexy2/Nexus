@@ -30,7 +30,6 @@ import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import {
   checkPersistentRateLimit,
-  enforceMutationBudget,
   rateLimitResponse,
   writeAuditLog,
 } from "@/lib/production-guardrails";
@@ -146,15 +145,6 @@ export async function POST(request: NextRequest) {
         { error: `Unknown operation: ${String(operation)}` },
         { status: 400 }
       );
-    }
-
-    if (table === "docs" || table === "tasks") {
-      const budget = await enforceMutationBudget({
-        userId,
-        email: protection.user?.email,
-        resource: table === "docs" ? "document" : "task",
-      });
-      if (budget) return budget;
     }
 
     if (table === "workspaces") {

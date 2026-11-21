@@ -18,11 +18,9 @@ vi.mock("@/lib/api-middleware", () => ({
 }));
 
 const checkPersistentRateLimit = vi.fn();
-const enforceMutationBudget = vi.fn();
 const writeAuditLog = vi.fn();
 vi.mock("@/lib/production-guardrails", () => ({
   checkPersistentRateLimit: (...a: unknown[]) => checkPersistentRateLimit(...a),
-  enforceMutationBudget: (...a: unknown[]) => enforceMutationBudget(...a),
   writeAuditLog: (...a: unknown[]) => writeAuditLog(...a),
   rateLimitResponse: () => new Response(JSON.stringify({ error: "RATE_LIMIT_EXCEEDED" }), { status: 429 }),
 }));
@@ -119,7 +117,6 @@ beforeEach(() => {
   insertReturning = [{ id: "new" }];
   protectRoute.mockResolvedValue({ success: true, user: { id: "user-1", email: "u@x.com" } });
   checkPersistentRateLimit.mockResolvedValue({ allowed: true, limit: 60, remaining: 59, resetAt: 0 });
-  enforceMutationBudget.mockResolvedValue(null);
   agentJobsFindFirst.mockResolvedValue(undefined);
 });
 
@@ -489,18 +486,6 @@ describe("POST /api/sync/push — limits and input validation", () => {
 
     expect(res.status).toBe(429);
     expect(checkPersistentRateLimit).toHaveBeenCalledWith("user-1", "sync:push:user", 60, 1000);
-    expectNoWrites();
-  });
-
-  it("applies the shared document/task mutation budget", async () => {
-    enforceMutationBudget.mockResolvedValue(new Response("{}", { status: 429 }));
-
-    const res = await push("tasks", "update", { id: "task-1", title: "x" });
-
-    expect(res.status).toBe(429);
-    expect(enforceMutationBudget).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: "user-1", resource: "task" })
-    );
     expectNoWrites();
   });
 
