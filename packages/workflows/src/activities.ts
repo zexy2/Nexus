@@ -3149,8 +3149,9 @@ export async function executeExternalWriteOperation(operationId: string) {
 
     // A `running` row whose lease lapsed was claimed by an attempt that died
     // (worker crash/redeploy or activity timeout) and is reclaimable. The
-    // provider-side marker dedupe in runGitHubExternalWrite prevents a second
-    // write if the dead attempt actually reached the provider.
+    // provider-side marker dedupe in runGitHubExternalWrite and
+    // runLinearExternalWrite (search-before-create for issues and comments)
+    // prevents a second write if the dead attempt actually reached the provider.
     const claimedRows = await sql<Array<{ id: string; attempt_count: number }>>`
       UPDATE external_write_operations
       SET status = 'running', attempt_count = attempt_count + 1,

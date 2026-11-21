@@ -157,7 +157,12 @@ function handle(text: string, values: unknown[]): Row[] {
   if (text.includes("FROM external_write_operations o")) {
     return mock.operationRow ? [{ ...mock.operationRow, token_ciphertext: db.integrationToken }] : [];
   }
-  if (text.includes("SET status = 'running'")) return [{ id: mock.operationRow?.id }];
+  // Claim returns the fencing attempt counter; the fenced outcome UPDATE
+  // (succeeded / failed_*) must report the row it wrote.
+  if (text.includes("SET status = 'running'")) return [{ id: mock.operationRow?.id, attempt_count: 1 }];
+  if (text.includes("UPDATE external_write_operations") && text.includes("RETURNING id")) {
+    return [{ id: mock.operationRow?.id }];
+  }
   if (text.includes("SELECT token_ciphertext")) return [{ token_ciphertext: db.integrationToken }];
   if (text.includes("UPDATE workspace_integrations") && text.includes("token_ciphertext")) {
     db.integrationToken = values[0] as string;
@@ -467,6 +472,36 @@ describe("Linear external writes", () => {
     expect(JSON.parse(succeeded?.values[0] as string)).toMatchObject({
       issueCreate: { issue: { id: "lin-issue-1" } },
     });
+  });
+
+  it("Linear create reclaimed after an expired lease dedupes instead of creating again", async () => {
+    const marker = linearOperationMarker("cs-1:cp-1:linear_create_issue");
+    const existingIssue = {
+      id: "lin-issue-1",
+      identifier: "ENG-1",
+      title: "REQ-1: Login",
+      description: `Body\n\n${marker}`,
+      url: "https://linear.app/x/issue/ENG-1",
+    };
+    const calls = installFetch((url) => {
+      if (url.endsWith("/graphql")) {
+        return jsonResponse({ data: { issues: { nodes: [existingIssue] } } });
+      }
+      return jsonResponse({}, 404);
+    });
+    // A dead attempt left the row `running`; the lease-guarded claim takes it over.
+    mock.operationRow = linearOperation({ status: "running" });
+
+    const result = await executeExternalWriteOperation("op-1");
+
+    expect(result.status).toBe("succeeded");
+    const claim = mock.calls.find((call) => call.text.includes("SET status = 'running'"));
+    expect(claim?.text).toContain("attempted_at < now() - make_interval");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query).toContain("NexusFindIssue");
+    expect(calls.some((call) => call.query.includes("issueCreate"))).toBe(false);
+    const succeeded = mock.calls.find((call) => call.text.includes("SET status = 'succeeded'"));
+    expect(succeeded?.text).toContain("attempt_count =");
   });
 
   it("Linear create embeds the idempotency marker when no earlier attempt exists", async () => {
