@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auditLogs, rateLimitBuckets } from "@nexus/database/schema";
+import { auditLogs, rateLimitBuckets, users } from "@nexus/database/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getOllamaConfig, hasAnyLlmProvider, isLocalOnly } from "@/lib/ai/providers";
 import { isEphemeralDemoEmail } from "@/lib/demo-sessions";
@@ -54,13 +54,45 @@ export function isAiEnabled() {
   return boolEnv("AI_ENABLED", true);
 }
 
-export function isAdminEmail(email?: string | null) {
+/** True when the address is on the ADMIN_EMAILS allow-list (no verification check). */
+export function isAdminEmailListed(email?: string | null) {
   if (!email) return false;
   return (process.env.ADMIN_EMAILS || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
     .includes(email.toLowerCase());
+}
+
+/**
+ * Admin privilege requires both an allow-listed address and a verified email.
+ * Otherwise anyone could register an ADMIN_EMAILS address before the real
+ * owner (e.g. when email verification is not enforced) and inherit admin
+ * rights. Fails closed: a missing/unknown `emailVerified` is not admin.
+ */
+export function isAdminEmail(email?: string | null, emailVerified?: boolean | null) {
+  return emailVerified === true && isAdminEmailListed(email);
+}
+
+/**
+ * Resolves admin status for callers that only know the user id/email: the
+ * verification flag is read from the database, and only when the address is
+ * allow-listed (so non-admin requests pay no extra query).
+ */
+export async function isVerifiedAdminUser(userId: string, email?: string | null) {
+  if (!isAdminEmailListed(email)) return false;
+  try {
+    const [row] = await db
+      .select({ email: users.email, emailVerified: users.emailVerified })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row || row.email.toLowerCase() !== email!.toLowerCase()) return false;
+    return isAdminEmail(row.email, row.emailVerified);
+  } catch (error) {
+    console.error("[Admin] Failed to resolve admin status:", error);
+    return false;
+  }
 }
 
 export function isDemoEmail(email?: string | null) {
@@ -324,7 +356,7 @@ export async function enforceAiBudget(options: {
     };
   }
 
-  const admin = isAdminEmail(options.email);
+  const admin = await isVerifiedAdminUser(options.userId, options.email);
   const limits = getAiUsageLimits(admin, isDemoEmail(options.email));
   const oneDay = 24 * 60 * 60 * 1000;
   const oneMinute = 60 * 1000;
@@ -372,7 +404,7 @@ export async function enforceAiBudget(options: {
 }
 
 export async function getAiUsageRemaining(userId: string, email?: string | null) {
-  const limits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
+  const limits = getAiUsageLimits(await isVerifiedAdminUser(userId, email), isDemoEmail(email));
   const now = new Date();
 
   const rows = await db

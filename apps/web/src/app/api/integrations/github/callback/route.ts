@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
+import { getCanonicalAppUrl } from "@/lib/integrations/crypto";
 import {
-  consumeIntegrationConnectState,
-  getCanonicalAppUrl,
-  readIntegrationConnectState,
-} from "@/lib/integrations/crypto";
+  authorizeIntegrationConnectState,
+  claimIntegrationConnectState,
+} from "@/lib/integrations/connect-state-guard";
 import {
   exchangeGitHubOAuthCode,
   getGitHubAppConfig,
@@ -39,13 +39,17 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const connectState = await readIntegrationConnectState("github", state);
-  if (!connectState) {
+  // Session user must be the user who started the flow and still own the
+  // target workspace. The state is only claimed right before persisting,
+  // because a first-time install round-trips through GitHub with it.
+  const authorization = await authorizeIntegrationConnectState("github", state, { consume: false });
+  if (!authorization.ok) {
     return redirectToSettings(request, {
       integration: "github",
-      error: "invalid_state",
+      error: authorization.error,
     });
   }
+  const connectState = authorization.connectState;
 
   try {
     const callbackUrl = new URL(
@@ -89,6 +93,16 @@ export async function GET(request: NextRequest) {
       installationId = String(installation.id);
     }
 
+    // One-time use: claim atomically before writing, so a replayed or
+    // concurrent callback with the same state cannot link again.
+    const claimed = await claimIntegrationConnectState("github", state, authorization.userId);
+    if (!claimed) {
+      return redirectToSettings(request, {
+        integration: "github",
+        error: "invalid_state",
+      });
+    }
+
     await db
       .insert(workspaceIntegrations)
       .values({
@@ -123,8 +137,6 @@ export async function GET(request: NextRequest) {
           updatedAt: new Date(),
         },
       });
-
-    await consumeIntegrationConnectState("github", state);
 
     return redirectToSettings(request, { integration: "github", connected: "true" });
   } catch (error) {
