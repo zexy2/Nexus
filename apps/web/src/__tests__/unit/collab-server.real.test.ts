@@ -4,6 +4,7 @@
  * persistence adapter and real y-websocket clients over a real socket.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import http from "node:http";
 import WS from "ws";
 import * as Y from "yjs";
 import * as decoding from "lib0/decoding";
@@ -73,6 +74,19 @@ function createProvider(params: Record<string, string>, connect = true) {
   return { ydoc, provider };
 }
 
+// The global test setup mocks fetch, so talk HTTP directly.
+function getJson(target: string): Promise<{ status: number; body: Record<string, unknown> }> {
+  return new Promise((resolve, reject) => {
+    http
+      .get(target, (res) => {
+        let raw = "";
+        res.on("data", (chunk) => (raw += chunk));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(raw) }));
+      })
+      .on("error", reject);
+  });
+}
+
 function waitFor(predicate: () => boolean, timeoutMs = 4000) {
   return vi.waitFor(
     () => {
@@ -105,6 +119,25 @@ afterEach(async () => {
 });
 
 describe("collaboration server", () => {
+  it("public /health reports degraded status without leaking the DB error", async () => {
+    const httpUrl = url.replace("ws://", "http://");
+    server.markPersistenceError(new Error('connect ECONNREFUSED 10.0.0.5:5432 password authentication failed for user "nexus"'));
+
+    const res = await getJson(`${httpUrl}/health`);
+    expect(res.status).toBe(503);
+    const body = res.body;
+    expect(body).toMatchObject({ status: "degraded", persistence: "unavailable" });
+    expect(JSON.stringify(body)).not.toMatch(/ECONNREFUSED|password|nexus"|5432/);
+    expect(body).not.toHaveProperty("persistenceError");
+    // Detail stays available internally.
+    expect(server.getPersistenceStatus().error).toContain("ECONNREFUSED");
+
+    server.markPersistenceHealthy();
+    const ok = await getJson(`${httpUrl}/health`);
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ status: "ok", persistence: "postgres" });
+  });
+
   it("reconnect after expiry succeeds", async () => {
     const fetchToken = vi
       .fn<() => Promise<string>>()
