@@ -1,10 +1,10 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
-import { docs, workspaces } from "@nexus/database/schema";
+import { docs } from "@nexus/database/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { enforceMutationBudget, writeAuditLog } from "@/lib/production-guardrails";
-import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
+import { ensureDefaultWorkspace, getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 
 // GET - List all documents
 export async function GET() {
@@ -78,20 +78,7 @@ export async function POST(req: Request) {
     }
     
     // Get or create workspace
-    let workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, userId),
-    });
-
-    if (!workspace) {
-      const [newWs] = await db
-        .insert(workspaces)
-        .values({
-          name: "My Workspace",
-          ownerId: userId,
-        })
-        .returning();
-      workspace = newWs;
-    }
+    const workspace = await ensureDefaultWorkspace(userId);
 
     // Create document
     // If content is string (markdown), convert to BlockNote format
