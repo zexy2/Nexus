@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Wifi, WifiOff, Users, Circle, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n/provider";
+import { useResolvedTheme } from "@/lib/use-resolved-theme";
 import { getCollaborationUrl } from "@/lib/sync/collaboration-url";
 import {
   attachCollabTokenRefresh,
@@ -115,6 +116,7 @@ function CollaborativeEditorInner({
   hasLocalContent: boolean;
 }) {
   const t = useT();
+  const resolvedTheme = useResolvedTheme();
   const [contentLoaded, setContentLoaded] = useState(false);
   const editorPlaceholder = t("docs.detail.editorPlaceholder");
   
@@ -168,7 +170,7 @@ function CollaborativeEditorInner({
   return (
     <div className="relative">
       {/* Collaboration Status Bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 rounded-t-xl border-x border-t border-b border-white/[0.06] bg-card">
+      <div className="flex items-center justify-between px-4 py-2.5 rounded-t-xl border-x border-t border-b border-border bg-card">
         <div className="flex items-center gap-2">
           <Badge variant={isConnected ? "default" : "secondary"} className="gap-1">
             {isConnected ? (
@@ -229,16 +231,16 @@ function CollaborativeEditorInner({
                         >
                           <AvatarFallback 
                             style={{ backgroundColor: user.color }}
-                            className="text-white text-xs font-semibold"
+                            className="text-foreground text-xs font-semibold"
                           >
                             {user.name.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <Circle 
                           className={`absolute -bottom-0.5 -right-0.5 size-3 fill-current stroke-background stroke-2 ${
-                            user.status === "active" ? "text-green-500" :
-                            user.status === "idle" ? "text-yellow-500" :
-                            "text-gray-400"
+                            user.status === "active" ? "text-green-700 dark:text-green-500" :
+                            user.status === "idle" ? "text-yellow-700 dark:text-yellow-500" :
+                            "text-muted-foreground"
                           }`}
                         />
                       </div>
@@ -254,9 +256,9 @@ function CollaborativeEditorInner({
                           <p className="text-xs text-muted-foreground capitalize flex items-center gap-1">
                             <Circle 
                               className={`size-2 fill-current ${
-                                user.status === "active" ? "text-green-500" :
-                                user.status === "idle" ? "text-yellow-500" :
-                                "text-gray-400"
+                                user.status === "active" ? "text-green-700 dark:text-green-500" :
+                                user.status === "idle" ? "text-yellow-700 dark:text-yellow-500" :
+                                "text-muted-foreground"
                               }`}
                             />
                             {t(`docs.detail.collab${
@@ -296,7 +298,7 @@ function CollaborativeEditorInner({
       </div>
 
       {/* Editor with cursor styles */}
-      <div className="min-h-[600px] rounded-b-xl border-x border-b border-white/[0.06] bg-card">
+      <div className="min-h-[600px] rounded-b-xl border-x border-b border-border bg-card">
         <style>{`
           .bn-container .collaboration-cursor__caret {
             position: relative;
@@ -342,7 +344,7 @@ function CollaborativeEditorInner({
           editor={editor}
           editable={canEdit}
           onChange={handleChange}
-          theme="dark"
+          theme={resolvedTheme}
           className="py-8"
         />
       </div>
@@ -352,7 +354,7 @@ function CollaborativeEditorInner({
           role="status"
           className={
             mode === "offline"
-              ? "mt-3 rounded-lg border border-white/10 bg-muted/40 px-4 py-3"
+              ? "mt-3 rounded-lg border border-border bg-muted/40 px-4 py-3"
               : "mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
           }
         >

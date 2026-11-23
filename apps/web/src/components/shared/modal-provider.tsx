@@ -75,7 +75,7 @@ function CreateDocumentModal() {
 
   return (
     <Dialog open={modals.createDocument} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-[500px] glass-premium border-white/10">
+      <DialogContent className="sm:max-w-[500px] glass-premium border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -174,7 +174,7 @@ function CreateTaskModal() {
 
   return (
     <Dialog open={modals.createTask} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-[500px] glass-premium border-white/10">
+      <DialogContent className="sm:max-w-[500px] glass-premium border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ListTodo className="h-5 w-5" />
@@ -261,10 +261,10 @@ function AIAssistantModal() {
 
   return (
     <Dialog open={modals.aiAssistant} onOpenChange={(open) => !open && closeModal('aiAssistant')}>
-      <DialogContent className="sm:max-w-[600px] glass-premium border-white/10">
+      <DialogContent className="sm:max-w-[600px] glass-premium border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-violet-400" />
+            <Sparkles className="h-5 w-5 text-violet-700 dark:text-violet-400" />
             {t('chat.askNexus')}
           </DialogTitle>
           <DialogDescription>{t('chat.headerSubtitle')}</DialogDescription>

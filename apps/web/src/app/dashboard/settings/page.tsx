@@ -524,7 +524,7 @@ function SettingsContent() {
             {isSaving ? (
               <Loader2 className="size-4 mr-2 animate-spin" />
             ) : saveSuccess ? (
-              <CheckCircle2 className="size-4 mr-2 text-green-500" />
+              <CheckCircle2 className="size-4 mr-2 text-green-700 dark:text-green-500" />
             ) : (
               <Save className="size-4 mr-2" />
             )}
@@ -796,14 +796,14 @@ function SettingsContent() {
                   </div>
 
                   {!tokenCreationEnabled && (
-                    <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                    <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
                       {locale === "tr" ? "Geçici demo oturumlarında token üretimi kapalıdır." : "Token creation is disabled for temporary demo sessions."}
                     </p>
                   )}
 
                   {newAgentToken && (
                     <div className="border border-emerald-400/20 bg-emerald-400/5 p-4">
-                      <p className="mb-2 text-sm font-medium text-emerald-200">
+                      <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
                         {locale === "tr" ? "Bu tokenı şimdi kaydedin; tekrar gösterilmeyecek." : "Store this token now; it will not be shown again."}
                       </p>
                       <div className="flex gap-2">
@@ -875,7 +875,7 @@ function SettingsContent() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   {!integrationConnectionEnabled && (
-                    <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                    <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
                       {locale === "tr"
                         ? "Geçici demo oturumlarında gerçek GitHub/Linear bağlantısı kapalıdır. Demo seed verisi salt okunur olarak gösterilir."
                         : "Temporary demo sessions cannot connect real GitHub/Linear accounts. Seeded demo data is shown read-only."}
@@ -928,7 +928,7 @@ function SettingsContent() {
                           )}
 
                           {existing?.lastError && (
-                            <p className="mt-3 text-xs leading-5 text-red-300">{existing.lastError}</p>
+                            <p className="mt-3 text-xs leading-5 text-red-700 dark:text-red-300">{existing.lastError}</p>
                           )}
 
                           {existing && !existing.seeded && (

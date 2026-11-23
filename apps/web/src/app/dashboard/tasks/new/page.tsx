@@ -83,9 +83,9 @@ export default function NewTaskPage() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10">
-        <header className="flex items-start justify-between gap-4 border-b border-white/10 pb-8">
+        <header className="flex items-start justify-between gap-4 border-b border-border pb-8">
           <div className="space-y-3">
             <Button asChild variant="ghost" size="sm" className="-ml-2 gap-2">
               <Link href="/dashboard/tasks">
@@ -94,13 +94,13 @@ export default function NewTaskPage() {
               </Link>
             </Button>
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/40">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-foreground-faint">
                 {t("tasks.label")}
               </p>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight">
                 {t("tasks.dialogCreateTitle")}
               </h1>
-              <p className="mt-2 max-w-2xl text-sm text-white/50">
+              <p className="mt-2 max-w-2xl text-sm text-foreground-subtle">
                 {t("tasks.description")}
               </p>
             </div>
@@ -108,8 +108,8 @@ export default function NewTaskPage() {
         </header>
 
         <form onSubmit={handleSubmit}>
-          <Card className="max-w-3xl rounded-2xl border-white/10 bg-white/[0.04] text-white shadow-none">
-            <CardHeader className="border-b border-white/10">
+          <Card className="max-w-3xl rounded-2xl border-border bg-foreground/[0.04] text-foreground shadow-none">
+            <CardHeader className="border-b border-border">
               <CardTitle>{t("tasks.dialogCreateTitle")}</CardTitle>
               <CardDescription>{t("tasks.dialogCreateDesc")}</CardDescription>
             </CardHeader>
@@ -184,7 +184,7 @@ export default function NewTaskPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 border-t border-white/10 pt-6">
+              <div className="flex justify-end gap-3 border-t border-border pt-6">
                 <Button type="button" variant="outline" asChild>
                   <Link href="/dashboard/tasks">{t("common.cancel")}</Link>
                 </Button>
