@@ -133,6 +133,10 @@ export const messages = {
       allChangesSynced: "Tüm değişiklikler eşitlendi",
       changeRejected: "Bir değişiklik sunucu tarafından reddedildi",
       changeRejectedDescription: "Kayıt sunucudaki son haliyle güncellendi.",
+      signOutUnsyncedTitle: "Eşitlenmemiş değişiklikler var",
+      signOutUnsyncedDesc: "{count} değişiklik henüz sunucuya kaydedilmedi. Şimdi çıkış yaparsanız bu değişiklikler kalıcı olarak kaybolur.",
+      signOutStayAndRetry: "Kal ve eşitlemeyi yeniden dene",
+      signOutAnyway: "Yine de çıkış yap",
     },
     settings: {
       title: "Ayarlar",
@@ -884,6 +888,10 @@ export const messages = {
       allChangesSynced: "All changes synced",
       changeRejected: "A change was rejected by the server",
       changeRejectedDescription: "The record was refreshed from the server.",
+      signOutUnsyncedTitle: "You have unsynced changes",
+      signOutUnsyncedDesc: "{count} change(s) have not been saved to the server yet. If you sign out now, they will be lost permanently.",
+      signOutStayAndRetry: "Stay and retry sync",
+      signOutAnyway: "Sign out anyway",
     },
     settings: {
       title: "Settings",

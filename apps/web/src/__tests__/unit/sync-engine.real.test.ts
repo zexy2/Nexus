@@ -374,6 +374,71 @@ describe("sign-out", () => {
     expect(b.pushes()).toHaveLength(0);
   });
 
+  it("sign-out with unsynced changes asks for confirmation", async () => {
+    const storage = new MapStorage();
+
+    const { engine, store, pushes } = makeEngine({
+      storage,
+      handler: (url) => {
+        if (url.includes("/pull")) return emptyPull(5_000);
+        return json({}, 503);
+      },
+    });
+    await engine.init({ background: false });
+    online = false;
+    await engine.mutate("tasks", "insert", task({ id: "unsynced" }));
+    online = true;
+
+    const signOut = vi.fn(async () => {});
+    const clearExtraLocalData = vi.fn(async () => {});
+    const confirmDiscard = vi.fn(async () => false);
+
+    // "Stay and retry sync": nothing is signed out or deleted, a push is retried.
+    const pushesBefore = pushes().length;
+    const stayed = await signOutAndClearLocalData({
+      engine,
+      signOut,
+      storage: new MapStorage(),
+      countUnsyncedDocuments: () => 2,
+      confirmDiscard,
+      clearExtraLocalData,
+    });
+    expect(stayed).toBe("cancelled");
+    expect(confirmDiscard).toHaveBeenCalledWith({ mutations: 1, documents: 2, total: 3 });
+    // One push for the final sync, one for the retry.
+    await vi.waitFor(() => expect(pushes().length).toBeGreaterThanOrEqual(pushesBefore + 2));
+    expect(signOut).not.toHaveBeenCalled();
+    expect(clearExtraLocalData).not.toHaveBeenCalled();
+    expect(engine.isDestroyed).toBe(false);
+    expect(engine.pendingCount).toBe(1);
+    expect(await store.get("tasks", "unsynced")).not.toBeNull();
+
+    // "Sign out anyway": the changes are discarded and everything is cleared.
+    confirmDiscard.mockResolvedValueOnce(true);
+    const result = await signOutAndClearLocalData({
+      engine,
+      signOut,
+      storage: new MapStorage(),
+      confirmDiscard,
+      clearExtraLocalData,
+    });
+    expect(result).toBe("signed-out");
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(clearExtraLocalData).toHaveBeenCalledTimes(1);
+    expect(engine.isDestroyed).toBe(true);
+    expect(store.tables.size).toBe(0);
+
+    // Once everything is synced, no confirmation is shown.
+    const synced = makeEngine({ handler: (url) => (url.includes("/pull") ? emptyPull() : json({ success: true })) });
+    await synced.engine.init({ background: false });
+    await synced.engine.mutate("tasks", "insert", task({ id: "synced" }));
+    const confirmSynced = vi.fn(async () => false);
+    expect(
+      await signOutAndClearLocalData({ engine: synced.engine, signOut, storage: new MapStorage(), confirmDiscard: confirmSynced })
+    ).toBe("signed-out");
+    expect(confirmSynced).not.toHaveBeenCalled();
+  });
+
   it("still clears local data when the sign-out request fails", async () => {
     const storage = new MapStorage();
     storage.setItem(cursorKey("user-a"), "123");

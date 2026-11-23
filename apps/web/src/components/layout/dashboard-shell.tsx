@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { signOut, useSession } from '@/lib/auth-client';
 import { useZero, useZeroStatus } from '@/lib/sync/zero';
 import { signOutAndClearLocalData } from '@/lib/sync/sign-out';
+import { countUnsyncedCollabDocs } from '@/lib/collab/unsynced';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
 import { useT } from '@/lib/i18n/provider';
@@ -31,6 +32,16 @@ import {
   Wand2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -238,21 +249,45 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
   const { engine } = useZero();
+  const [unsyncedCount, setUnsyncedCount] = useState<number | null>(null);
+  const confirmResolver = useRef<((discard: boolean) => void) | null>(null);
+  const signingOut = useRef(false);
+
+  const resolveConfirm = useCallback((discard: boolean) => {
+    const resolve = confirmResolver.current;
+    confirmResolver.current = null;
+    setUnsyncedCount(null);
+    resolve?.(discard);
+  }, []);
+
   const handleSignOut = useCallback(async () => {
+    if (signingOut.current) return;
+    signingOut.current = true;
+    let navigate = true;
     try {
-      // Flush, sign out, then delete this user's offline DB, pull cursor,
-      // command queue and chat store so the next user starts clean.
-      await signOutAndClearLocalData({ engine, signOut: () => signOut() });
+      // Final sync, confirm if changes are still unsynced, sign out, then
+      // delete this user's offline DB, pull cursor, command queue, chat store
+      // and collaborative documents' offline copies.
+      const result = await signOutAndClearLocalData({
+        engine,
+        signOut: () => signOut(),
+        countUnsyncedDocuments: countUnsyncedCollabDocs,
+        confirmDiscard: ({ total }) =>
+          new Promise<boolean>((resolve) => {
+            confirmResolver.current = resolve;
+            setUnsyncedCount(total);
+          }),
+        // Loaded lazily so the shell bundle does not pull in Yjs.
+        clearExtraLocalData: () =>
+          import('@/lib/collab/offline-store').then(({ clearCollabOfflineData }) =>
+            clearCollabOfflineData()
+          ),
+      });
+      navigate = result === 'signed-out';
     } finally {
-      // Drop locally cached collaborative document bodies (shared machines).
-      // Loaded lazily so the shell bundle does not pull in Yjs.
-      await import('@/lib/collab/offline-store')
-        .then(({ clearCollabOfflineData }) => clearCollabOfflineData())
-        .catch((error) => {
-          console.error('[Collab] Failed to clear offline documents:', error);
-        });
+      signingOut.current = false;
       // Full navigation: drops every in-memory store and the sync engine.
-      window.location.assign('/login');
+      if (navigate) window.location.assign('/login');
     }
   }, [engine]);
 
@@ -427,6 +462,33 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       </motion.div>
 
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+
+      <AlertDialog
+        open={unsyncedCount !== null}
+        onOpenChange={(open) => {
+          if (!open && confirmResolver.current) resolveConfirm(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('syncStatus.signOutUnsyncedTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('syncStatus.signOutUnsyncedDesc').replace('{count}', String(unsyncedCount ?? 0))}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => resolveConfirm(false)}>
+              {t('syncStatus.signOutStayAndRetry')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => resolveConfirm(true)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('syncStatus.signOutAnyway')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

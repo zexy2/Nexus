@@ -36,6 +36,7 @@ import {
   fetchCollabToken,
 } from "@/lib/collab/token-refresh";
 import { openCollabOfflineStore } from "@/lib/collab/offline-store";
+import { setCollabDocUnsynced } from "@/lib/collab/unsynced";
 import { seedFragmentIfEmpty } from "@/lib/collab/seed";
 import {
   type CollabPersistenceEvent,
@@ -527,6 +528,13 @@ export function CollaborativeEditor({
       ydoc.destroy();
     };
   }, [documentId, userId, userName, stableUserColor, ydoc, fragment]);
+
+  // Report unconfirmed edits so sign-out can warn before deleting the
+  // offline copy.
+  useEffect(() => {
+    setCollabDocUnsynced(documentId, persistenceStatus !== "saved");
+    return () => setCollabDocUnsynced(documentId, false);
+  }, [documentId, persistenceStatus]);
 
   // Show loading until provider is ready
   if (!provider) {
