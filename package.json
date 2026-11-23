@@ -34,7 +34,7 @@
   },
   "packageManager": "pnpm@10.26.2",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "postgres": "^3.4.9"
