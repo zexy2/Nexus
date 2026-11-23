@@ -53,13 +53,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const aiBudget = await enforceAiBudget({
-    userId: protection.user.id,
-    email: protection.user.email,
-    kind: "chat",
-  });
-  if (!aiBudget.ok) return aiBudget.response;
-
   try {
     const body = await request.json();
     const {
@@ -111,6 +104,15 @@ export async function POST(request: NextRequest) {
         message: "Command processing already started",
       });
     }
+
+    // Budget is consumed only for a valid, authorized request that actually
+    // starts a new execution (not for a retry of one already in flight).
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "chat",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const [execution] = await db
       .insert(agentExecutions)

@@ -32,13 +32,6 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
-  const aiBudget = await enforceAiBudget({
-    userId,
-    email: session.user.email,
-    kind: "chat",
-  });
-  if (!aiBudget.ok) return aiBudget.response;
-
   // `messages` stays loosely typed: the AI SDK's ModelMessage union is stricter
   // than the wire format the existing clients send, and we validate the parts
   // we rely on below.
@@ -60,6 +53,14 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+
+  // Budget is consumed only after the request body is validated.
+  const aiBudget = await enforceAiBudget({
+    userId,
+    email: session.user.email,
+    kind: "chat",
+  });
+  if (!aiBudget.ok) return aiBudget.response;
 
   const chatMessages = messages as any[];
   const userMessage: string = lastMessage.content;

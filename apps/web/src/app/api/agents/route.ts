@@ -90,13 +90,6 @@ async function prepareRequest(request: NextRequest): Promise<
     };
   }
 
-  const budget = await enforceAiBudget({
-    userId: authorized.value.userId,
-    email: authorized.value.email,
-    kind: "chat",
-  });
-  if (!budget.ok) return { ok: false, response: budget.response };
-
   const access = await requireWorkspaceAccess(
     authorized.value.userId,
     body.context?.workspaceId
@@ -107,6 +100,14 @@ async function prepareRequest(request: NextRequest): Promise<
       response: NextResponse.json({ error: access.error }, { status: access.status }),
     };
   }
+
+  // Budget is consumed only after validation and workspace authorization.
+  const budget = await enforceAiBudget({
+    userId: authorized.value.userId,
+    email: authorized.value.email,
+    kind: "chat",
+  });
+  if (!budget.ok) return { ok: false, response: budget.response };
 
   try {
     const modelConfig = await getUserModelConfig(authorized.value.userId);

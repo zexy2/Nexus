@@ -52,13 +52,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const aiBudget = await enforceAiBudget({
-      userId: protection.user.id,
-      email: protection.user.email,
-      kind: "research",
-    });
-    if (!aiBudget.ok) return aiBudget.response;
-
     const access = await requireWorkspaceAccess(
       protection.user.id,
       typeof workspaceId === "string" ? workspaceId : undefined
@@ -66,6 +59,14 @@ export async function POST(request: NextRequest) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
+
+    // Budget is consumed only after the request is valid and authorized.
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "research",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const [workspaceContext, webResult, modelConfig] = await Promise.all([
       useDocSearch ? getRAGContext(query, access.workspaceId) : Promise.resolve(""),
