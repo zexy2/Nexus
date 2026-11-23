@@ -220,13 +220,24 @@ export function createGitHubAppJwt() {
   return `${unsigned}.${base64Url(signer.sign(githubPrivateKey()))}`;
 }
 
-async function githubFetch<T>(
+/** Per-request timeout for GitHub API calls (connect + full body). */
+export const GITHUB_FETCH_TIMEOUT_MS = 15_000;
+/** Upper bound on pages followed per list (100 items per page). */
+export const GITHUB_MAX_PAGES = 10;
+/** Concurrent per-pull-request detail fetches during a repository sync. */
+const GITHUB_DETAIL_CONCURRENCY = 6;
+
+function withTimeout(init: RequestInit, timeoutMs: number): RequestInit {
+  return { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) };
+}
+
+async function githubRequest<T>(
   url: string,
   token: string,
   init: RequestInit = {}
-): Promise<T> {
+): Promise<{ body: T; headers: Headers }> {
   const response = await fetch(url, {
-    ...init,
+    ...withTimeout(init, GITHUB_FETCH_TIMEOUT_MS),
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
@@ -242,12 +253,74 @@ async function githubFetch<T>(
     error.body = body;
     throw error;
   }
-  return body as T;
+  return { body: body as T, headers: response.headers };
+}
+
+async function githubFetch<T>(
+  url: string,
+  token: string,
+  init: RequestInit = {}
+): Promise<T> {
+  return (await githubRequest<T>(url, token, init)).body;
+}
+
+/**
+ * Returns the rel="next" URL from a GitHub `Link` header. Only api.github.com
+ * URLs are followed so the installation token is never sent elsewhere.
+ */
+export function parseGitHubNextLink(link: string | null): string | null {
+  if (!link) return null;
+  for (const part of link.split(",")) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/i);
+    if (!match) continue;
+    try {
+      const url = new URL(match[1]!);
+      return url.protocol === "https:" && url.hostname === "api.github.com" ? url.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function githubFetchAllPages<TItem, TPage = TItem[]>(
+  url: string,
+  token: string,
+  extract: (page: TPage) => TItem[] = (page) => page as unknown as TItem[],
+  maxPages = GITHUB_MAX_PAGES
+): Promise<TItem[]> {
+  const items: TItem[] = [];
+  let next: string | null = url;
+  for (let page = 0; next && page < maxPages; page += 1) {
+    const { body, headers }: { body: TPage; headers: Headers } = await githubRequest<TPage>(next, token);
+    items.push(...(extract(body) || []));
+    next = parseGitHubNextLink(headers.get("link"));
+  }
+  return items;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  fn: (value: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (cursor < values.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await fn(values[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export async function exchangeGitHubOAuthCode(code: string, redirectUri: string) {
   const { clientId, clientSecret } = getGitHubAppConfig();
   const response = await fetch("https://github.com/login/oauth/access_token", {
+    signal: AbortSignal.timeout(GITHUB_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -268,25 +341,30 @@ export async function exchangeGitHubOAuthCode(code: string, redirectUri: string)
 }
 
 export async function verifyGitHubInstallationForUser(userAccessToken: string, installationId: string) {
-  const body = await githubFetch<{ installations: Array<{ id: number; account?: { login?: string } }> }>(
+  const installations = await githubFetchAllPages<
+    { id: number; account?: { login?: string } },
+    { installations: Array<{ id: number; account?: { login?: string } }> }
+  >(
     "https://api.github.com/user/installations?per_page=100",
-    userAccessToken
+    userAccessToken,
+    (page) => page.installations
   );
   const numericInstallationId = Number(installationId);
-  return body.installations.find((installation) => installation.id === numericInstallationId) || null;
+  return installations.find((installation) => installation.id === numericInstallationId) || null;
 }
 
 export async function listGitHubInstallationsForUser(userAccessToken: string) {
-  const body = await githubFetch<{
-    installations: Array<{
-      id: number;
-      app_id?: number;
-      app_slug?: string;
-      account?: { login?: string };
-    }>;
-  }>("https://api.github.com/user/installations?per_page=100", userAccessToken);
-
-  return body.installations;
+  type Installation = {
+    id: number;
+    app_id?: number;
+    app_slug?: string;
+    account?: { login?: string };
+  };
+  return githubFetchAllPages<Installation, { installations: Installation[] }>(
+    "https://api.github.com/user/installations?per_page=100",
+    userAccessToken,
+    (page) => page.installations
+  );
 }
 
 export async function createInstallationAccessToken(installationId: string) {
@@ -300,18 +378,24 @@ export async function createInstallationAccessToken(installationId: string) {
 
 export async function listInstallationRepositories(installationId: string): Promise<GitHubRepository[]> {
   const token = await createInstallationAccessToken(installationId);
-  const body = await githubFetch<{
-    repositories: Array<{
-      id: number;
-      full_name: string;
-      name: string;
-      private: boolean;
-      default_branch: string;
-      html_url: string;
-      owner: { login: string };
-    }>;
-  }>("https://api.github.com/installation/repositories?per_page=100", token);
-  return body.repositories.map((repo) => ({
+  type InstallationRepository = {
+    id: number;
+    full_name: string;
+    name: string;
+    private: boolean;
+    default_branch: string;
+    html_url: string;
+    owner: { login: string };
+  };
+  const repositories = await githubFetchAllPages<
+    InstallationRepository,
+    { repositories: InstallationRepository[] }
+  >(
+    "https://api.github.com/installation/repositories?per_page=100",
+    token,
+    (page) => page.repositories
+  );
+  return repositories.map((repo) => ({
     id: repo.id,
     fullName: repo.full_name,
     owner: repo.owner.login,
@@ -339,27 +423,27 @@ export async function getGitHubRepositoryData(input: {
       html_url: string;
       owner: { login: string };
     }>(base, token),
-    githubFetch<GitHubIssue[]>(`${base}/issues?state=all&per_page=100`, token),
-    githubFetch<GitHubPullRequest[]>(`${base}/pulls?state=all&per_page=100`, token),
+    // Most recently updated first, so the page cap keeps the freshest items.
+    githubFetchAllPages<GitHubIssue>(`${base}/issues?state=all&sort=updated&direction=desc&per_page=100`, token),
+    githubFetchAllPages<GitHubPullRequest>(`${base}/pulls?state=all&sort=updated&direction=desc&per_page=100`, token),
   ]);
 
   const issues = rawIssues.filter((issue) => !issue.pull_request);
-  const pullDetails = await Promise.all(
-    pulls.map(async (pullRequest) => {
-      const [files, checks] = await Promise.all([
-        githubFetch<Array<{ filename: string }>>(`${base}/pulls/${pullRequest.number}/files?per_page=100`, token),
-        githubFetch<{ check_runs: GitHubCheckRun[] }>(
-          `${base}/commits/${pullRequest.head.sha}/check-runs?per_page=100`,
-          token
-        ).catch(() => ({ check_runs: [] })),
-      ]);
-      return {
-        pullRequest,
-        files: files.map((file) => file.filename),
-        checks: checks.check_runs,
-      };
-    })
-  );
+  const pullDetails = await mapWithConcurrency(pulls, GITHUB_DETAIL_CONCURRENCY, async (pullRequest) => {
+    const [files, checks] = await Promise.all([
+      githubFetchAllPages<{ filename: string }>(`${base}/pulls/${pullRequest.number}/files?per_page=100`, token),
+      githubFetchAllPages<GitHubCheckRun, { check_runs: GitHubCheckRun[] }>(
+        `${base}/commits/${pullRequest.head.sha}/check-runs?per_page=100`,
+        token,
+        (page) => page.check_runs
+      ).catch(() => [] as GitHubCheckRun[]),
+    ]);
+    return {
+      pullRequest,
+      files: files.map((file) => file.filename),
+      checks,
+    };
+  });
 
   return {
     repository: {

@@ -1,9 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { integrationWebhookEvents, workspaceIntegrations } from "@nexus/database/schema";
+import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { sha256Hex } from "@/lib/integrations/crypto";
-import { syncIntegrationById } from "@/lib/integrations/sync";
+import {
+  claimWebhookDelivery,
+  processWebhookDeliveryAfterResponse,
+} from "@/lib/integrations/webhook-delivery";
 import { and, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
@@ -97,61 +100,44 @@ export async function POST(request: NextRequest) {
       })
     : null;
 
-  const [webhookEvent] = await db
-    .insert(integrationWebhookEvents)
-    .values({
-      workspaceId: integration?.workspaceId,
-      integrationId: integration?.id,
-      provider: "linear",
-      deliveryId,
-      eventType: payload.type || payload.action || "unknown",
-      status: integration ? "queued" : "ignored",
-      rawMetadataHash: sha256Hex(rawBody),
-      metadata: {
-        action: payload.action,
-        organizationId: payload.organizationId,
-        objectId: payload.data?.id,
-        identifier: payload.data?.identifier,
-        teamId: payload.data?.team?.id,
-      },
-      processedAt: integration ? null : new Date(),
-    })
-    .onConflictDoNothing()
-    .returning({ id: integrationWebhookEvents.id });
+  const metadata = {
+    action: payload.action,
+    organizationId: payload.organizationId,
+    objectId: payload.data?.id,
+    identifier: payload.data?.identifier,
+    teamId: payload.data?.team?.id,
+  };
+  const claim = await claimWebhookDelivery({
+    workspaceId: integration?.workspaceId,
+    integrationId: integration?.id,
+    provider: "linear",
+    deliveryId,
+    eventType: payload.type || payload.action || "unknown",
+    status: integration ? "queued" : "ignored",
+    rawMetadataHash: sha256Hex(rawBody),
+    metadata,
+    processedAt: integration ? null : new Date(),
+  });
 
-  if (!webhookEvent) {
+  if (claim.kind === "duplicate") {
     return NextResponse.json({ ok: true, status: "duplicate" });
   }
 
-  if (integration) {
-    try {
-      await syncIntegrationById(integration.id);
-      await db
-        .update(integrationWebhookEvents)
-        .set({ status: "completed", processedAt: new Date() })
-        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
-    } catch (error) {
-      await db
-        .update(integrationWebhookEvents)
-        .set({
-          status: "failed",
-          processedAt: new Date(),
-          metadata: {
-            action: payload.action,
-            organizationId: payload.organizationId,
-            objectId: payload.data?.id,
-            identifier: payload.data?.identifier,
-            teamId: payload.data?.team?.id,
-            error: error instanceof Error ? error.message : "Linear sync failed",
-          },
-        })
-        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
-      return NextResponse.json({ ok: false, status: "failed" }, { status: 502 });
-    }
+  if (!integration) {
+    return NextResponse.json({ ok: true, status: "ignored" });
   }
 
-  return NextResponse.json({
-    ok: true,
-    status: integration ? "completed" : "ignored",
+  // Acknowledge within Linear's delivery timeout and sync after the response.
+  // A failed sync is recorded as "failed" and is reprocessed on redelivery.
+  processWebhookDeliveryAfterResponse({
+    eventId: claim.id,
+    integrationId: integration.id,
+    metadata,
+    fallbackError: "Linear sync failed",
   });
+
+  return NextResponse.json(
+    { ok: true, status: "accepted", redelivery: claim.redelivery },
+    { status: 202 }
+  );
 }

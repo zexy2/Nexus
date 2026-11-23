@@ -1,10 +1,13 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { integrationWebhookEvents, workspaceIntegrations } from "@nexus/database/schema";
+import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { sha256Hex } from "@/lib/integrations/crypto";
-import { syncIntegrationById } from "@/lib/integrations/sync";
+import {
+  claimWebhookDelivery,
+  processWebhookDeliveryAfterResponse,
+} from "@/lib/integrations/webhook-delivery";
 
 export const runtime = "nodejs";
 
@@ -18,6 +21,9 @@ function verifyGitHubSignature(secret: string, rawBody: string, signature: strin
     timingSafeEqual(expectedBuffer, actualBuffer)
   );
 }
+
+// Events that carry no repository state; acknowledged without a sync.
+const NON_SYNC_EVENTS = new Set(["ping"]);
 
 type GitHubWebhookPayload = {
   installation?: { id?: number };
@@ -58,58 +64,44 @@ export async function POST(request: NextRequest) {
       })
     : null;
 
-  const [webhookEvent] = await db
-    .insert(integrationWebhookEvents)
-    .values({
-      workspaceId: integration?.workspaceId,
-      integrationId: integration?.id,
-      provider: "github",
-      deliveryId,
-      eventType,
-      status: integration ? "queued" : "ignored",
-      rawMetadataHash: sha256Hex(rawBody),
-      metadata: {
-        action: payload.action,
-        repository: payload.repository?.full_name,
-        installationId,
-      },
-      processedAt: integration ? null : new Date(),
-    })
-    .onConflictDoNothing()
-    .returning({ id: integrationWebhookEvents.id });
+  const shouldSync = Boolean(integration) && !NON_SYNC_EVENTS.has(eventType);
+  const metadata = {
+    action: payload.action,
+    repository: payload.repository?.full_name,
+    installationId,
+  };
+  const claim = await claimWebhookDelivery({
+    workspaceId: integration?.workspaceId,
+    integrationId: integration?.id,
+    provider: "github",
+    deliveryId,
+    eventType,
+    status: shouldSync ? "queued" : "ignored",
+    rawMetadataHash: sha256Hex(rawBody),
+    metadata,
+    processedAt: shouldSync ? null : new Date(),
+  });
 
-  if (!webhookEvent) {
+  if (claim.kind === "duplicate") {
     return NextResponse.json({ ok: true, status: "duplicate", event: eventType });
   }
 
-  if (integration) {
-    try {
-      await syncIntegrationById(integration.id);
-      await db
-        .update(integrationWebhookEvents)
-        .set({ status: "completed", processedAt: new Date() })
-        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
-    } catch (error) {
-      await db
-        .update(integrationWebhookEvents)
-        .set({
-          status: "failed",
-          processedAt: new Date(),
-          metadata: {
-            action: payload.action,
-            repository: payload.repository?.full_name,
-            installationId,
-            error: error instanceof Error ? error.message : "GitHub sync failed",
-          },
-        })
-        .where(eq(integrationWebhookEvents.id, webhookEvent.id));
-      return NextResponse.json({ ok: false, status: "failed", event: eventType }, { status: 502 });
-    }
+  if (!shouldSync || !integration) {
+    return NextResponse.json({ ok: true, status: "ignored", event: eventType });
   }
 
-  return NextResponse.json({
-    ok: true,
-    status: integration ? "completed" : "ignored",
-    event: eventType,
+  // A full repository sync can take far longer than GitHub's 10s delivery
+  // timeout, so acknowledge now and sync after the response. A failed sync is
+  // recorded as "failed" and is reprocessed when the delivery is redelivered.
+  processWebhookDeliveryAfterResponse({
+    eventId: claim.id,
+    integrationId: integration.id,
+    metadata,
+    fallbackError: "GitHub sync failed",
   });
+
+  return NextResponse.json(
+    { ok: true, status: "accepted", event: eventType, redelivery: claim.redelivery },
+    { status: 202 }
+  );
 }

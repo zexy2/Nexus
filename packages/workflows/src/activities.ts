@@ -8,10 +8,11 @@
 import {
   createCipheriv,
   createDecipheriv,
+  createHash,
   createSign,
   randomBytes,
 } from "node:crypto";
-import { ApplicationFailure } from "@temporalio/activity";
+import { ApplicationFailure, Context } from "@temporalio/activity";
 import type { AgentStepResult } from "./types";
 
 // Gemini API call helper
@@ -587,8 +588,79 @@ Format as JSON array: [{"title": "Task name", "description": "...", "priority": 
   };
 }
 
+type ActivityReceiptScope = {
+  key: string;
+  workflowId: string;
+  activityType: string;
+};
+
 /**
- * Save a document to the database
+ * Deterministic idempotency key for the current activity execution.
+ *
+ * Temporal keeps workflowId and activityId stable across every retry of one
+ * scheduled activity, so the key identifies "this side effect of this
+ * workflow". Returns null when called outside an activity (scripts, tests that
+ * do not mock the context), in which case callers fall back to a plain,
+ * single-transaction write.
+ */
+export function currentActivityReceiptScope(activityType: string): ActivityReceiptScope | null {
+  try {
+    const info = Context.current().info;
+    const workflowId = info.workflowExecution?.workflowId;
+    if (!workflowId || !info.activityId) return null;
+    return {
+      key: `${workflowId}:${info.activityId}:${activityType}`.slice(0, 512),
+      workflowId: workflowId.slice(0, 255),
+      activityType,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Claims the receipt for this activity inside the caller's transaction.
+ * The primary key makes concurrent attempts serialize: the loser blocks until
+ * the winner commits, then sees the stored result.
+ */
+async function claimActivityReceipt<T>(
+  tx: SqlExecutor,
+  scope: ActivityReceiptScope,
+  workspaceId: string | null
+): Promise<{ claimed: true } | { claimed: false; result: T }> {
+  const inserted = await tx<Array<{ idempotency_key: string }>>`
+    INSERT INTO workflow_activity_receipts (idempotency_key, workflow_id, activity_type, workspace_id)
+    VALUES (${scope.key}, ${scope.workflowId}, ${scope.activityType}, ${workspaceId})
+    ON CONFLICT (idempotency_key) DO NOTHING
+    RETURNING idempotency_key
+  `;
+  if (inserted[0]?.idempotency_key) return { claimed: true };
+
+  const existing = await tx<Array<{ result: T | null }>>`
+    SELECT result FROM workflow_activity_receipts
+    WHERE idempotency_key = ${scope.key}
+    LIMIT 1
+  `;
+  const result = existing[0]?.result;
+  if (result === undefined || result === null) {
+    throw new Error(`Activity receipt ${scope.key} exists without a result`);
+  }
+  return { claimed: false, result };
+}
+
+async function completeActivityReceipt(tx: SqlExecutor, scope: ActivityReceiptScope, result: unknown) {
+  await tx`
+    UPDATE workflow_activity_receipts
+    SET result = ${JSON.stringify(result)}::jsonb
+    WHERE idempotency_key = ${scope.key}
+  `;
+}
+
+/**
+ * Save a document to the database.
+ *
+ * Idempotent per workflow activity: a retry after the insert committed
+ * returns the same document id instead of creating a second document.
  */
 export async function saveDocument(
   workspaceId: string,
@@ -602,6 +674,7 @@ export async function saveDocument(
     throw new Error("DATABASE_URL is not set");
   }
 
+  const receiptScope = currentActivityReceiptScope("saveDocument");
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl);
   const blockContent = [
@@ -620,16 +693,29 @@ export async function saveDocument(
   const documentTitle = deriveDocumentTitle(title, content);
 
   try {
-    const rows = await sql<{ id: string }[]>`
-      INSERT INTO docs (workspace_id, title, icon_emoji, content, created_by, is_ai_generated)
-      VALUES (${workspaceId}, ${documentTitle}, ${"✨"}, ${JSON.stringify(blockContent)}::jsonb, ${createdBy}, 1)
-      RETURNING id
-    `;
+    const saved = await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as SqlExecutor;
+      if (receiptScope) {
+        const receipt = await claimActivityReceipt<{ documentId: string }>(tx, receiptScope, workspaceId);
+        if (!receipt.claimed) return { documentId: receipt.result.documentId, replayed: true };
+      }
 
-    const documentId = rows[0]?.id;
-    if (!documentId) {
-      throw new Error("Document insert did not return an id");
-    }
+      const rows = await tx<Array<{ id: string }>>`
+        INSERT INTO docs (workspace_id, title, icon_emoji, content, created_by, is_ai_generated)
+        VALUES (${workspaceId}, ${documentTitle}, ${"✨"}, ${JSON.stringify(blockContent)}::jsonb, ${createdBy}, 1)
+        RETURNING id
+      `;
+
+      const documentId = rows[0]?.id;
+      if (!documentId) {
+        throw new Error("Document insert did not return an id");
+      }
+      if (receiptScope) await completeActivityReceipt(tx, receiptScope, { documentId });
+      return { documentId, replayed: false };
+    });
+
+    const documentId = saved.documentId;
+    if (saved.replayed) return documentId;
 
     try {
       await indexDocument(documentId, content, workspaceId, { title: documentTitle });
@@ -659,7 +745,12 @@ export async function saveDocument(
 }
 
 /**
- * Save tasks to the database
+ * Save tasks to the database.
+ *
+ * All rows are written in one transaction together with the activity
+ * receipt, so a retry either finds nothing (and writes the full set) or finds
+ * the receipt (and returns the same ids). It can never insert a partial or
+ * duplicate set.
  */
 export async function saveTasks(
   workspaceId: string,
@@ -673,72 +764,93 @@ export async function saveTasks(
     throw new Error("DATABASE_URL is not set");
   }
 
+  const receiptScope = currentActivityReceiptScope("saveTasks");
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl);
 
   try {
-    const taskIds: string[] = [];
-
-    for (let index = 0; index < tasks.length; index++) {
-      const task = tasks[index];
-      if (!task?.title?.trim()) continue;
-
-      const priority = ["low", "medium", "high", "urgent"].includes(task.priority)
-        ? task.priority
-        : "medium";
-
-      const rows = await sql<{ id: string }[]>`
-        INSERT INTO tasks (
-          workspace_id,
-          doc_id,
-          title,
-          description,
-          status,
-          priority,
-          position,
-          is_archived,
-          alignment_status,
-          alignment_updated_at,
-          created_by,
-          assignee_id
-        )
-        VALUES (
-          ${workspaceId},
-          ${docId || null},
-          ${task.title.slice(0, 500)},
-          ${task.description || ""},
-          ${"todo"},
-          ${priority},
-          ${index},
-          ${0},
-          ${docId ? "needs_review" : "orphaned"},
-          ${docId ? new Date() : null},
-          ${createdBy},
-          ${createdBy}
-        )
-        RETURNING id
-      `;
-
-      if (rows[0]?.id) {
-        taskIds.push(rows[0].id);
-        try {
-          await sql`
-            INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
-            VALUES (
-              ${createdBy},
-              ${workspaceId},
-              ${"task.create"},
-              ${"success"},
-              ${JSON.stringify({ taskId: rows[0].id, title: task.title, source: "workflow" })}::jsonb
-            )
-          `;
-        } catch (error) {
-          console.warn("[Activity] Task saved but audit log failed:", error);
+    const saved = await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as SqlExecutor;
+      if (receiptScope) {
+        const receipt = await claimActivityReceipt<{ taskIds: string[] }>(tx, receiptScope, workspaceId);
+        if (!receipt.claimed) {
+          return { taskIds: receipt.result.taskIds, created: [] as Array<{ id: string; title: string }> };
         }
+      }
+
+      const taskIds: string[] = [];
+      const created: Array<{ id: string; title: string }> = [];
+
+      for (let index = 0; index < tasks.length; index++) {
+        const task = tasks[index];
+        if (!task?.title?.trim()) continue;
+
+        const priority = ["low", "medium", "high", "urgent"].includes(task.priority)
+          ? task.priority
+          : "medium";
+
+        const rows = await tx<Array<{ id: string }>>`
+          INSERT INTO tasks (
+            workspace_id,
+            doc_id,
+            title,
+            description,
+            status,
+            priority,
+            position,
+            is_archived,
+            alignment_status,
+            alignment_updated_at,
+            created_by,
+            assignee_id
+          )
+          VALUES (
+            ${workspaceId},
+            ${docId || null},
+            ${task.title.slice(0, 500)},
+            ${task.description || ""},
+            ${"todo"},
+            ${priority},
+            ${index},
+            ${0},
+            ${docId ? "needs_review" : "orphaned"},
+            ${docId ? new Date() : null},
+            ${createdBy},
+            ${createdBy}
+          )
+          RETURNING id
+        `;
+
+        if (rows[0]?.id) {
+          taskIds.push(rows[0].id);
+          created.push({ id: rows[0].id, title: task.title });
+        }
+      }
+
+      if (receiptScope) await completeActivityReceipt(tx, receiptScope, { taskIds });
+      return { taskIds, created };
+    });
+
+    // Audit logs are best-effort and written only by the attempt that
+    // actually created the tasks.
+    for (const task of saved.created) {
+      try {
+        await sql`
+          INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+          VALUES (
+            ${createdBy},
+            ${workspaceId},
+            ${"task.create"},
+            ${"success"},
+            ${JSON.stringify({ taskId: task.id, title: task.title, source: "workflow" })}::jsonb
+          )
+        `;
+      } catch (error) {
+        console.warn("[Activity] Task saved but audit log failed:", error);
       }
     }
 
-    return taskIds;
+    return saved.taskIds;
   } finally {
     await sql.end();
   }
@@ -1114,6 +1226,37 @@ export async function persistPlanImpact(
   try {
     return await sql.begin(async (transaction) => {
       const tx = transaction as unknown as typeof sql;
+
+      // Idempotency: the change set is keyed by the Temporal workflow id. A
+      // retry after a committed attempt (lost ack, worker crash) returns the
+      // persisted result instead of failing on plan_versions' unique key.
+      // The advisory lock serializes concurrent attempts of one workflow.
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`persistPlanImpact:${temporalWorkflowId}`}))`;
+      const alreadyPersisted = await tx<Array<{
+        id: string;
+        summary: string;
+        stats: Record<string, number> | null;
+        version_number: number;
+      }>>`
+        SELECT cs.id, cs.summary, cs.stats, pv.version_number
+        FROM change_sets cs
+        INNER JOIN plan_versions pv ON pv.id = cs.proposed_version_id
+        WHERE cs.temporal_workflow_id = ${temporalWorkflowId}
+          AND cs.doc_id = ${analysis.docId}
+        ORDER BY cs.created_at
+        LIMIT 1
+      `;
+      const existing = alreadyPersisted[0];
+      if (existing) {
+        return {
+          changeSetId: existing.id,
+          versionNumber: existing.version_number,
+          summary: existing.summary,
+          stats: existing.stats || {},
+          steps: analysis.steps,
+        };
+      }
+
       const versionRows = await tx<Array<{ id: string }>>`
         INSERT INTO plan_versions (
           workspace_id, doc_id, version_number, title, content, content_text,
@@ -1487,16 +1630,18 @@ export async function persistPlanImpact(
   }
 }
 
-export async function applyPlanChangeSet(
-  changeSetId: string,
-  selectedProposalIds: string[],
-  userId: string
-): Promise<{
+type ApplyPlanChangeSetResult = {
   applied: number;
   rejected: number;
   createdTaskIds: string[];
   externalOperationIds: string[];
-}> {
+};
+
+export async function applyPlanChangeSet(
+  changeSetId: string,
+  selectedProposalIds: string[],
+  userId: string
+): Promise<ApplyPlanChangeSetResult> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is not set");
 
@@ -1508,6 +1653,7 @@ export async function applyPlanChangeSet(
     throw new Error("No change proposals selected");
   }
 
+  const receiptScope = currentActivityReceiptScope("applyPlanChangeSet");
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl);
 
@@ -1528,7 +1674,28 @@ export async function applyPlanChangeSet(
       `;
       const changeSet = changeSetRows[0];
       if (!changeSet) throw new Error("Change set not found");
-      if (changeSet.status !== "pending") throw new Error("Change set is already resolved");
+      if (changeSet.status !== "pending") {
+        // A retry of the attempt that resolved this change set (ack lost after
+        // commit) gets the committed result back. Any other caller still sees
+        // the conflict.
+        if (receiptScope) {
+          const prior = await tx<Array<{ result: ApplyPlanChangeSetResult | null }>>`
+            SELECT result FROM workflow_activity_receipts
+            WHERE idempotency_key = ${receiptScope.key}
+            LIMIT 1
+          `;
+          if (prior[0]?.result) return prior[0].result;
+        }
+        throw new Error("Change set is already resolved");
+      }
+      if (receiptScope) {
+        const receipt = await claimActivityReceipt<ApplyPlanChangeSetResult>(
+          tx as unknown as SqlExecutor,
+          receiptScope,
+          changeSet.workspace_id
+        );
+        if (!receipt.claimed) return receipt.result;
+      }
 
       const proposals = await tx<Array<{
         id: string;
@@ -1914,7 +2081,11 @@ export async function applyPlanChangeSet(
         `;
       }
 
-      return { applied, rejected, createdTaskIds, externalOperationIds };
+      const result: ApplyPlanChangeSetResult = { applied, rejected, createdTaskIds, externalOperationIds };
+      if (receiptScope) {
+        await completeActivityReceipt(tx as unknown as SqlExecutor, receiptScope, result);
+      }
+      return result;
     });
   } finally {
     await sql.end();
@@ -1941,7 +2112,78 @@ type ExternalOperationRow = {
   requirement_id: string | null;
 };
 
-type ProviderHttpError = Error & { status?: number; body?: unknown };
+type ProviderHttpError = Error & {
+  status?: number;
+  body?: unknown;
+  /** Provider asked us to slow down (HTTP 429, GitHub rate-limit 403, Linear RATELIMITED). */
+  rateLimited?: boolean;
+  /** Provider-suggested wait before the next attempt, when known. */
+  retryAfterMs?: number;
+};
+
+const MIN_PROVIDER_RETRY_DELAY_MS = 1_000;
+const MAX_PROVIDER_RETRY_DELAY_MS = 15 * 60_000;
+
+function clampRetryDelay(ms: number) {
+  return Math.min(MAX_PROVIDER_RETRY_DELAY_MS, Math.max(MIN_PROVIDER_RETRY_DELAY_MS, Math.ceil(ms)));
+}
+
+/**
+ * Reads the provider's requested back-off from response headers:
+ * `retry-after` (seconds or HTTP date), GitHub `x-ratelimit-reset` (epoch
+ * seconds) and Linear `x-ratelimit-*-reset` (epoch milliseconds).
+ */
+export function providerRetryAfterMs(headers: Headers, now = Date.now()): number | undefined {
+  const retryAfter = headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds)) return clampRetryDelay(seconds * 1000);
+    const date = Date.parse(retryAfter);
+    if (Number.isFinite(date)) return clampRetryDelay(date - now);
+  }
+  for (const name of ["x-ratelimit-requests-reset", "x-ratelimit-complexity-reset"]) {
+    const value = Number(headers.get(name));
+    if (Number.isFinite(value) && value > 0) return clampRetryDelay(value - now);
+  }
+  const githubReset = Number(headers.get("x-ratelimit-reset"));
+  if (Number.isFinite(githubReset) && githubReset > 0) return clampRetryDelay(githubReset * 1000 - now);
+  return undefined;
+}
+
+function isGitHubRateLimitResponse(status: number, headers: Headers, body: unknown) {
+  if (status === 429) return true;
+  if (status !== 403) return false;
+  if (headers.get("x-ratelimit-remaining") === "0" || headers.has("retry-after")) return true;
+  const message = asRecord(body).message;
+  return typeof message === "string" && /rate limit/i.test(message);
+}
+
+/**
+ * Builds the error thrown for a failed provider call. Rate-limited responses
+ * become a retryable ApplicationFailure carrying `nextRetryDelay`, so Temporal
+ * waits for the provider's reset window instead of the default back-off.
+ */
+function createProviderHttpError(input: {
+  message: string;
+  status: number;
+  body: unknown;
+  rateLimited: boolean;
+  retryAfterMs?: number;
+}): ProviderHttpError {
+  const error: ProviderHttpError = input.rateLimited
+    ? ApplicationFailure.create({
+        message: input.message,
+        type: "ProviderRateLimited",
+        nonRetryable: false,
+        nextRetryDelay: input.retryAfterMs,
+      })
+    : new Error(input.message);
+  error.status = input.status;
+  error.body = input.body;
+  error.rateLimited = input.rateLimited;
+  error.retryAfterMs = input.retryAfterMs;
+  return error;
+}
 
 function integrationEncryptionKey() {
   const raw = process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY;
@@ -2022,10 +2264,16 @@ async function providerFetch<T>(url: string, token: string, init: RequestInit = 
     body = text;
   }
   if (!response.ok) {
-    const error = new Error(`Provider API failed: ${response.status}`) as ProviderHttpError;
-    error.status = response.status;
-    error.body = body;
-    throw error;
+    const rateLimited = isGitHubRateLimitResponse(response.status, response.headers, body);
+    throw createProviderHttpError({
+      message: rateLimited
+        ? `Provider API rate limited: ${response.status}`
+        : `Provider API failed: ${response.status}`,
+      status: response.status,
+      body,
+      rateLimited,
+      retryAfterMs: rateLimited ? providerRetryAfterMs(response.headers) : undefined,
+    });
   }
   return body as T;
 }
@@ -2049,7 +2297,13 @@ function selectedGitHubRepository(metadata: Record<string, unknown>) {
   }
   const owner = typeof metadata.repositoryOwner === "string" ? metadata.repositoryOwner : null;
   const repo = typeof metadata.repositoryName === "string" ? metadata.repositoryName : null;
-  if (!owner || !repo) throw new Error("Select a GitHub repository before applying writes");
+  if (!owner || !repo) {
+    // User-actionable configuration gap: retrying cannot fix it.
+    throw ApplicationFailure.nonRetryable(
+      "Select a GitHub repository before applying writes",
+      "ExternalWriteTerminalError"
+    );
+  }
   return { owner, repo };
 }
 
@@ -2397,9 +2651,13 @@ type LinearTokenPayload = {
   scope?: string;
 };
 
+function linearTokenNeedsRefresh(token: LinearTokenPayload) {
+  return Boolean(token.expiresAt && token.expiresAt < Date.now() + 60_000 && token.refreshToken);
+}
+
 async function resolveLinearWorkerToken(encrypted: string) {
   const token = decryptIntegrationToken<LinearTokenPayload>(encrypted);
-  if (!token.expiresAt || token.expiresAt >= Date.now() + 60_000 || !token.refreshToken) {
+  if (!linearTokenNeedsRefresh(token) || !token.refreshToken) {
     return { accessToken: token.accessToken, encrypted: null as string | null };
   }
   const clientId = process.env.LINEAR_CLIENT_ID;
@@ -2417,10 +2675,14 @@ async function resolveLinearWorkerToken(encrypted: string) {
   });
   const body = await response.json() as Record<string, unknown>;
   if (!response.ok || typeof body.access_token !== "string") {
-    const error = new Error("Linear token refresh failed") as ProviderHttpError;
-    error.status = response.status;
-    error.body = body;
-    throw error;
+    const rateLimited = response.status === 429;
+    throw createProviderHttpError({
+      message: "Linear token refresh failed",
+      status: response.status,
+      body,
+      rateLimited,
+      retryAfterMs: rateLimited ? providerRetryAfterMs(response.headers) : undefined,
+    });
   }
   const next: LinearTokenPayload = {
     accessToken: body.access_token,
@@ -2430,6 +2692,54 @@ async function resolveLinearWorkerToken(encrypted: string) {
   };
   return { accessToken: next.accessToken, encrypted: encryptIntegrationToken(next) };
 }
+
+/**
+ * Returns a usable Linear access token for the integration. When the token
+ * has to be refreshed, the rotated pair is committed immediately, before any
+ * mutation runs: Linear invalidates the old refresh token on rotation, so
+ * losing the new pair (for example because the write then fails) would kill
+ * the integration until the user reconnects. The row lock serializes
+ * concurrent refreshes; a caller that waited picks up the already rotated
+ * token instead of spending the consumed refresh token.
+ */
+async function resolveAndPersistLinearWorkerToken(integrationId: string, encrypted: string) {
+  const token = decryptIntegrationToken<LinearTokenPayload>(encrypted);
+  if (!linearTokenNeedsRefresh(token)) return token.accessToken;
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl, { max: 1 });
+  try {
+    return await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as SqlExecutor;
+      const rows = await tx<Array<{ token_ciphertext: string | null }>>`
+        SELECT token_ciphertext
+        FROM workspace_integrations
+        WHERE id = ${integrationId}::uuid
+        FOR UPDATE
+      `;
+      const latest = rows[0]?.token_ciphertext || encrypted;
+      if (latest !== encrypted) {
+        const rotated = decryptIntegrationToken<LinearTokenPayload>(latest);
+        if (!linearTokenNeedsRefresh(rotated)) return rotated.accessToken;
+      }
+      const refreshed = await resolveLinearWorkerToken(latest);
+      if (refreshed.encrypted) {
+        await tx`
+          UPDATE workspace_integrations
+          SET token_ciphertext = ${refreshed.encrypted}, updated_at = now()
+          WHERE id = ${integrationId}::uuid
+        `;
+      }
+      return refreshed.accessToken;
+    });
+  } finally {
+    await sql.end();
+  }
+}
+
+type LinearGraphqlError = { message?: string; extensions?: { code?: string } };
 
 async function linearWorkerGraphql<T>(
   accessToken: string,
@@ -2441,36 +2751,102 @@ async function linearWorkerGraphql<T>(
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ query, variables }),
   });
-  const body = await response.json() as { data?: T; errors?: Array<{ message?: string }> };
+  const body = await response.json() as { data?: T; errors?: LinearGraphqlError[] };
   if (!response.ok || body.errors?.length || !body.data) {
-    const error = new Error(body.errors?.[0]?.message || `Linear API failed: ${response.status}`) as ProviderHttpError;
-    error.status = response.status || 400;
-    error.body = body;
-    throw error;
+    // Linear reports rate limiting as a GraphQL error (HTTP 400 or 200) with
+    // extensions.code = RATELIMITED, or as HTTP 429.
+    const rateLimited =
+      response.status === 429 ||
+      Boolean(body.errors?.some((error) => error.extensions?.code === "RATELIMITED"));
+    throw createProviderHttpError({
+      message: body.errors?.[0]?.message || `Linear API failed: ${response.status}`,
+      status: response.status || 400,
+      body,
+      rateLimited,
+      retryAfterMs: rateLimited ? providerRetryAfterMs(response.headers) : undefined,
+    });
   }
   return body.data;
 }
 
+/**
+ * Stable marker embedded in Linear issue descriptions and comment bodies so
+ * a retried write can find the item an earlier attempt already created.
+ * It is a short hash (letters, digits, hyphens) because Linear re-serializes
+ * markdown and would escape characters such as underscores in the raw key.
+ */
+export function linearOperationMarker(idempotencyKey: string) {
+  return `nexus-op-${createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)}`;
+}
+
+function withLinearMarker(body: string | undefined, marker: string) {
+  const text = (body || "").trim();
+  if (text.includes(marker)) return text;
+  return text ? `${text}\n\n${marker}` : marker;
+}
+
+/**
+ * Lookup before create. Rate-limit and server errors propagate so the
+ * attempt is retried; any other lookup failure (for example a schema
+ * mismatch) falls through to the create, keeping dedupe best-effort rather
+ * than a new way for writes to fail.
+ */
+async function findExistingLinearItem<T>(lookup: () => Promise<T | null>): Promise<T | null> {
+  try {
+    return await lookup();
+  } catch (error) {
+    if (externalErrorIsRetryable(error)) throw error;
+    console.warn("[Activity] Linear dedupe lookup failed; creating without dedupe:", error);
+    return null;
+  }
+}
+
+const LINEAR_ISSUE_FIELDS =
+  "id identifier title description url priority state { name } labels { nodes { name } }";
+
 async function runLinearExternalWrite(operation: ExternalOperationRow) {
   if (!operation.token_ciphertext) throw new Error("Linear OAuth token is missing");
-  const token = await resolveLinearWorkerToken(operation.token_ciphertext);
+  const accessToken = await resolveAndPersistLinearWorkerToken(
+    operation.integration_id,
+    operation.token_ciphertext
+  );
   const payload = operation.payload || {};
+  const marker = linearOperationMarker(operation.idempotency_key);
   let result: unknown;
 
   if (operation.operation_type === "linear_create_issue") {
     const teamId = typeof payload.teamId === "string" ? payload.teamId : null;
     const title = typeof payload.title === "string" ? payload.title.trim() : "";
     if (!teamId || !title) throw new Error("Linear create requires payload.teamId and payload.title");
-    result = await linearWorkerGraphql(token.accessToken, `mutation NexusIssueCreate($input: IssueCreateInput!) {
-      issueCreate(input: $input) { success issue { id identifier title description url priority state { name } labels { nodes { name } } } }
-    }`, {
-      input: {
-        teamId,
-        title,
-        description: typeof payload.description === "string" ? payload.description : undefined,
-        projectId: typeof payload.projectId === "string" ? payload.projectId : undefined,
-      },
+    const existing = await findExistingLinearItem(async () => {
+      const found = await linearWorkerGraphql<{ issues?: { nodes?: Array<Record<string, unknown>> } }>(
+        accessToken,
+        `query NexusFindIssue($teamId: ID!, $marker: String!) {
+          issues(first: 1, includeArchived: true, filter: { team: { id: { eq: $teamId } }, description: { contains: $marker } }) {
+            nodes { ${LINEAR_ISSUE_FIELDS} }
+          }
+        }`,
+        { teamId, marker }
+      );
+      return found.issues?.nodes?.[0] || null;
     });
+    if (existing) {
+      result = { issueCreate: { success: true, issue: existing }, deduplicated: true };
+    } else {
+      result = await linearWorkerGraphql(accessToken, `mutation NexusIssueCreate($input: IssueCreateInput!) {
+        issueCreate(input: $input) { success issue { ${LINEAR_ISSUE_FIELDS} } }
+      }`, {
+        input: {
+          teamId,
+          title,
+          description: withLinearMarker(
+            typeof payload.description === "string" ? payload.description : undefined,
+            marker
+          ),
+          projectId: typeof payload.projectId === "string" ? payload.projectId : undefined,
+        },
+      });
+    }
   } else if (operation.operation_type === "linear_update_issue") {
     const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
     if (!issueId) throw new Error("Linear update requires payload.issueId");
@@ -2478,8 +2854,8 @@ async function runLinearExternalWrite(operation: ExternalOperationRow) {
     if (typeof payload.title === "string") input.title = payload.title;
     if (typeof payload.description === "string") input.description = payload.description;
     if (typeof payload.stateId === "string") input.stateId = payload.stateId;
-    result = await linearWorkerGraphql(token.accessToken, `mutation NexusIssueUpdate($id: String!, $input: IssueUpdateInput!) {
-      issueUpdate(id: $id, input: $input) { success issue { id identifier title description url priority state { name } labels { nodes { name } } } }
+    result = await linearWorkerGraphql(accessToken, `mutation NexusIssueUpdate($id: String!, $input: IssueUpdateInput!) {
+      issueUpdate(id: $id, input: $input) { success issue { ${LINEAR_ISSUE_FIELDS} } }
     }`, { id: issueId, input });
   } else if (operation.operation_type === "linear_comment") {
     const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
@@ -2487,23 +2863,50 @@ async function runLinearExternalWrite(operation: ExternalOperationRow) {
     if (!issueId || typeof body !== "string" || !body.trim()) {
       throw new Error("Linear comment requires payload.issueId and payload.body");
     }
-    result = await linearWorkerGraphql(token.accessToken, `mutation NexusComment($issueId: String!, $body: String!) {
-      commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id url } }
-    }`, { issueId, body });
+    const existing = await findExistingLinearItem(async () => {
+      const found = await linearWorkerGraphql<{
+        issue?: { comments?: { nodes?: Array<Record<string, unknown>> } } | null;
+      }>(
+        accessToken,
+        `query NexusFindComment($issueId: String!, $marker: String!) {
+          issue(id: $issueId) {
+            comments(first: 1, filter: { body: { contains: $marker } }) { nodes { id url } }
+          }
+        }`,
+        { issueId, marker }
+      );
+      return found.issue?.comments?.nodes?.[0] || null;
+    });
+    if (existing) {
+      result = { commentCreate: { success: true, comment: existing }, deduplicated: true };
+    } else {
+      result = await linearWorkerGraphql(accessToken, `mutation NexusComment($issueId: String!, $body: String!) {
+        commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id url } }
+      }`, { issueId, body: withLinearMarker(body, marker) });
+    }
   } else {
     throw new Error(`Unsupported Linear operation: ${operation.operation_type}`);
   }
 
-  return { result, refreshedCiphertext: token.encrypted };
+  // The token (if refreshed) is already persisted, so there is nothing left
+  // for the caller to store.
+  return { result, refreshedCiphertext: null as string | null };
 }
 
 export function externalErrorIsRetryable(error: unknown) {
-  const status = (error as ProviderHttpError | null)?.status;
+  if (error instanceof ApplicationFailure && error.nonRetryable) return false;
+
+  const providerError = error as ProviderHttpError | null;
+  const status = providerError?.status;
   const message = error instanceof Error ? error.message : String(error);
+
+  // Provider throttling always clears with time (GitHub rate-limit 403,
+  // HTTP 429, Linear RATELIMITED).
+  if (providerError?.rateLimited) return true;
 
   // Local validation and configuration failures cannot succeed on retry.
   if (
-    /installation is missing|requires payload\.|requires payload |OAuth token is missing|unsupported external provider/i.test(
+    /installation is missing|requires payload\.|requires payload |OAuth token is missing|unsupported external provider|select a github repository/i.test(
       message
     )
   ) {
@@ -2523,6 +2926,71 @@ export function externalWriteOperationNeedsWork(operation: {
     (operation.status === "succeeded" &&
       ["pending", "running", "failed_retryable"].includes(operation.syncStatus))
   );
+}
+
+/**
+ * Lease on a claimed (`running`) external write. Once it lapses, the claim is
+ * treated as abandoned (worker crash, redeploy, or activity timeout) and the
+ * row can be reclaimed or finalized. It must exceed the external-write
+ * activity `startToCloseTimeout` (90 s in workflows.ts) so a live attempt is
+ * never stolen.
+ */
+export const EXTERNAL_WRITE_CLAIM_LEASE_SECONDS = 120;
+
+export const EXTERNAL_WRITE_INTERRUPTED_MESSAGE =
+  "External write was interrupted before the provider confirmed it. Retry to check the provider and finish it.";
+export const EXTERNAL_SYNC_INTERRUPTED_MESSAGE =
+  "Provider refresh was interrupted after the external write succeeded. Retry to refresh it.";
+
+export type ExternalFinalizeRow = {
+  id: string;
+  status: string;
+  sync_status: string;
+  /** True when the row's last activity (claim, or update for pending/sync) is older than the lease. */
+  stale: boolean;
+  /** Seconds until the lease lapses (0 when already stale). */
+  lease_remaining_seconds: number | null;
+};
+
+export function summarizeExternalOperationsForFinalize(rows: ExternalFinalizeRow[]) {
+  let succeeded = 0;
+  let failed = 0;
+  let inFlight = 0;
+  let retryAfterSeconds = 0;
+  const interruptedWriteIds: string[] = [];
+  const interruptedSyncIds: string[] = [];
+
+  for (const row of rows) {
+    const waitFor = () => {
+      inFlight += 1;
+      retryAfterSeconds = Math.max(retryAfterSeconds, Number(row.lease_remaining_seconds) || 0);
+    };
+    if (row.status === "pending" || row.status === "running") {
+      if (row.stale) {
+        interruptedWriteIds.push(row.id);
+        failed += 1;
+      } else {
+        waitFor();
+      }
+    } else if (row.status === "succeeded") {
+      if (row.sync_status === "pending" || row.sync_status === "running") {
+        if (row.stale) {
+          interruptedSyncIds.push(row.id);
+          failed += 1;
+        } else {
+          waitFor();
+        }
+      } else if (row.sync_status === "failed_retryable" || row.sync_status === "failed_terminal") {
+        failed += 1;
+      } else {
+        succeeded += 1;
+      }
+    } else if (row.status === "failed_retryable" || row.status === "failed_terminal") {
+      failed += 1;
+    }
+  }
+
+  return { succeeded, failed, inFlight, retryAfterSeconds, interruptedWriteIds, interruptedSyncIds };
 }
 
 export function resolveExternalChangeSetStatus(input: {
@@ -2644,6 +3112,10 @@ export async function executeExternalWriteOperation(operationId: string) {
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl, { max: 1 });
   let operation: ExternalOperationRow | null = null;
+  // Fencing token: the attempt_count this attempt claimed. Writes of the
+  // outcome are guarded by it so a timed-out zombie attempt cannot overwrite
+  // the state recorded by the attempt that reclaimed the row.
+  let claimedAttempt: number | null = null;
 
   try {
     const rows = await sql<ExternalOperationRow[]>`
@@ -2667,27 +3139,65 @@ export async function executeExternalWriteOperation(operationId: string) {
     if (operation.status === "succeeded") {
       return { operationId, status: "succeeded" as const, alreadyCompleted: true };
     }
-    if (operation.status !== "pending" && operation.status !== "failed_retryable") {
+    if (
+      operation.status !== "pending" &&
+      operation.status !== "failed_retryable" &&
+      operation.status !== "running"
+    ) {
       return { operationId, status: operation.status, skipped: true };
     }
 
-    const claimedRows = await sql<Array<{ id: string }>>`
+    // A `running` row whose lease lapsed was claimed by an attempt that died
+    // (worker crash/redeploy or activity timeout) and is reclaimable. The
+    // provider-side marker dedupe in runGitHubExternalWrite and
+    // runLinearExternalWrite (search-before-create for issues and comments)
+    // prevents a second write if the dead attempt actually reached the provider.
+    const claimedRows = await sql<Array<{ id: string; attempt_count: number }>>`
       UPDATE external_write_operations
       SET status = 'running', attempt_count = attempt_count + 1,
           attempted_at = now(), error = NULL, updated_at = now()
       WHERE id = ${operation.id}::uuid
-        AND status IN ('pending', 'failed_retryable')
-      RETURNING id
+        AND (
+          status IN ('pending', 'failed_retryable')
+          OR (
+            status = 'running'
+            AND (
+              attempted_at IS NULL
+              OR attempted_at < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8)
+            )
+          )
+        )
+      RETURNING id, attempt_count
     `;
     if (!claimedRows[0]?.id) {
-      const currentRows = await sql<Array<{ status: string }>>`
-        SELECT status
+      const currentRows = await sql<Array<{ status: string; lease_remaining_seconds: number | null }>>`
+        SELECT status,
+               GREATEST(
+                 0,
+                 EXTRACT(EPOCH FROM (
+                   COALESCE(attempted_at, now()) + make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) - now()
+                 ))
+               )::float8 AS lease_remaining_seconds
         FROM external_write_operations
         WHERE id = ${operation.id}::uuid
         LIMIT 1
       `;
-      return { operationId, status: currentRows[0]?.status || "unknown", skipped: true };
+      const current = currentRows[0];
+      if (current?.status === "succeeded") {
+        return { operationId, status: "succeeded" as const, alreadyCompleted: true };
+      }
+      if (current?.status === "running") {
+        // Another live attempt holds the lease. Retry once it lapses instead of
+        // returning early and leaving finalize with a non-terminal row.
+        throw ApplicationFailure.create({
+          message: "External write is in progress in another attempt",
+          type: "ExternalWriteInProgress",
+          nextRetryDelay: `${Math.ceil(Number(current.lease_remaining_seconds) || 0) + 1}s`,
+        });
+      }
+      return { operationId, status: current?.status || "unknown", skipped: true };
     }
+    claimedAttempt = Number(claimedRows[0].attempt_count);
 
     let response: unknown;
     if (operation.provider === "github") {
@@ -2707,14 +3217,10 @@ export async function executeExternalWriteOperation(operationId: string) {
     }
 
     const currentOperation = operation;
-    await sql.begin(async (transaction) => {
+    const fence = claimedAttempt;
+    const recorded = await sql.begin(async (transaction) => {
       const tx = transaction as unknown as typeof sql;
-      await upsertExternalIssueFromWrite(
-        tx as unknown as SqlExecutor,
-        currentOperation,
-        response
-      );
-      await tx`
+      const updatedRows = await tx<Array<{ id: string }>>`
         UPDATE external_write_operations
         SET status = 'succeeded', response = ${JSON.stringify(response)}::jsonb,
             error = NULL, sync_status = CASE
@@ -2723,7 +3229,16 @@ export async function executeExternalWriteOperation(operationId: string) {
             END,
             sync_error = NULL, completed_at = now(), updated_at = now()
         WHERE id = ${currentOperation.id}::uuid
+          AND status = 'running'
+          AND attempt_count = ${fence}
+        RETURNING id
       `;
+      if (!updatedRows[0]?.id) return false;
+      await upsertExternalIssueFromWrite(
+        tx as unknown as SqlExecutor,
+        currentOperation,
+        response
+      );
       await tx`
         UPDATE change_proposals
         SET status = 'applied', applied_at = now()
@@ -2739,21 +3254,34 @@ export async function executeExternalWriteOperation(operationId: string) {
           ${JSON.stringify({ operationId, provider: currentOperation.provider, operationType: currentOperation.operation_type })}::jsonb
         )
       `;
+      return true;
     });
+    if (!recorded) {
+      // This attempt's lease lapsed and another attempt reclaimed the row;
+      // that attempt owns the outcome (and dedupes against the provider).
+      return { operationId, status: "running" as const, skipped: true, superseded: true };
+    }
     return { operationId, status: "succeeded" as const, alreadyCompleted: false };
   } catch (error) {
-    if (!operation) throw error;
+    // Errors before this attempt claimed the row (including the in-progress
+    // signal above) must not overwrite the state owned by another attempt.
+    if (!operation || claimedAttempt === null) throw error;
     const currentOperation = operation;
+    const fence = claimedAttempt;
     const retryable = externalErrorIsRetryable(error);
     const message = error instanceof Error ? error.message : "External write failed";
-    await sql.begin(async (transaction) => {
+    const recorded = await sql.begin(async (transaction) => {
       const tx = transaction as unknown as typeof sql;
-      await tx`
+      const updatedRows = await tx<Array<{ id: string }>>`
         UPDATE external_write_operations
         SET status = ${retryable ? "failed_retryable" : "failed_terminal"},
             error = ${message}, updated_at = now()
         WHERE id = ${currentOperation.id}::uuid
+          AND status = 'running'
+          AND attempt_count = ${fence}
+        RETURNING id
       `;
+      if (!updatedRows[0]?.id) return false;
       await tx`
         UPDATE change_proposals
         SET status = ${retryable ? "failed_retryable" : "failed_terminal"}
@@ -2769,7 +3297,11 @@ export async function executeExternalWriteOperation(operationId: string) {
           ${JSON.stringify({ operationId, provider: currentOperation.provider, retryable, error: message })}::jsonb
         )
       `;
+      return true;
     });
+    if (!recorded) {
+      return { operationId, status: "running" as const, skipped: true, superseded: true };
+    }
     if (!retryable) {
       throw ApplicationFailure.nonRetryable(message, "ExternalWriteTerminalError");
     }
@@ -3095,6 +3627,13 @@ export async function listRunnableExternalWriteOperationIds(changeSetId: string)
         AND (
           status IN ('pending', 'failed_retryable')
           OR (
+            status = 'running'
+            AND (
+              attempted_at IS NULL
+              OR attempted_at < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8)
+            )
+          )
+          OR (
             status = 'succeeded'
             AND sync_status IN ('pending', 'running', 'failed_retryable')
           )
@@ -3113,56 +3652,117 @@ export async function finalizeExternalWriteOperations(changeSetId: string, userI
   const postgres = (await import("postgres")).default;
   const sql = postgres(databaseUrl, { max: 1 });
   try {
-    const rows = await sql<Array<{ status: string; sync_status: string; count: number }>>`
-      SELECT status, sync_status, count(*)::int AS count
-      FROM external_write_operations
-      WHERE change_set_id = ${changeSetId}::uuid
-      GROUP BY status, sync_status
-    `;
-    let succeeded = 0;
-    let failed = 0;
-    let remaining = 0;
-    for (const row of rows) {
-      const count = Number(row.count);
-      if (row.status === "pending" || row.status === "running") {
-        remaining += count;
-      } else if (row.status === "succeeded") {
-        if (row.sync_status === "pending" || row.sync_status === "running") {
-          remaining += count;
-        } else if (row.sync_status === "failed_retryable" || row.sync_status === "failed_terminal") {
-          failed += count;
-        } else {
-          succeeded += count;
-        }
-      } else if (row.status === "failed_retryable" || row.status === "failed_terminal") {
-        failed += count;
-      }
-    }
-    if (remaining > 0) throw new Error("External operations are not terminal");
+    const outcome = await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof sql;
+      // Lock the operations so a concurrent reclaim cannot race the
+      // interrupted -> failed_retryable transition below.
+      const rows = await tx<ExternalFinalizeRow[]>`
+        SELECT
+          id, status, sync_status,
+          (
+            CASE WHEN status = 'running' THEN COALESCE(attempted_at, updated_at) ELSE updated_at END
+          ) < now() - make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) AS stale,
+          GREATEST(
+            0,
+            EXTRACT(EPOCH FROM (
+              (CASE WHEN status = 'running' THEN COALESCE(attempted_at, updated_at) ELSE updated_at END)
+              + make_interval(secs => ${EXTERNAL_WRITE_CLAIM_LEASE_SECONDS}::float8) - now()
+            ))
+          )::float8 AS lease_remaining_seconds
+        FROM external_write_operations
+        WHERE change_set_id = ${changeSetId}::uuid
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const summary = summarizeExternalOperationsForFinalize(rows);
+      if (summary.inFlight > 0) return { summary, status: null };
 
-    const internalRows = await sql<Array<{ count: number }>>`
-      SELECT count(*)::int AS count
-      FROM change_proposals
-      WHERE change_set_id = ${changeSetId}::uuid
-        AND status = 'applied'
-        AND action IN ('create_task', 'update_task', 'archive_task', 'relink_task', 'mark_agent_job_outdated')
-    `;
-    const internalApplied = internalRows[0]?.count || 0;
-    const status = resolveExternalChangeSetStatus({ succeeded, failed, internalApplied });
-    await sql`
-      UPDATE change_sets
-      SET status = ${status}, updated_at = now()
-      WHERE id = ${changeSetId}::uuid
-    `;
-    await sql`
-      INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
-      SELECT
-        ${userId}, workspace_id, ${"plan.external_writes_completed"},
-        ${failed === 0 ? "success" : "error"},
-        ${JSON.stringify({ changeSetId, succeeded, failed, status })}::jsonb
-      FROM change_sets WHERE id = ${changeSetId}::uuid
-    `;
-    return { succeeded, failed, status: status as "applied" | "partially_applied" | "external_failed" };
+      if (summary.interruptedWriteIds.length > 0) {
+        // The claiming attempt died without recording an outcome. Surface it
+        // as retryable so the UI shows it and the retry endpoint accepts it;
+        // a retry re-checks the provider marker before writing again.
+        await tx`
+          UPDATE external_write_operations
+          SET status = 'failed_retryable',
+              error = ${EXTERNAL_WRITE_INTERRUPTED_MESSAGE},
+              updated_at = now()
+          WHERE id IN ${tx(summary.interruptedWriteIds)}
+            AND status IN ('pending', 'running')
+        `;
+        await tx`
+          UPDATE change_proposals
+          SET status = 'failed_retryable'
+          WHERE id IN (
+            SELECT change_proposal_id
+            FROM external_write_operations
+            WHERE id IN ${tx(summary.interruptedWriteIds)}
+              AND change_proposal_id IS NOT NULL
+          )
+        `;
+        await tx`
+          INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+          SELECT
+            ${userId}, workspace_id, ${"integration.write_interrupted"}, ${"error"},
+            ${JSON.stringify({ changeSetId, operationIds: summary.interruptedWriteIds })}::jsonb
+          FROM change_sets WHERE id = ${changeSetId}::uuid
+        `;
+      }
+      if (summary.interruptedSyncIds.length > 0) {
+        await tx`
+          UPDATE external_write_operations
+          SET sync_status = 'failed_retryable',
+              sync_error = ${EXTERNAL_SYNC_INTERRUPTED_MESSAGE},
+              updated_at = now()
+          WHERE id IN ${tx(summary.interruptedSyncIds)}
+            AND sync_status IN ('pending', 'running')
+        `;
+      }
+
+      const internalRows = await tx<Array<{ count: number }>>`
+        SELECT count(*)::int AS count
+        FROM change_proposals
+        WHERE change_set_id = ${changeSetId}::uuid
+          AND status = 'applied'
+          AND action IN ('create_task', 'update_task', 'archive_task', 'relink_task', 'mark_agent_job_outdated')
+      `;
+      const internalApplied = internalRows[0]?.count || 0;
+      const status = resolveExternalChangeSetStatus({
+        succeeded: summary.succeeded,
+        failed: summary.failed,
+        internalApplied,
+      });
+      await tx`
+        UPDATE change_sets
+        SET status = ${status}, updated_at = now()
+        WHERE id = ${changeSetId}::uuid
+      `;
+      await tx`
+        INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+        SELECT
+          ${userId}, workspace_id, ${"plan.external_writes_completed"},
+          ${summary.failed === 0 ? "success" : "error"},
+          ${JSON.stringify({ changeSetId, succeeded: summary.succeeded, failed: summary.failed, status })}::jsonb
+        FROM change_sets WHERE id = ${changeSetId}::uuid
+      `;
+      return { summary, status };
+    });
+
+    if (outcome.status === null) {
+      // Another live attempt still holds a lease. Leases are bounded, so ask
+      // Temporal to retry just after the longest one lapses; by then every
+      // row is terminal or reclassified as interrupted, and finalize returns.
+      throw ApplicationFailure.create({
+        message: "External operations are not terminal",
+        type: "ExternalWritesInFlight",
+        nextRetryDelay: `${Math.max(5, Math.ceil(outcome.summary.retryAfterSeconds) + 1)}s`,
+      });
+    }
+
+    return {
+      succeeded: outcome.summary.succeeded,
+      failed: outcome.summary.failed,
+      status: outcome.status as "applied" | "partially_applied" | "external_failed",
+    };
   } finally {
     await sql.end();
   }

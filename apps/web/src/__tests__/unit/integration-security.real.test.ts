@@ -133,8 +133,9 @@ describe("GitHub webhook security", () => {
       })
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
+    // The sync runs after the response (see lib/integrations/webhook-delivery).
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "accepted" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "github",
@@ -147,7 +148,7 @@ describe("GitHub webhook security", () => {
       })
     );
     expect(JSON.stringify(dbMock.values.mock.calls[0]?.[0])).not.toContain(body);
-    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
+    await vi.waitFor(() => expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1"));
   });
 });
 
@@ -193,8 +194,9 @@ describe("Linear webhook security", () => {
       })
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
+    // The sync runs after the response (see lib/integrations/webhook-delivery).
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "accepted" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "linear",
@@ -211,6 +213,6 @@ describe("Linear webhook security", () => {
         }),
       })
     );
-    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
+    await vi.waitFor(() => expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1"));
   });
 });
