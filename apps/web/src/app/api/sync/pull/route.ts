@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, gte, inArray, or, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { toClientFormat } from "@/lib/sync/client-format";
 import {
   agentExecutions,
   chatMessages,
@@ -42,6 +43,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Cursor for the client's next pull, taken BEFORE any query runs so a row
+    // committed while the queries execute is not skipped by the next pull. The
+    // client must persist this value (never its own clock). `lastSync` is the
+    // pre-existing field and carries the same value for older clients.
+    const serverTime = Date.now();
+
     const { searchParams } = new URL(request.url);
     const since = parseInt(searchParams.get("since") || "0", 10);
     const sinceDate = new Date(Number.isFinite(since) ? since : 0);
@@ -61,7 +68,8 @@ export async function GET(request: NextRequest) {
         workspaces: [],
         chatMessages: [],
         agentExecutions: [],
-        lastSync: Date.now(),
+        lastSync: serverTime,
+        serverTime,
       });
     }
 
@@ -101,7 +109,8 @@ export async function GET(request: NextRequest) {
       workspaces: workspacesData.map(toClientFormat),
       chatMessages: chatMessagesData.map(toClientFormat),
       agentExecutions: agentExecutionsData.map(toClientFormat),
-      lastSync: Date.now(),
+      lastSync: serverTime,
+      serverTime,
     };
 
     return NextResponse.json(result);
@@ -112,24 +121,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function toClientFormat(record: unknown): Record<string, unknown> {
-  if (!record || typeof record !== 'object') return {};
-  
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(record as Record<string, unknown>)) {
-    // Convert snake_case to camelCase
-    const clientKey = key.replace(/_([a-z])/g, (_, char) => char.toUpperCase());
-    
-    // Convert Date objects to timestamps
-    if (value instanceof Date) {
-      result[clientKey] = value.getTime();
-    } else {
-      result[clientKey] = value;
-    }
-  }
-
-  return result;
 }
