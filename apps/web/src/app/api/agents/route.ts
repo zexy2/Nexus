@@ -4,6 +4,7 @@
  * The current UI uses /api/chat. This route keeps the former SSE/JSON wire
  * format without maintaining a second provider stack or hard-coded model list.
  */
+import { logInternalError } from "@/lib/api-response";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
@@ -122,16 +123,15 @@ async function prepareRequest(request: NextRequest): Promise<
       },
     };
   } catch (error) {
+    const requestId = logInternalError("Agents model config", error, request.headers);
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "AI_PROVIDER_UNAVAILABLE",
-          message:
-            error instanceof Error
-              ? error.message
-              : "No server-managed AI provider is configured",
+          message: "No server-managed AI provider is configured",
           retryable: false,
+          requestId,
         },
         { status: 503 }
       ),

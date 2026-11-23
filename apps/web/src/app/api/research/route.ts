@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { internalError } from "@/lib/api-response";
 import { generateText } from "ai";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { enforceAiBudget } from "@/lib/production-guardrails";
@@ -110,11 +111,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }
 
@@ -171,10 +168,6 @@ export async function GET(request: NextRequest) {
       results: results.results,
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }

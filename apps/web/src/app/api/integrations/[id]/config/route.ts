@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { workspaceIntegrations } from "@nexus/database/schema";
@@ -55,8 +56,9 @@ export async function PATCH(
         { status: error.status }
       );
     }
+    const requestId = logInternalError("Integration config", error, request.headers);
     return NextResponse.json(
-      { error: "INTEGRATION_CONFIG_FAILED", message: error instanceof Error ? error.message : "Config update failed." },
+      { error: "INTEGRATION_CONFIG_FAILED", message: "Config update failed.", requestId },
       { status: 500 }
     );
   }

@@ -18,6 +18,7 @@ import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
+import { logInternalError } from "@/lib/api-response";
 
 // Allow streaming responses up to 60 seconds for agent operations
 export const maxDuration = 60;
@@ -70,11 +71,13 @@ export async function POST(req: Request) {
   try {
     modelConfig = await getUserModelConfig(userId);
   } catch (error) {
+    const requestId = logInternalError("Chat model config", error, req.headers);
     return Response.json(
       {
         error: "AI_PROVIDER_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "No server-managed AI provider is configured",
+        message: "No server-managed AI provider is configured",
         retryable: false,
+        requestId,
       },
       { status: 503 }
     );

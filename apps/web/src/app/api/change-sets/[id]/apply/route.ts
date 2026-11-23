@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { changeProposals, changeSets } from "@nexus/database/schema";
@@ -114,11 +115,12 @@ export async function POST(
         { status: 202 }
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workflow engine is unavailable";
+      const requestId = logInternalError("Change set apply recovery", error, request.headers);
       return NextResponse.json(
         {
           error: "TEMPORAL_UNAVAILABLE",
-          message,
+          message: "Workflow engine is unavailable.",
+          requestId,
         },
         { status: 503 }
       );
@@ -266,13 +268,12 @@ export async function POST(
           { status: 202 }
         );
       } catch (recoveryError) {
-        const recoveryMessage =
-          recoveryError instanceof Error ? recoveryError.message : "Workflow engine is unavailable";
-
+        const requestId = logInternalError("Change set apply recovery", recoveryError, request.headers);
         return NextResponse.json(
           {
             error: "TEMPORAL_UNAVAILABLE",
-            message: recoveryMessage,
+            message: "Workflow engine is unavailable.",
+            requestId,
           },
           { status: 503 }
         );
@@ -290,10 +291,12 @@ export async function POST(
         { status: 200 }
       );
     }
+    const requestId = logInternalError("Change set apply", error, request.headers);
     return NextResponse.json(
       {
         error: "TEMPORAL_UNAVAILABLE",
-        message,
+        message: "Workflow engine is unavailable.",
+        requestId,
       },
       { status: 503 }
     );
