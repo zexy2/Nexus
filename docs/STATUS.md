@@ -102,8 +102,7 @@ Route coverage (import-level) is complete, but line coverage is still moderate. 
 - Light theme has not had a visual pass.
 - No UI for rejected offline mutations.
 - `pnpm audit --prod` reports 13 moderate/low advisories (11 moderate, 2 low; none high or critical), mostly OpenTelemetry instrumentation packages plus `@ai-sdk/provider-utils`, `glob` and `minimatch`.
-- Default global AI limits (`AI_GLOBAL_DAILY_LIMIT=25`, `AI_GLOBAL_PER_MINUTE_LIMIT=2`) look too low for more than a handful of demo users; owner decision.
-- `CSP_ENFORCE` and `REQUIRE_INTEGRATION_PROVIDERS` are listed in `.env.production.example` but not passed to the web container in `docker-compose.prod.yml`, so setting them in `.env.production` has no effect until they are added to the compose `environment` block; owner decision.
+- AI limit defaults (all env-overridable, see `docs/DEPLOYMENT.md`): global safety cap 5000/day and 120/min; regular user 200/day and 20/min (workflows 50/day, chat 200/day); admin 400/day and 40/min; demo unchanged (3/day, 1/min).
 - ADR-003 Saga/compensation is not implemented.
 - OpenTelemetry is not wired into the worker.
 

@@ -27,21 +27,26 @@ NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
 REQUIRE_INTEGRATIONS_HEALTH=true
 REQUIRE_INTEGRATION_PROVIDERS=github
+CSP_ENFORCE=true
 AI_ENABLED=true
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 TAVILY_API_KEY=
-AI_GLOBAL_DAILY_LIMIT=25
-AI_GLOBAL_PER_MINUTE_LIMIT=2
-AI_USER_DAILY_LIMIT=5
-AI_USER_PER_MINUTE_LIMIT=1
-AI_WORKFLOW_DAILY_LIMIT=2
-AI_CHAT_DAILY_LIMIT=3
+AI_GLOBAL_DAILY_LIMIT=5000
+AI_GLOBAL_PER_MINUTE_LIMIT=120
+AI_USER_DAILY_LIMIT=200
+AI_USER_PER_MINUTE_LIMIT=20
+AI_WORKFLOW_DAILY_LIMIT=50
+AI_CHAT_DAILY_LIMIT=200
 AI_DEMO_DAILY_LIMIT=3
 AI_DEMO_PER_MINUTE_LIMIT=1
 AI_DEMO_WORKFLOW_DAILY_LIMIT=2
 AI_DEMO_CHAT_DAILY_LIMIT=1
-AI_MAX_STEPS_PER_WORKFLOW=5
+AI_ADMIN_DAILY_LIMIT=400
+AI_ADMIN_PER_MINUTE_LIMIT=40
+AI_ADMIN_WORKFLOW_DAILY_LIMIT=100
+AI_ADMIN_CHAT_DAILY_LIMIT=400
+AI_MAX_STEPS_PER_WORKFLOW=4
 TRUSTED_PROXY_COUNT=1
 HEALTH_CHECK_TOKEN=generate-with-openssl-rand-hex-32
 WORKER_SHUTDOWN_GRACE_TIME=45 seconds
@@ -56,6 +61,16 @@ Operational settings (all optional; defaults shown in `.env.production.example`)
 | `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
 | `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
 | `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+| `CSP_ENFORCE` | web | `true` enforces the Content-Security-Policy, `false` sends report-only. Empty/unset = enforce in production, report-only otherwise. |
+| `REQUIRE_INTEGRATION_PROVIDERS` | web | Comma list (`github`, `linear`) of providers whose missing credentials fail `/api/health`. Empty/unset = none required (unless legacy `REQUIRE_INTEGRATIONS_HEALTH=true`, which implies `github`). |
+| `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_PER_MINUTE_LIMIT` | web | Cost-runaway safety cap across ALL users. Defaults 5000/day, 120/min. |
+| `AI_USER_DAILY_LIMIT` / `AI_USER_PER_MINUTE_LIMIT` | web | Per regular verified user (applies to research/embedding calls). Defaults 200/day, 20/min. |
+| `AI_WORKFLOW_DAILY_LIMIT` / `AI_CHAT_DAILY_LIMIT` | web | Per-user per-feature daily caps. Defaults 50 and 200 (legacy `AI_WORKFLOWS_PER_DAY` / `AI_CHAT_MESSAGES_PER_DAY` still honoured as fallbacks). |
+| `AI_ADMIN_DAILY_LIMIT` / `AI_ADMIN_PER_MINUTE_LIMIT` / `AI_ADMIN_WORKFLOW_DAILY_LIMIT` / `AI_ADMIN_CHAT_DAILY_LIMIT` | web | Verified admins. Defaults 400/day, 40/min, 100 workflows/day, 400 chat/day. |
+| `AI_DEMO_DAILY_LIMIT` / `AI_DEMO_PER_MINUTE_LIMIT` / `AI_DEMO_WORKFLOW_DAILY_LIMIT` / `AI_DEMO_CHAT_DAILY_LIMIT` | web | Per temporary demo visitor. Defaults 3/day, 1/min, 2 workflows/day, 1 chat/day. |
+| `AI_MAX_STEPS_PER_WORKFLOW` | web, worker | Max steps per AI workflow. Default 4. |
+
+AI limit variables must be positive integers; empty or unset uses the default, an invalid value logs a warning and uses the default.
 
 `docker-compose.prod.yml` passes environment variables to each service explicitly, so a value in `.env.production` only reaches a container when the service's `environment:` block lists it.
 
