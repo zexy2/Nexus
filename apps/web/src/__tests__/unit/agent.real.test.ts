@@ -22,13 +22,13 @@ vi.mock("@/lib/ai/chat-actions", () => ({
   createTask: (...a: unknown[]) => createTask(...a),
 }));
 
-// Pass-through tool() so the test can reach each tool's execute(); stepCountIs
+// Pass-through tool() so the test can reach each tool's execute(); isStepCount
 // is irrelevant under the mock.
 const generateText = vi.fn();
 vi.mock("ai", () => ({
   generateText: (...a: unknown[]) => generateText(...a),
   tool: (def: unknown) => def,
-  stepCountIs: (n: number) => n,
+  isStepCount: (n: number) => n,
 }));
 
 import { runAgent } from "@/lib/ai/agent";
