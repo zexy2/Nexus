@@ -14,7 +14,7 @@ import {
   bigint,
   bigserial,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ==========================================
 // CUSTOM TYPES (pgvector support)
@@ -151,6 +151,10 @@ export const workspaces = pgTable("workspaces", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   iconUrl: text("icon_url"),
+  // The workspace ensureDefaultWorkspace() hands out. At most one per owner
+  // (partial unique index) so concurrent first requests cannot create
+  // duplicate default workspaces. Other owned workspaces stay false.
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -158,7 +162,12 @@ export const workspaces = pgTable("workspaces", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex("workspaces_owner_default_idx")
+    .on(table.ownerId)
+    .where(sql`${table.isDefault}`),
+  index("workspaces_owner_idx").on(table.ownerId),
+]);
 
 // ==========================================
 // WORKSPACE MEMBERS (Çoklu Kullanıcı Desteği)
@@ -203,6 +212,8 @@ export const docs = pgTable(
     coverUrl: text("cover_url"),
     isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer, sync serialization ile uyumlu
     isAiGenerated: integer("is_ai_generated").notNull().default(0),
+    // Workspace-level "starred" flag (0/1, like is_archived). Client-writable via sync.
+    isFavorite: integer("is_favorite").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
     // pgvector embedding for semantic search
     embedding: vector("embedding", { dimensions: 1536 }),
@@ -583,6 +594,11 @@ export const agentJobs = pgTable(
     index("agent_jobs_workspace_idx").on(table.workspaceId),
     index("agent_jobs_task_idx").on(table.taskId),
     index("agent_jobs_status_idx").on(table.status),
+    // At most one active job per task. Keep the status list in sync with
+    // ACTIVE_AGENT_JOB_STATUSES in apps/web/src/lib/agent-handoff.ts.
+    uniqueIndex("agent_jobs_task_active_idx")
+      .on(table.taskId)
+      .where(sql`${table.status} in ('queued', 'claimed', 'running', 'submitted')`),
   ]
 );
 
@@ -905,6 +921,9 @@ export const integrationWebhookEvents = pgTable(
     rawMetadataHash: varchar("raw_metadata_hash", { length: 128 }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    // Set each time a delivery is claimed for processing (first delivery or a
+    // redelivery of a failed/stale one). Used to detect abandoned claims.
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1016,6 +1035,9 @@ export const agentExecutions = pgTable(
     errorMessage: text("error_message"),
     temporalWorkflowId: varchar("temporal_workflow_id", { length: 255 }),
     startedAt: timestamp("started_at", { withTimezone: true }),
+    // Lease heartbeat for in-process (non-Temporal) runs. A "running" row whose
+    // heartbeat is older than the lease TTL is treated as abandoned.
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1296,6 +1318,33 @@ export const workerHeartbeats = pgTable(
   (table) => [
     uniqueIndex("worker_heartbeats_worker_id_idx").on(table.workerId),
     index("worker_heartbeats_last_heartbeat_idx").on(table.lastHeartbeatAt),
+  ]
+);
+
+// ==========================================
+// WORKFLOW ACTIVITY RECEIPTS (Idempotent activity retries)
+// ==========================================
+
+// One row per (workflow, activity) side effect. The worker inserts the
+// receipt in the same transaction as the side effect; a Temporal retry that
+// finds the receipt returns the stored result instead of writing again.
+export const workflowActivityReceipts = pgTable(
+  "workflow_activity_receipts",
+  {
+    idempotencyKey: varchar("idempotency_key", { length: 512 }).primaryKey(),
+    workflowId: varchar("workflow_id", { length: 255 }).notNull(),
+    activityType: varchar("activity_type", { length: 80 }).notNull(),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, {
+      onDelete: "cascade",
+    }),
+    result: jsonb("result").$type<unknown>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("workflow_activity_receipts_workflow_idx").on(table.workflowId),
+    index("workflow_activity_receipts_created_idx").on(table.createdAt),
   ]
 );
 

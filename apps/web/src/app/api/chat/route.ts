@@ -6,7 +6,6 @@
  * decides which tools to call and chains them. Legacy direct-mode values map to
  * focused capabilities, not separately running agent personas.
  */
-import { generateText } from "ai";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { searchWeb } from "@/lib/ai/tavily";
@@ -17,7 +16,9 @@ import { getRAGContext } from "@/lib/ai/chat-rag";
 import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
+import { logInternalError } from "@/lib/api-response";
 
 // Allow streaming responses up to 60 seconds for agent operations
 export const maxDuration = 60;
@@ -31,13 +32,6 @@ export async function POST(req: Request) {
     );
   }
   const userId = session.user.id;
-
-  const aiBudget = await enforceAiBudget({
-    userId,
-    email: session.user.email,
-    kind: "chat",
-  });
-  if (!aiBudget.ok) return aiBudget.response;
 
   // `messages` stays loosely typed: the AI SDK's ModelMessage union is stricter
   // than the wire format the existing clients send, and we validate the parts
@@ -61,6 +55,14 @@ export async function POST(req: Request) {
     );
   }
 
+  // Budget is consumed only after the request body is validated.
+  const aiBudget = await enforceAiBudget({
+    userId,
+    email: session.user.email,
+    kind: "chat",
+  });
+  if (!aiBudget.ok) return aiBudget.response;
+
   const chatMessages = messages as any[];
   const userMessage: string = lastMessage.content;
   const userMessageLower = userMessage.toLowerCase();
@@ -69,11 +71,13 @@ export async function POST(req: Request) {
   try {
     modelConfig = await getUserModelConfig(userId);
   } catch (error) {
+    const requestId = logInternalError("Chat model config", error, req.headers);
     return Response.json(
       {
         error: "AI_PROVIDER_UNAVAILABLE",
-        message: error instanceof Error ? error.message : "No server-managed AI provider is configured",
+        message: "No server-managed AI provider is configured",
         retryable: false,
+        requestId,
       },
       { status: 503 }
     );
@@ -104,7 +108,7 @@ export async function POST(req: Request) {
 
     let docJson = "";
     try {
-      const result = await generateText({
+      const result = await generateTextTraced({
         model,
         prompt: `Extract the content to save as a document from this conversation.
 
@@ -113,7 +117,7 @@ ${conversationHistory}
 
 Create a JSON response with title and content. Content should include the main information from the assistant's responses.
 Respond ONLY with JSON: {"title": "...", "content": "..."}`,
-      });
+      }, { name: "chat.save", agentType: "chat", userId, modelName, provider, input: userMessage });
       docJson = result.text;
     } catch (error) {
       if (isAiQuotaError(error)) return aiQuotaResponse();
@@ -184,11 +188,10 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       : "");
 
     try {
-      const { text } = await generateText({
-        model,
-        system: enhancedSystem,
-        messages: chatMessages,
-      });
+      const { text } = await generateTextTraced(
+        { model, system: enhancedSystem, messages: chatMessages },
+        { name: `chat.${agentMode}`, agentType: "chat", userId, workspaceId, modelName, provider }
+      );
 
       return new Response(text);
     } catch (error) {
@@ -210,6 +213,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       messages: chatMessages,
       context: { userId, workspaceId },
       maxSteps: 6,
+      trace: { name: "chat.agent", modelName, provider },
     });
   } catch (error) {
     if (isAiQuotaError(error)) {

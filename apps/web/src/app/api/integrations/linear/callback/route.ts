@@ -1,7 +1,9 @@
+import { isErrorCode, logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
-import { consumeIntegrationConnectState, getCanonicalAppUrl } from "@/lib/integrations/crypto";
+import { getCanonicalAppUrl } from "@/lib/integrations/crypto";
+import { authorizeIntegrationConnectState } from "@/lib/integrations/connect-state-guard";
 import {
   exchangeLinearOAuthCode,
   getLinearViewer,
@@ -28,13 +30,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const connectState = await consumeIntegrationConnectState("linear", state);
-  if (!connectState) {
+  // Session user must be the user who started the flow and still own the
+  // target workspace; the state is consumed atomically (one-time use).
+  const authorization = await authorizeIntegrationConnectState("linear", state, { consume: true });
+  if (!authorization.ok) {
     return redirectToSettings(request, {
       integration: "linear",
-      error: "invalid_state",
+      error: authorization.error,
     });
   }
+  const connectState = authorization.connectState;
 
   try {
     const callbackUrl =
@@ -98,9 +103,13 @@ export async function GET(request: NextRequest) {
 
     return redirectToSettings(request, { integration: "linear", connected: "true" });
   } catch (error) {
+    // Only machine-readable codes go into the redirect URL; anything else
+    // (provider/database errors) is logged server-side.
+    const message = error instanceof Error ? error.message : "";
+    if (!isErrorCode(message)) logInternalError("linear OAuth callback", error, request.headers);
     return redirectToSettings(request, {
       integration: "linear",
-      error: error instanceof Error ? error.message : "linear_callback_failed",
+      error: isErrorCode(message) ? message : "linear_callback_failed",
     });
   }
 }

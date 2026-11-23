@@ -9,19 +9,13 @@ type LinearTokenPayload = {
 
 type LinearGraphqlError = Error & { body?: unknown };
 
-export type LinearTeam = {
+type LinearTeam = {
   id: string;
   key: string;
   name: string;
 };
 
-export type LinearProject = {
-  id: string;
-  name: string;
-  teamIds: string[];
-};
-
-export type LinearIssue = {
+type LinearIssue = {
   id: string;
   identifier: string;
   title: string;
@@ -35,7 +29,12 @@ export type LinearIssue = {
   updatedAt: string;
 };
 
-export function getLinearConfig() {
+/** Per-request timeout for Linear API and OAuth calls. */
+const LINEAR_FETCH_TIMEOUT_MS = 15_000;
+/** Upper bound on issue pages followed per sync (100 issues per page). */
+const LINEAR_MAX_PAGES = 10;
+
+function getLinearConfig() {
   const clientId = process.env.LINEAR_CLIENT_ID;
   const clientSecret = process.env.LINEAR_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -47,6 +46,7 @@ export function getLinearConfig() {
 export async function exchangeLinearOAuthCode(code: string, redirectUri: string) {
   const { clientId, clientSecret } = getLinearConfig();
   const response = await fetch("https://api.linear.app/oauth/token", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -72,6 +72,7 @@ export async function exchangeLinearOAuthCode(code: string, redirectUri: string)
 async function refreshLinearOAuthToken(refreshToken: string) {
   const { clientId, clientSecret } = getLinearConfig();
   const response = await fetch("https://api.linear.app/oauth/token", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -104,12 +105,13 @@ export async function resolveLinearAccessToken(encrypted: string) {
   return { encrypted: null, accessToken: token.accessToken };
 }
 
-export async function linearGraphql<T>(
+async function linearGraphql<T>(
   accessToken: string,
   query: string,
   variables?: Record<string, unknown>
 ): Promise<T> {
   const response = await fetch("https://api.linear.app/graphql", {
+    signal: AbortSignal.timeout(LINEAR_FETCH_TIMEOUT_MS),
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -178,10 +180,8 @@ export async function listLinearIssues(
     variables.projectId = input.projectId;
   }
   const filter = filters.length > 0 ? `filter: { ${filters.join(", ")} },` : "";
-  const data = await linearGraphql<{ issues: { nodes: LinearIssue[] } }>(
-    accessToken,
-    `query NexusLinearIssues($teamId: String, $projectId: String) {
-      issues(first: 100, ${filter} orderBy: updatedAt) {
+  const query = `query NexusLinearIssues($teamId: String, $projectId: String, $after: String) {
+      issues(first: 100, after: $after, ${filter} orderBy: updatedAt) {
         nodes {
           id
           identifier
@@ -195,59 +195,19 @@ export async function listLinearIssues(
           project { id name }
           labels { nodes { name } }
         }
+        pageInfo { hasNextPage endCursor }
       }
-    }`,
-    variables
-  );
-  return data.issues.nodes;
-}
-
-export async function performLinearWrite(
-  accessToken: string,
-  operationType: string,
-  payload: Record<string, unknown>
-) {
-  if (operationType === "linear_comment") {
-    const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
-    const body = typeof payload.body === "string" ? payload.body : payload.comment;
-    if (!issueId || typeof body !== "string" || body.trim().length === 0) {
-      throw new Error("Linear comment requires payload.issueId and payload.body");
-    }
-    return linearGraphql(accessToken, `mutation NexusComment($issueId: String!, $body: String!) {
-      commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id url } }
-    }`, { issueId, body });
+    }`;
+  const issues: LinearIssue[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < LINEAR_MAX_PAGES; page += 1) {
+    const data: {
+      issues: { nodes: LinearIssue[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } };
+    } = await linearGraphql(accessToken, query, { ...variables, after });
+    issues.push(...data.issues.nodes);
+    const pageInfo = data.issues.pageInfo;
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) break;
+    after = pageInfo.endCursor;
   }
-
-  if (operationType === "linear_update_issue") {
-    const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
-    if (!issueId) throw new Error("Linear update requires payload.issueId");
-    const input: Record<string, unknown> = {};
-    if (typeof payload.title === "string") input.title = payload.title;
-    if (typeof payload.description === "string") input.description = payload.description;
-    if (typeof payload.stateId === "string") input.stateId = payload.stateId;
-    if (Object.keys(input).length === 0) {
-      throw new Error("Linear update requires at least one mutable field");
-    }
-    return linearGraphql(accessToken, `mutation NexusIssueUpdate($id: String!, $input: IssueUpdateInput!) {
-      issueUpdate(id: $id, input: $input) { success issue { id identifier url } }
-    }`, { id: issueId, input });
-  }
-
-  if (operationType === "linear_create_issue") {
-    const teamId = typeof payload.teamId === "string" ? payload.teamId : null;
-    const title = typeof payload.title === "string" ? payload.title : null;
-    if (!teamId || !title) throw new Error("Linear create requires payload.teamId and payload.title");
-    return linearGraphql(accessToken, `mutation NexusIssueCreate($input: IssueCreateInput!) {
-      issueCreate(input: $input) { success issue { id identifier url } }
-    }`, {
-      input: {
-        teamId,
-        title,
-        description: typeof payload.description === "string" ? payload.description : undefined,
-        projectId: typeof payload.projectId === "string" ? payload.projectId : undefined,
-      },
-    });
-  }
-
-  throw new Error(`Unsupported Linear operation: ${operationType}`);
+  return issues;
 }

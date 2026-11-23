@@ -1,0 +1,1 @@
+ALTER TABLE "docs" ADD COLUMN "is_favorite" integer DEFAULT 0 NOT NULL;

@@ -1,13 +1,38 @@
 /**
  * Transactional email — dependency-free.
  *
- * Sends via the Resend HTTP API when RESEND_API_KEY is configured; otherwise
- * logs the message (so local/dev flows surface the link instead of failing
- * silently). Auth uses this for email verification and password reset.
+ * Sends via the Resend HTTP API when RESEND_API_KEY is configured. Without a
+ * provider, development/test logs the message (so local flows surface the
+ * link); production refuses to send and never logs the content, because the
+ * content contains single-use auth links (password reset, verification).
+ * Auth uses this for email verification and password reset.
  */
 
 export function isEmailConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
+}
+
+/** Dev/test only: without a provider the message content is printed to the log. */
+function mayLogEmailContent(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Whether a password-reset link can reach the user. In production this needs
+ * a real provider; auth disables the reset endpoint otherwise so it fails
+ * clearly ("Reset password isn't enabled") instead of silently dropping or
+ * logging the link.
+ */
+export function canDeliverPasswordReset(): boolean {
+  return isEmailConfigured() || mayLogEmailContent();
+}
+
+export class EmailNotConfiguredError extends Error {
+  readonly code = "EMAIL_PROVIDER_NOT_CONFIGURED";
+  constructor() {
+    super("Email provider is not configured (set RESEND_API_KEY)");
+    this.name = "EmailNotConfiguredError";
+  }
 }
 
 const DEFAULT_FROM = "Nexus <onboarding@resend.dev>";
@@ -21,9 +46,14 @@ export async function sendEmail(opts: {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-    // No provider: don't fail the auth flow — surface the content in logs.
+    if (!mayLogEmailContent()) {
+      // Never write auth links to production logs.
+      console.error(`[email] No provider configured; refusing to send subject="${opts.subject}"`);
+      throw new EmailNotConfiguredError();
+    }
+    // Development: surface the content (e.g. the reset link) in the log.
     console.log(
-      `[email] No provider configured. to=${opts.to} subject="${opts.subject}"\n${opts.text || opts.html}`
+      `[email] No provider configured (dev only). to=${opts.to} subject="${opts.subject}"\n${opts.text || opts.html}`
     );
     return;
   }

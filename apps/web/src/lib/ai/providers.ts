@@ -9,7 +9,7 @@
  * OpenAI-compatible endpoint (e.g. http://localhost:11434/v1).
  */
 
-export interface OllamaConfig {
+interface OllamaConfig {
   baseURL: string;
   apiKey: string;
   model: string;

@@ -40,7 +40,12 @@ export async function GET() {
     });
     const providerStatus = getAiProviderStatus();
     const email = user?.email || session.user.email;
-    const usageLimits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
+    // Admin requires a verified address; the session user can be stale, so
+    // trust the DB row and fall back to "not admin" when it is missing.
+    const usageLimits = getAiUsageLimits(
+      isAdminEmail(email, user ? user.emailVerified : false),
+      isDemoEmail(email)
+    );
     const usageRemaining = await getAiUsageRemaining(session.user.id, email);
     const workspace = await ensureDefaultWorkspace(session.user.id);
     const repository = await db.query.workspaceRepositories.findFirst({

@@ -8,6 +8,7 @@
 import { Worker, NativeConnection } from "@temporalio/worker";
 import * as activities from "./activities";
 import { createRequire } from "module";
+import { resolveWorkerShutdownGraceTime, runWorkerUntilShutdown } from "./worker-lifecycle";
 
 const require = createRequire(import.meta.url);
 const taskQueue = process.env.TEMPORAL_TASK_QUEUE || "nexus-agents";
@@ -65,28 +66,33 @@ async function run() {
     address: process.env.TEMPORAL_ADDRESS || "localhost:7233",
   });
 
+  const shutdownGraceTime = resolveWorkerShutdownGraceTime();
   const worker = await Worker.create({
     connection,
     namespace: process.env.TEMPORAL_NAMESPACE || "default",
     taskQueue,
     workflowsPath: require.resolve("./workflows"),
     activities,
+    // In-flight activities get this long to finish after SIGTERM before they
+    // are cancelled. Keep it below the container stop_grace_period.
+    shutdownGraceTime: shutdownGraceTime as `${number} seconds`,
   });
 
   console.log("✅ Worker connected to Temporal");
   console.log(`📋 Task Queue: ${taskQueue}`);
+  console.log(`⏳ Shutdown grace time: ${shutdownGraceTime}`);
   console.log("🔄 Waiting for workflows...\n");
 
   const stopHeartbeat = await startWorkerHeartbeat();
-  const shutdown = async () => {
-    await stopHeartbeat();
-    process.exit(0);
-  };
-
-  process.once("SIGTERM", () => void shutdown());
-  process.once("SIGINT", () => void shutdown());
-
-  await worker.run();
+  const exitCode = await runWorkerUntilShutdown({
+    worker,
+    signals: process,
+    cleanup: async () => {
+      await stopHeartbeat();
+      await connection.close();
+    },
+  });
+  process.exit(exitCode);
 }
 
 run().catch((err) => {

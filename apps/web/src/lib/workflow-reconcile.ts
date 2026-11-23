@@ -28,12 +28,46 @@ type WorkflowClient = {
   getWorkflowResult: <TOutput = unknown>(workflowId: string) => Promise<TemporalResult & { result?: TOutput }>;
 };
 
-export function normalizeTemporalStatus(status: string) {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("completed")) return "completed";
-  if (normalized.includes("failed")) return "failed";
-  if (normalized.includes("canceled") || normalized.includes("terminated")) return "failed";
-  return "running";
+type ExecutionStatus = "running" | "completed" | "failed";
+
+/**
+ * Temporal `WorkflowExecutionStatusName` -> agent_executions.status.
+ * agent_executions only models running/completed/failed, so every closed
+ * non-success state maps to "failed" (with a descriptive error message).
+ * CONTINUED_AS_NEW is not terminal: the handle follows the new run.
+ */
+const TEMPORAL_STATUS_MAP: Record<string, ExecutionStatus> = {
+  RUNNING: "running",
+  CONTINUED_AS_NEW: "running",
+  PAUSED: "running",
+  UNSPECIFIED: "running",
+  UNKNOWN: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "failed",
+  CANCELED: "failed",
+  TERMINATED: "failed",
+  TIMED_OUT: "failed",
+};
+
+const TEMPORAL_CLOSED_FAILURE_MESSAGES: Record<string, string> = {
+  CANCELLED: "Workflow was cancelled",
+  CANCELED: "Workflow was cancelled",
+  TERMINATED: "Workflow was terminated",
+  TIMED_OUT: "Workflow timed out",
+};
+
+function temporalStatusKey(status: string) {
+  return status.trim().toUpperCase().replace(/^WORKFLOW_EXECUTION_STATUS_/, "");
+}
+
+export function normalizeTemporalStatus(status: string): ExecutionStatus {
+  return TEMPORAL_STATUS_MAP[temporalStatusKey(status)] ?? "running";
+}
+
+/** Default error for closed non-success states that carry no failure message. */
+function temporalClosedStatusMessage(status: string): string | undefined {
+  return TEMPORAL_CLOSED_FAILURE_MESSAGES[temporalStatusKey(status)];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,7 +106,10 @@ export async function reconcileWorkflowExecution(
     const status = normalizeTemporalStatus(temporalStatus.status);
 
     let output = execution.output;
-    let errorMessage = temporalStatus.error || execution.errorMessage;
+    let errorMessage =
+      temporalStatus.error ||
+      temporalClosedStatusMessage(temporalStatus.status) ||
+      execution.errorMessage;
 
     if (status !== "running") {
       const terminalResult =

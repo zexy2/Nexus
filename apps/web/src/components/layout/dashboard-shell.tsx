@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { signOut, useSession } from '@/lib/auth-client';
-import { useZeroStatus } from '@/lib/sync/zero';
+import { useZero, useZeroStatus } from '@/lib/sync/zero';
+import { signOutAndClearLocalData } from '@/lib/sync/sign-out';
+import { countUnsyncedCollabDocs } from '@/lib/collab/unsynced';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
 import { useT } from '@/lib/i18n/provider';
+import { createNavSequenceMatcher, isCommandPaletteShortcut, navShortcutLabel } from '@/lib/shortcuts';
 import {
   ListTodo,
   FileText,
@@ -31,6 +34,16 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -40,13 +53,17 @@ import {
 import { CommandPalette } from '@/components/shared/command-palette';
 import { CommandInput } from '@/components/shared/command-input';
 import { NexusMark } from '@/components/shared/nexus-mark';
+import { SyncIssuesPanel } from '@/components/shared/sync-issues-panel';
+import type { UnsyncedChanges } from '@/lib/sync/sign-out';
 
 // Navigation items
 const navItems = [
-  { key: 'plans', href: '/dashboard/docs', icon: FileText, shortcut: '⌘1' },
-  { key: 'work', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘2' },
-  { key: 'changes', href: '/dashboard/changes', icon: GitPullRequestArrow, shortcut: '⌘3' },
-  { key: 'runs', href: '/dashboard/agents', icon: Activity, shortcut: '⌘4' },
+  // Shortcuts are "G then <key>" sequences (see lib/shortcuts.ts); ⌘1-9 is
+  // left to the browser for tab switching.
+  { key: 'plans', href: '/dashboard/docs', icon: FileText, shortcut: navShortcutLabel('/dashboard/docs') },
+  { key: 'work', href: '/dashboard/tasks', icon: ListTodo, shortcut: navShortcutLabel('/dashboard/tasks') },
+  { key: 'changes', href: '/dashboard/changes', icon: GitPullRequestArrow, shortcut: navShortcutLabel('/dashboard/changes') },
+  { key: 'runs', href: '/dashboard/agents', icon: Activity, shortcut: navShortcutLabel('/dashboard/agents') },
 ];
 
 // Sync status types
@@ -79,7 +96,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
           <Link
             key={item.href}
             href={item.href}
-            onMouseEnter={() => setHoveredIndex(index)}
+            title={item.shortcut ? `${t(`nav.${item.key}`)} (${item.shortcut})` : undefined}            onMouseEnter={() => setHoveredIndex(index)}
             onMouseLeave={() => setHoveredIndex(null)}
             className={cn(
               'relative flex items-center gap-2 px-4 py-2.5 rounded-full',
@@ -93,7 +110,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
             {isActive && (
               <motion.span
                 layoutId="nav-pill"
-                className="absolute inset-0 bg-white/10 rounded-full"
+                className="absolute inset-0 bg-foreground/10 rounded-full"
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
             )}
@@ -105,7 +122,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-white/5 rounded-full"
+                className="absolute inset-0 bg-foreground/5 rounded-full"
               />
             )}
 
@@ -236,29 +253,70 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const userImage = user?.image || '';
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
+  const { engine, rejectedMutations } = useZero();
+  const [unsynced, setUnsynced] = useState<UnsyncedChanges | null>(null);
+  const [issuesOpen, setIssuesOpen] = useState(false);
+  const confirmResolver = useRef<((discard: boolean) => void) | null>(null);
+  const signingOut = useRef(false);
+
+  const resolveConfirm = useCallback((discard: boolean) => {
+    const resolve = confirmResolver.current;
+    confirmResolver.current = null;
+    setUnsynced(null);
+    resolve?.(discard);
+  }, []);
+
   const handleSignOut = useCallback(async () => {
-    await signOut();
-    router.push('/login');
-  }, [router]);
+    if (signingOut.current) return;
+    signingOut.current = true;
+    let navigate = true;
+    try {
+      // Final sync, confirm if changes are still unsynced, sign out, then
+      // delete this user's offline DB, pull cursor, command queue, chat store
+      // and collaborative documents' offline copies.
+      const result = await signOutAndClearLocalData({
+        engine,
+        signOut: () => signOut(),
+        // Open editors plus docs edited earlier (even if closed offline).
+        countUnsyncedDocuments: () => countUnsyncedCollabDocs(user?.id),
+        confirmDiscard: (changes) =>
+          new Promise<boolean>((resolve) => {
+            confirmResolver.current = resolve;
+            setUnsynced(changes);
+          }),
+        // Loaded lazily so the shell bundle does not pull in Yjs.
+        clearExtraLocalData: () =>
+          import('@/lib/collab/offline-store').then(({ clearCollabOfflineData }) =>
+            clearCollabOfflineData()
+          ),
+      });
+      navigate = result === 'signed-out';
+    } finally {
+      signingOut.current = false;
+      // Full navigation: drops every in-memory store and the sync engine.
+      if (navigate) window.location.assign('/login');
+    }
+  }, [engine, user?.id]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setClientReady(true), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (documented in lib/shortcuts.ts).
   useEffect(() => {
+    const matchNavSequence = createNavSequenceMatcher();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+      if (e.defaultPrevented) return;
+      if (isCommandPaletteShortcut(e)) {
         e.preventDefault();
-        setCommandOpen(true);
+        setCommandOpen((open) => !open);
+        return;
       }
-      if (e.metaKey || e.ctrlKey) {
-        const num = parseInt(e.key);
-        if (num >= 1 && num <= navItems.length) {
-          e.preventDefault();
-          router.push(navItems[num - 1].href);
-        }
+      const href = matchNavSequence(e);
+      if (href) {
+        e.preventDefault();
+        router.push(href);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -278,7 +336,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
           <div className="flex items-center gap-4">
             <button
               onClick={onMenuClick}
-              className="md:hidden p-2 rounded-lg glass-premium hover:bg-white/10 transition-colors"
+              className="md:hidden p-2 rounded-lg glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -293,14 +351,23 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               <span className="hidden md:inline font-semibold text-sm">Nexus</span>
             </Link>
 
-            {/* Sync status */}
-            <motion.div
+            {/* Sync status; opens the sync-issues panel (rejected changes). */}
+            <motion.button
+              type="button"
+              onClick={() => setIssuesOpen(true)}
+              aria-haspopup="dialog"
+              aria-label={
+                rejectedMutations > 0
+                  ? `${t(`nav.${syncState}`)}. ${t('syncStatus.issuesButton').replace('{count}', String(rejectedMutations))}`
+                  : `${t(`nav.${syncState}`)}. ${t('syncStatus.issuesTitle')}`
+              }
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className={cn(
-                'hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
-                syncState === 'synced' && 'text-emerald-500 bg-emerald-500/10',
-                syncState === 'syncing' && 'text-amber-500 bg-amber-500/10',
+                'items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                rejectedMutations > 0 ? 'flex' : 'hidden md:flex',
+                syncState === 'synced' && 'text-emerald-700 dark:text-emerald-500 bg-emerald-500/10',
+                syncState === 'syncing' && 'text-amber-700 dark:text-amber-500 bg-amber-500/10',
                 syncState === 'offline' && 'text-red-500 bg-red-500/10',
                 syncState === 'error' && 'text-red-500 bg-red-500/10'
               )}
@@ -309,8 +376,17 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               {syncState === 'syncing' && <RefreshCw className="h-3 w-3 animate-spin" />}
               {syncState === 'offline' && <CloudOff className="h-3 w-3" />}
               {syncState === 'error' && <AlertTriangle className="h-3 w-3" />}
-              <span className="capitalize">{t(`nav.${syncState}`)}</span>
-            </motion.div>
+              <span className="capitalize hidden md:inline">{t(`nav.${syncState}`)}</span>
+              {rejectedMutations > 0 && (
+                <span
+                  data-testid="sync-issues-badge"
+                  className="ml-0.5 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold normal-case tracking-normal text-white"
+                  aria-hidden="true"
+                >
+                  {rejectedMutations}
+                </span>
+              )}
+            </motion.button>
           </div>
 
           {/* Right side - Actions & User */}
@@ -320,7 +396,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setCommandOpen(true)}
-              className="p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Search className="h-4 w-4" />
             </motion.button>
@@ -330,7 +406,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => openModal('createDocument')}
-              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Plus className="h-4 w-4" />
             </motion.button>
@@ -340,7 +416,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => openModal('aiAssistant')}
-              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Sparkles className="h-4 w-4" />
             </motion.button>
@@ -349,7 +425,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/dashboard/settings"
-                className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+                className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
               >
                 <Settings className="h-4 w-4" />
               </Link>
@@ -362,9 +438,9 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="p-1 rounded-full glass-premium hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
                   >
-                    <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                    <Avatar className="h-8 w-8 ring-2 ring-foreground/10">
                       <AvatarImage src={userImage} />
                       <AvatarFallback className="bg-muted text-xs font-medium">
                         {userInitials}
@@ -396,11 +472,11 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             ) : (
               <button
                 type="button"
-                aria-label="User menu loading"
+                aria-label={t('shell.userMenuLoading')}
                 className="p-1 rounded-full glass-premium transition-colors"
                 disabled
               >
-                <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                <Avatar className="h-8 w-8 ring-2 ring-foreground/10">
                   <AvatarFallback className="bg-muted text-xs font-medium">
                     U
                   </AvatarFallback>
@@ -412,6 +488,48 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       </motion.div>
 
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <SyncIssuesPanel open={issuesOpen} onOpenChange={setIssuesOpen} />
+
+      <AlertDialog
+        open={unsynced !== null}
+        onOpenChange={(open) => {
+          if (!open && confirmResolver.current) resolveConfirm(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('syncStatus.signOutUnsyncedTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('syncStatus.signOutLossIntro')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1" data-testid="sign-out-loss-list">
+            {unsynced && unsynced.mutations + unsynced.documents > 0 && (
+              <li>
+                {t('syncStatus.signOutUnsyncedLine').replace(
+                  '{count}',
+                  String(unsynced.mutations + unsynced.documents)
+                )}
+              </li>
+            )}
+            {unsynced && unsynced.rejected > 0 && (
+              <li>{t('syncStatus.signOutRejectedLine').replace('{count}', String(unsynced.rejected))}</li>
+            )}
+            {unsynced && unsynced.commands > 0 && (
+              <li>{t('syncStatus.signOutCommandsLine').replace('{count}', String(unsynced.commands))}</li>
+            )}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => resolveConfirm(false)}>
+              {t('syncStatus.signOutStayAndRetry')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => resolveConfirm(true)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('syncStatus.signOutAnyway')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -509,13 +627,13 @@ function AICommandButton({ userId }: { userId: string }) {
         className={cn(
           'fixed bottom-6 right-6 z-40',
           'w-14 h-14 rounded-full',
-          'bg-white text-black',
+          'bg-foreground text-background',
           'flex items-center justify-center',
           'shadow-lg shadow-black/20',
           'hover:shadow-xl hover:shadow-black/30',
           'transition-shadow duration-200'
         )}
-        title={`${t('chat.askAiAnything')} (⌘J)`}
+        title={t('chat.askAiAnything')}
       >
         <Wand2 className="h-6 w-6" />
       </motion.button>
@@ -541,15 +659,15 @@ function AICommandButton({ userId }: { userId: string }) {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4"
             >
-              <div className="bg-neutral-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <div className="flex items-center gap-2 text-white/60 text-sm">
+              <div className="bg-popover border border-border rounded-2xl overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <Sparkles className="h-4 w-4" />
                     <span>{t('chat.askAiAnything')}</span>
                   </div>
                   <button
                     onClick={() => setIsOpen(false)}
-                    className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors"
                   >
                     <X className="h-4 w-4" />
                   </button>

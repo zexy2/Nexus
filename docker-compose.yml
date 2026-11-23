@@ -23,7 +23,11 @@ services:
 
   # Temporal Server (all-in-one development image)
   temporal:
-    image: temporalio/auto-setup:latest
+    # Pinned: `latest` silently upgrades the server on a pull. auto-setup is
+    # only published up to 1.29.x (Temporal deprecated it); moving to 1.30+
+    # means temporalio/server + admin-tools schema setup. Compatible with
+    # @temporalio/* 1.18 in packages/workflows.
+    image: temporalio/auto-setup:1.29.7
     container_name: nexus-temporal
     depends_on:
       postgres:
@@ -46,7 +50,7 @@ services:
 
   # Temporal Web UI
   temporal-ui:
-    image: temporalio/ui:latest
+    image: temporalio/ui:2.58.1
     container_name: nexus-temporal-ui
     depends_on:
       - temporal

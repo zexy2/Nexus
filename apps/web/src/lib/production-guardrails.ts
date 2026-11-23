@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { auditLogs, rateLimitBuckets } from "@nexus/database/schema";
+import { auditLogs, rateLimitBuckets, users } from "@nexus/database/schema";
 import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { getOllamaConfig, hasAnyLlmProvider, isLocalOnly } from "@/lib/ai/providers";
 import { isEphemeralDemoEmail } from "@/lib/demo-sessions";
 import { getTrustedProxyClientIP } from "@/lib/request-ip";
 
-export type PersistentLimitResult = {
+type PersistentLimitResult = {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -38,8 +38,13 @@ function boolEnv(name: string, defaultValue: boolean) {
 }
 
 function intEnv(name: string, defaultValue: number) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? value : defaultValue;
+  const raw = process.env[name];
+  // Unset or blank (e.g. compose passthrough `${VAR:-}`) means "use the default".
+  if (raw === undefined || raw.trim() === "") return defaultValue;
+  const value = Number(raw);
+  if (Number.isInteger(value) && value > 0) return value;
+  console.warn(`[guardrails] Invalid ${name}="${raw}" (expected positive integer); using default ${defaultValue}`);
+  return defaultValue;
 }
 
 export function isDemoMode() {
@@ -50,17 +55,49 @@ export function isPublicSignupEnabled() {
   return boolEnv("PUBLIC_SIGNUP_ENABLED", process.env.NODE_ENV !== "production");
 }
 
-export function isAiEnabled() {
+function isAiEnabled() {
   return boolEnv("AI_ENABLED", true);
 }
 
-export function isAdminEmail(email?: string | null) {
+/** True when the address is on the ADMIN_EMAILS allow-list (no verification check). */
+function isAdminEmailListed(email?: string | null) {
   if (!email) return false;
   return (process.env.ADMIN_EMAILS || "")
     .split(",")
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean)
     .includes(email.toLowerCase());
+}
+
+/**
+ * Admin privilege requires both an allow-listed address and a verified email.
+ * Otherwise anyone could register an ADMIN_EMAILS address before the real
+ * owner (e.g. when email verification is not enforced) and inherit admin
+ * rights. Fails closed: a missing/unknown `emailVerified` is not admin.
+ */
+export function isAdminEmail(email?: string | null, emailVerified?: boolean | null) {
+  return emailVerified === true && isAdminEmailListed(email);
+}
+
+/**
+ * Resolves admin status for callers that only know the user id/email: the
+ * verification flag is read from the database, and only when the address is
+ * allow-listed (so non-admin requests pay no extra query).
+ */
+export async function isVerifiedAdminUser(userId: string, email?: string | null) {
+  if (!isAdminEmailListed(email)) return false;
+  try {
+    const [row] = await db
+      .select({ email: users.email, emailVerified: users.emailVerified })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!row || row.email.toLowerCase() !== email!.toLowerCase()) return false;
+    return isAdminEmail(row.email, row.emailVerified);
+  } catch (error) {
+    console.error("[Admin] Failed to resolve admin status:", error);
+    return false;
+  }
 }
 
 export function isDemoEmail(email?: string | null) {
@@ -71,39 +108,63 @@ export function isDemoEmail(email?: string | null) {
   );
 }
 
+/**
+ * Default AI limits. Demo values are intentionally tiny (public visitors);
+ * regular verified users get real working room; the global caps are a
+ * cost-runaway safety net across all users. Every value is env-overridable.
+ */
+export const AI_LIMIT_DEFAULTS = {
+  globalDaily: 5000,
+  globalMinute: 120,
+  userDaily: 200,
+  userMinute: 20,
+  workflowDaily: 50,
+  chatDaily: 200,
+  adminDaily: 400,
+  adminMinute: 40,
+  adminWorkflowDaily: 100,
+  adminChatDaily: 400,
+  demoDaily: 3,
+  demoMinute: 1,
+  demoWorkflowDaily: 2,
+  demoChatDaily: 1,
+  maxStepsPerWorkflow: 4,
+} as const;
+
 export function getAiUsageLimits(isAdmin = false, isDemo = false) {
+  const d = AI_LIMIT_DEFAULTS;
+  const global = {
+    globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", d.globalDaily),
+    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", d.globalMinute),
+    maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", d.maxStepsPerWorkflow),
+  };
+
   if (isAdmin) {
     return {
-      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
-      userDaily: intEnv("AI_ADMIN_DAILY_LIMIT", 50),
-      userMinute: intEnv("AI_ADMIN_PER_MINUTE_LIMIT", 4),
-      workflowDaily: intEnv("AI_ADMIN_WORKFLOW_DAILY_LIMIT", 20),
-      chatDaily: intEnv("AI_ADMIN_CHAT_DAILY_LIMIT", 100),
-      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
+      ...global,
+      userDaily: intEnv("AI_ADMIN_DAILY_LIMIT", d.adminDaily),
+      userMinute: intEnv("AI_ADMIN_PER_MINUTE_LIMIT", d.adminMinute),
+      workflowDaily: intEnv("AI_ADMIN_WORKFLOW_DAILY_LIMIT", d.adminWorkflowDaily),
+      chatDaily: intEnv("AI_ADMIN_CHAT_DAILY_LIMIT", d.adminChatDaily),
     };
   }
 
   if (isDemo) {
     return {
-      globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
-      globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
-      userDaily: intEnv("AI_DEMO_DAILY_LIMIT", 3),
-      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", 1),
-      workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", 2),
-      chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", 1),
-      maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
+      ...global,
+      userDaily: intEnv("AI_DEMO_DAILY_LIMIT", d.demoDaily),
+      userMinute: intEnv("AI_DEMO_PER_MINUTE_LIMIT", d.demoMinute),
+      workflowDaily: intEnv("AI_DEMO_WORKFLOW_DAILY_LIMIT", d.demoWorkflowDaily),
+      chatDaily: intEnv("AI_DEMO_CHAT_DAILY_LIMIT", d.demoChatDaily),
     };
   }
 
   return {
-    globalDaily: intEnv("AI_GLOBAL_DAILY_LIMIT", 25),
-    globalMinute: intEnv("AI_GLOBAL_PER_MINUTE_LIMIT", 2),
-    userDaily: intEnv("AI_USER_DAILY_LIMIT", 5),
-    userMinute: intEnv("AI_USER_PER_MINUTE_LIMIT", 1),
-    workflowDaily: intEnv("AI_WORKFLOW_DAILY_LIMIT", 2),
-    chatDaily: intEnv("AI_CHAT_DAILY_LIMIT", intEnv("AI_CHAT_MESSAGES_PER_DAY", 3)),
-    maxStepsPerWorkflow: intEnv("AI_MAX_STEPS_PER_WORKFLOW", 4),
+    ...global,
+    userDaily: intEnv("AI_USER_DAILY_LIMIT", d.userDaily),
+    userMinute: intEnv("AI_USER_PER_MINUTE_LIMIT", d.userMinute),
+    workflowDaily: intEnv("AI_WORKFLOW_DAILY_LIMIT", intEnv("AI_WORKFLOWS_PER_DAY", d.workflowDaily)),
+    chatDaily: intEnv("AI_CHAT_DAILY_LIMIT", intEnv("AI_CHAT_MESSAGES_PER_DAY", d.chatDaily)),
   };
 }
 
@@ -324,7 +385,7 @@ export async function enforceAiBudget(options: {
     };
   }
 
-  const admin = isAdminEmail(options.email);
+  const admin = await isVerifiedAdminUser(options.userId, options.email);
   const limits = getAiUsageLimits(admin, isDemoEmail(options.email));
   const oneDay = 24 * 60 * 60 * 1000;
   const oneMinute = 60 * 1000;
@@ -372,7 +433,7 @@ export async function enforceAiBudget(options: {
 }
 
 export async function getAiUsageRemaining(userId: string, email?: string | null) {
-  const limits = getAiUsageLimits(isAdminEmail(email), isDemoEmail(email));
+  const limits = getAiUsageLimits(await isVerifiedAdminUser(userId, email), isDemoEmail(email));
   const now = new Date();
 
   const rows = await db

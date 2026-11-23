@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import { integrationConnectStates } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 
@@ -100,16 +100,28 @@ export async function updateIntegrationConnectStateMetadata(
     .where(eq(integrationConnectStates.id, row.id));
 }
 
+/**
+ * One-time, atomic consumption: the conditional UPDATE only matches an
+ * unconsumed, unexpired row, so two concurrent callbacks (or a replay) cannot
+ * both succeed. Returns the consumed row, or null when the state is unknown,
+ * expired or already used.
+ */
 export async function consumeIntegrationConnectState(provider: IntegrationProvider, state: string) {
-  const row = await readIntegrationConnectState(provider, state);
-  if (!row) return null;
-
-  await db
+  const now = new Date();
+  const [row] = await db
     .update(integrationConnectStates)
-    .set({ consumedAt: new Date() })
-    .where(eq(integrationConnectStates.id, row.id));
+    .set({ consumedAt: now })
+    .where(
+      and(
+        eq(integrationConnectStates.provider, provider),
+        eq(integrationConnectStates.stateHash, sha256Hex(state)),
+        isNull(integrationConnectStates.consumedAt),
+        gt(integrationConnectStates.expiresAt, now)
+      )
+    )
+    .returning();
 
-  return row;
+  return row ?? null;
 }
 
 export function getCanonicalAppUrl(requestOrigin?: string) {

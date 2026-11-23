@@ -15,6 +15,7 @@ NODE_BIN_DIR="${NODE_BIN_DIR:-$HOME/.hermes/node/bin}"
 SERVICE_PATH="$NODE_BIN_DIR:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/logs/maintenance}"
 BACKUP_RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
+RECEIPT_RETENTION_DAYS="${RECEIPT_RETENTION_DAYS:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-5min}"
 
 if ! command -v sudo >/dev/null 2>&1; then
@@ -114,8 +115,39 @@ Persistent=true
 WantedBy=timers.target
 UNIT
 
+sudo tee /etc/systemd/system/nexus-db-cleanup.service >/dev/null <<UNIT
+[Unit]
+Description=Nexus database retention cleanup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_GROUP
+WorkingDirectory=$ROOT_DIR
+Environment=PATH=$SERVICE_PATH
+Environment=ENV_FILE=$ENV_FILE
+Environment=LOG_DIR=$LOG_DIR
+Environment=RECEIPT_RETENTION_DAYS=$RECEIPT_RETENTION_DAYS
+ExecStart=/usr/bin/env bash $ROOT_DIR/scripts/maintenance-db-cleanup.sh
+UNIT
+
+sudo tee /etc/systemd/system/nexus-db-cleanup.timer >/dev/null <<'UNIT'
+[Unit]
+Description=Run Nexus database retention cleanup daily
+
+[Timer]
+OnCalendar=*-*-* 03:40:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now nexus-health-check.timer nexus-postgres-backup.timer nexus-docker-cleanup.timer
+sudo systemctl enable --now nexus-health-check.timer nexus-postgres-backup.timer nexus-docker-cleanup.timer nexus-db-cleanup.timer
 sudo systemctl start nexus-health-check.service
 
 echo "Installed Nexus maintenance timers:"

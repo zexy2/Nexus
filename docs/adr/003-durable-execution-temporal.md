@@ -92,3 +92,15 @@ export async function documentGenerationWorkflow(input: DocumentInput) {
 ## Related Decisions
 - ADR-001: Local-First Architecture
 - ADR-002: AI orchestration and coding-agent boundary
+
+## Status update (2026-11)
+
+The saga / compensation pattern mentioned above is **not implemented**. Workflows do not run compensating steps. Failure handling today relies on:
+
+- Leases with reclaim: a stalled run or external write can be reclaimed by another worker once its lease expires.
+- Finalize steps that record a terminal outcome (success or failure) in workflow history and the audit log.
+- Non-retryable error classification, so permanent provider failures stop retrying.
+- Idempotency receipts (`workflow_activity_receipts`) so retried activities do not repeat side effects; old receipts are removed by `scripts/maintenance-db-cleanup.sh`.
+- Worker drain on shutdown (`WORKER_SHUTDOWN_GRACE_TIME`).
+
+Compensation for partially applied external writes remains a follow-up.

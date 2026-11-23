@@ -73,8 +73,17 @@ class CommandStore {
 
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        this.db = request.result;
-        resolve(this.db);
+        const db = request.result;
+        this.db = db;
+        // Let another tab's sign-out delete the DB instead of blocking it.
+        db.onversionchange = () => {
+          db.close();
+          if (this.db === db) {
+            this.db = null;
+            this.dbPromise = null;
+          }
+        };
+        resolve(db);
       };
 
       request.onupgradeneeded = (event) => {
@@ -183,6 +192,28 @@ class CommandStore {
     });
   }
 
+  /** Close and delete the whole command DB (sign-out). */
+  async destroy(): Promise<void> {
+    const pending = this.dbPromise;
+    this.db?.close();
+    this.db = null;
+    this.dbPromise = null;
+    if (pending) {
+      try {
+        (await pending).close();
+      } catch {
+        // never opened
+      }
+    }
+    if (typeof indexedDB === "undefined") return;
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase(DB_NAME);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
+  }
+
   async clearCompleted(): Promise<void> {
     const completed = await this.getByStatus("completed");
     for (const cmd of completed) {
@@ -205,6 +236,13 @@ class CommandQueue {
   private statusListeners: Set<StatusChangeListener> = new Set();
   private isProcessing = false;
   private syncCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private onlineHandler: (() => void) | null = null;
+  private watchers = 0;
+  private resumed = false;
+  /** Poll timers, so stop/reset can cancel them. */
+  private pollTimers = new Set<ReturnType<typeof setTimeout>>();
+  /** Commands currently being polled, so a resume never double-polls. */
+  private polling = new Set<string>();
 
   /**
    * Create a new command (works offline)
@@ -250,6 +288,7 @@ class CommandQueue {
     this.isProcessing = true;
     
     try {
+      await this.resumeInterrupted();
       const pending = await commandStore.getPending();
       
       for (const cmd of pending) {
@@ -257,6 +296,23 @@ class CommandQueue {
       }
     } finally {
       this.isProcessing = false;
+    }
+  }
+
+  /**
+   * A reload while a command was "syncing" (upload may not have reached the
+   * server) or "processing" (server has it) used to leave it spinning forever.
+   * Re-queue the former (the server keys it by commandId) and resume polling
+   * the latter. Runs once per page load.
+   */
+  private async resumeInterrupted(): Promise<void> {
+    if (this.resumed) return;
+    this.resumed = true;
+    for (const cmd of await commandStore.getByStatus("syncing")) {
+      await commandStore.update(cmd.id, { status: "pending" });
+    }
+    for (const cmd of await commandStore.getByStatus("processing")) {
+      void this.pollForCompletion(cmd.id);
     }
   }
 
@@ -326,13 +382,25 @@ class CommandQueue {
   /**
    * Poll server for command completion
    */
+  private schedulePoll(fn: () => void, ms: number): void {
+    const timer = setTimeout(() => {
+      this.pollTimers.delete(timer);
+      fn();
+    }, ms);
+    this.pollTimers.add(timer);
+  }
+
   private async pollForCompletion(commandId: string): Promise<void> {
+    if (this.polling.has(commandId)) return;
+    this.polling.add(commandId);
     const maxAttempts = 60; // 5 minutes max (5s intervals)
     let attempts = 0;
+    const done = () => this.polling.delete(commandId);
 
     const poll = async () => {
       attempts++;
       if (attempts > maxAttempts) {
+        done();
         await commandStore.update(commandId, { 
           status: "failed",
           error: "Timeout waiting for completion",
@@ -355,6 +423,7 @@ class CommandQueue {
             processedAt: Date.now(),
             result: data.result,
           });
+          done();
           const cmd = await commandStore.get(commandId);
           if (cmd) this.notifyStatusChange(cmd);
           this.notifyListeners();
@@ -366,6 +435,7 @@ class CommandQueue {
             status: "failed",
             error: data.error,
           });
+          done();
           const cmd = await commandStore.get(commandId);
           if (cmd) this.notifyStatusChange(cmd);
           this.notifyListeners();
@@ -373,41 +443,69 @@ class CommandQueue {
         }
 
         // Still processing, poll again
-        setTimeout(poll, 5000);
+        this.schedulePoll(poll, 5000);
       } catch {
         // Network error, retry
-        setTimeout(poll, 5000);
+        this.schedulePoll(poll, 5000);
       }
     };
 
-    setTimeout(poll, 2000); // Start polling after 2 seconds
+    this.schedulePoll(poll, 2000); // Start polling after 2 seconds
   }
 
   /**
    * Start listening for online/offline events
    */
+  /**
+   * Reference-counted: every startSyncWatch() needs a matching stopSyncWatch().
+   * Only one online listener and one interval exist however many callers.
+   */
   startSyncWatch(): void {
     if (typeof window === "undefined") return;
+    this.watchers++;
+    if (this.onlineHandler) return;
 
-    // Listen for online event
-    window.addEventListener("online", () => {
-      console.log("🌐 Back online - processing pending commands...");
-      this.processPendingCommands();
-    });
-
-    // Also check periodically
+    this.onlineHandler = () => {
+      void this.processPendingCommands();
+    };
+    window.addEventListener("online", this.onlineHandler);
     this.syncCheckInterval = setInterval(() => {
-      if (navigator.onLine) {
-        this.processPendingCommands();
-      }
-    }, 30000); // Every 30 seconds
+      if (navigator.onLine) void this.processPendingCommands();
+    }, 30000);
   }
 
   stopSyncWatch(): void {
+    this.watchers = Math.max(0, this.watchers - 1);
+    if (this.watchers > 0) return;
+    this.teardownWatch();
+  }
+
+  /** True while an online listener / interval is installed (for tests). */
+  get isWatching(): boolean {
+    return this.onlineHandler !== null;
+  }
+
+  private teardownWatch(): void {
     if (this.syncCheckInterval) {
       clearInterval(this.syncCheckInterval);
       this.syncCheckInterval = null;
     }
+    if (this.onlineHandler && typeof window !== "undefined") {
+      window.removeEventListener("online", this.onlineHandler);
+    }
+    this.onlineHandler = null;
+  }
+
+  /** Sign-out: stop all timers and listeners and delete the command DB. */
+  async reset(): Promise<void> {
+    this.watchers = 0;
+    this.teardownWatch();
+    this.pollTimers.forEach((timer) => clearTimeout(timer));
+    this.pollTimers.clear();
+    this.polling.clear();
+    this.resumed = false;
+    await commandStore.destroy();
+    this.listeners.forEach((listener) => listener([]));
   }
 
   /**
@@ -482,7 +580,27 @@ class CommandQueue {
 
 export const commandQueue = new CommandQueue();
 
-// Auto-start sync watch in browser
-if (typeof window !== "undefined") {
-  commandQueue.startSyncWatch();
+/**
+ * Commands the server has not taken over yet: still queued, interrupted
+ * mid-upload, or failed (kept for a manual retry). Sign-out deletes the whole
+ * command DB, so these are lost with it. 0 when IndexedDB is unavailable.
+ */
+export async function countQueuedOfflineCommands(): Promise<number> {
+  if (typeof indexedDB === "undefined") return 0;
+  try {
+    const all = await commandStore.getAll();
+    return all.filter((cmd) => cmd.status === "pending" || cmd.status === "syncing" || cmd.status === "failed")
+      .length;
+  } catch {
+    return 0;
+  }
 }
+
+/** Sign-out helper: stop the queue and delete the command DB. */
+export function clearOfflineCommands(): Promise<void> {
+  return commandQueue.reset();
+}
+
+// The sync watch is started by the components that need it (command-input),
+// each with a matching stop on unmount; there is no module-level listener
+// that could never be removed.

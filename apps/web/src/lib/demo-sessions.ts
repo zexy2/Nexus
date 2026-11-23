@@ -72,7 +72,7 @@ export function secureAccessCodeMatches(expected: string, provided: string) {
   );
 }
 
-export type ProvisionedDemoSession = {
+type ProvisionedDemoSession = {
   userId: string;
   email: string;
   password: string;
@@ -149,6 +149,7 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
         name: "Isolated Demo Workspace",
         description: "Temporary workspace created for one public demo session.",
         ownerId: userId,
+        isDefault: true,
       })
       .returning({ id: workspaces.id });
 

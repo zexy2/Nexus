@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
+import { applyAppearance, normalizeTheme, storeAppearance } from "@/lib/appearance";
 
 interface SettingsData {
   profile: {
@@ -164,6 +165,7 @@ function SettingsContent() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [agentNotifications, setAgentNotifications] = useState(true);
   const [taskReminders, setTaskReminders] = useState(true);
+  const router = useRouter();
   const [theme, setTheme] = useState("system");
   const [compactMode, setCompactMode] = useState(false);
   const [offlineMode, setOfflineMode] = useState(true);
@@ -217,10 +219,10 @@ function SettingsContent() {
     );
   }, [originalSettings, name, defaultModel, autoSaveAiOutputs, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
   
-  // Fetch settings from API
-  const fetchSettings = useCallback(async () => {
+  // Fetch settings from API. isLoading starts true, so the initial load does
+  // not need to set it; explicit reloads go through fetchSettings below.
+  const loadSettings = useCallback(async () => {
     try {
-      setIsLoading(true);
       const response = await fetch("/api/settings");
       if (!response.ok) throw new Error("Failed to fetch settings");
       
@@ -272,12 +274,18 @@ function SettingsContent() {
       setIsLoading(false);
     }
   }, []);
+
+  const fetchSettings = useCallback(async () => {
+    setIsLoading(true);
+    await loadSettings();
+  }, [loadSettings]);
   
   useEffect(() => {
     if (session?.user) {
-      fetchSettings();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
+      void loadSettings();
     }
-  }, [session, fetchSettings]);
+  }, [session, loadSettings]);
   
   const userInitials = name
     .split(" ")
@@ -339,6 +347,13 @@ function SettingsContent() {
       if (!response.ok) throw new Error("Failed to save settings");
       
       setSaveSuccess(true);
+
+      // Apply the saved appearance right away and refresh the dashboard layout
+      // so <AppearanceSync> receives the new server values.
+      const appearance = { theme: normalizeTheme(theme), compact: compactMode };
+      applyAppearance(document.documentElement, appearance);
+      storeAppearance(appearance);
+      router.refresh();
       
       // Refresh settings to get the latest server-managed AI availability and quota.
       await fetchSettings();
@@ -408,7 +423,7 @@ function SettingsContent() {
         throw new Error(body?.message || body?.error || "Integration could not be connected");
       }
       const url = body.installUrl || body.authUrl;
-      if (url) window.location.href = url;
+      if (url) window.location.assign(url);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Integration could not be connected");
     } finally {
@@ -509,7 +524,7 @@ function SettingsContent() {
             {isSaving ? (
               <Loader2 className="size-4 mr-2 animate-spin" />
             ) : saveSuccess ? (
-              <CheckCircle2 className="size-4 mr-2 text-green-500" />
+              <CheckCircle2 className="size-4 mr-2 text-green-700 dark:text-green-500" />
             ) : (
               <Save className="size-4 mr-2" />
             )}
@@ -522,32 +537,32 @@ function SettingsContent() {
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-            <TabsList className="grid grid-cols-3 sm:grid-cols-7 w-full h-auto gap-1">
-              <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+            <TabsList className="flex flex-wrap justify-start w-full h-auto gap-1.5 p-1.5">
+              <TabsTrigger value="profile" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <User className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.profile")}</span>
               </TabsTrigger>
-              <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="ai" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Bot className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.ai")}</span>
               </TabsTrigger>
-              <TabsTrigger value="agents" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="agents" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <GitBranch className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{locale === "tr" ? "Agentlar" : "Agents"}</span>
               </TabsTrigger>
-              <TabsTrigger value="integrations" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="integrations" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Plug className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{locale === "tr" ? "Bağlantılar" : "Integrations"}</span>
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="notifications" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Bell className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.notifications")}</span>
               </TabsTrigger>
-              <TabsTrigger value="appearance" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="appearance" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Palette className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.appearance")}</span>
               </TabsTrigger>
-              <TabsTrigger value="sync" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="sync" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Database className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.sync")}</span>
               </TabsTrigger>
@@ -781,14 +796,14 @@ function SettingsContent() {
                   </div>
 
                   {!tokenCreationEnabled && (
-                    <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                    <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
                       {locale === "tr" ? "Geçici demo oturumlarında token üretimi kapalıdır." : "Token creation is disabled for temporary demo sessions."}
                     </p>
                   )}
 
                   {newAgentToken && (
                     <div className="border border-emerald-400/20 bg-emerald-400/5 p-4">
-                      <p className="mb-2 text-sm font-medium text-emerald-200">
+                      <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
                         {locale === "tr" ? "Bu tokenı şimdi kaydedin; tekrar gösterilmeyecek." : "Store this token now; it will not be shown again."}
                       </p>
                       <div className="flex gap-2">
@@ -860,7 +875,7 @@ function SettingsContent() {
                 </CardHeader>
                 <CardContent className="space-y-5">
                   {!integrationConnectionEnabled && (
-                    <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-200">
+                    <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
                       {locale === "tr"
                         ? "Geçici demo oturumlarında gerçek GitHub/Linear bağlantısı kapalıdır. Demo seed verisi salt okunur olarak gösterilir."
                         : "Temporary demo sessions cannot connect real GitHub/Linear accounts. Seeded demo data is shown read-only."}
@@ -913,7 +928,7 @@ function SettingsContent() {
                           )}
 
                           {existing?.lastError && (
-                            <p className="mt-3 text-xs leading-5 text-red-300">{existing.lastError}</p>
+                            <p className="mt-3 text-xs leading-5 text-red-700 dark:text-red-300">{existing.lastError}</p>
                           )}
 
                           {existing && !existing.seeded && (

@@ -5,7 +5,7 @@
  * https://tavily.com - AI-optimized search API
  */
 
-export interface TavilySearchResult {
+interface TavilySearchResult {
   title: string;
   url: string;
   content: string;
@@ -13,7 +13,7 @@ export interface TavilySearchResult {
   publishedDate?: string;
 }
 
-export interface TavilySearchResponse {
+interface TavilySearchResponse {
   query: string;
   results: TavilySearchResult[];
   answer?: string;
@@ -83,85 +83,3 @@ export async function searchWeb(
   }
 }
 
-/**
- * Get AI-optimized answer for a question
- */
-export async function getAnswer(
-  question: string
-): Promise<{ answer: string; sources: TavilySearchResult[] }> {
-  const searchResult = await searchWeb(question, {
-    searchDepth: "advanced",
-    includeAnswer: true,
-    maxResults: 5,
-  });
-
-  return {
-    answer: searchResult.answer || formatResultsAsAnswer(searchResult.results),
-    sources: searchResult.results,
-  };
-}
-
-/**
- * Format search results as a readable answer
- */
-function formatResultsAsAnswer(results: TavilySearchResult[]): string {
-  if (results.length === 0) {
-    return "No relevant information found.";
-  }
-
-  const sections = results.slice(0, 3).map((r, i) => {
-    return `**${i + 1}. ${r.title}**\n${r.content.slice(0, 300)}...\n_Source: ${r.url}_`;
-  });
-
-  return sections.join("\n\n");
-}
-
-/**
- * Search for recent news on a topic
- */
-export async function searchNews(
-  topic: string,
-  maxResults = 5
-): Promise<TavilySearchResult[]> {
-  const result = await searchWeb(`${topic} latest news`, {
-    maxResults,
-    searchDepth: "basic",
-    includeDomains: [
-      "reuters.com",
-      "bbc.com",
-      "cnn.com",
-      "nytimes.com",
-      "theguardian.com",
-      "techcrunch.com",
-      "wired.com",
-    ],
-  });
-
-  return result.results;
-}
-
-/**
- * Search for technical documentation
- */
-export async function searchDocs(
-  query: string,
-  technology?: string
-): Promise<TavilySearchResult[]> {
-  const searchQuery = technology ? `${technology} ${query}` : query;
-
-  const result = await searchWeb(searchQuery, {
-    maxResults: 5,
-    searchDepth: "advanced",
-    includeDomains: [
-      "docs.github.com",
-      "developer.mozilla.org",
-      "stackoverflow.com",
-      "medium.com",
-      "dev.to",
-      "npmjs.com",
-      "pypi.org",
-    ],
-  });
-
-  return result.results;
-}

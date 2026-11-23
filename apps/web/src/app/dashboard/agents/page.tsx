@@ -76,22 +76,22 @@ const runStatus = {
   running: {
     icon: CircleDot,
     labelKey: "agents.center.statusRunning",
-    className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-200",
+    className: "border-cyan-400/25 bg-cyan-400/10 text-cyan-800 dark:text-cyan-200",
   },
   pending: {
     icon: CircleDot,
     labelKey: "agents.center.statusPending",
-    className: "border-white/10 bg-white/5 text-white/50",
+    className: "border-border bg-foreground/5 text-foreground-subtle",
   },
   completed: {
     icon: CheckCircle2,
     labelKey: "agents.center.statusCompleted",
-    className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
+    className: "border-emerald-400/25 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200",
   },
   failed: {
     icon: XCircle,
     labelKey: "agents.center.statusFailed",
-    className: "border-red-400/25 bg-red-400/10 text-red-200",
+    className: "border-red-400/25 bg-red-400/10 text-red-800 dark:text-red-200",
   },
 };
 
@@ -150,6 +150,7 @@ export default function WorkflowCenterPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void Promise.all([fetchRuns(), fetchDocuments(), fetchCodingJobs()])
       .catch((error) =>
         showToast.error(error instanceof Error ? error.message : t("agents.center.centerLoadError"))
@@ -232,26 +233,26 @@ export default function WorkflowCenterPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1450px] px-4 pb-24 pt-10 md:px-8">
-      <header className="mb-10 flex flex-col justify-between gap-6 border-b border-white/10 pb-8 lg:flex-row lg:items-end">
+      <header className="mb-10 flex flex-col justify-between gap-6 border-b border-border pb-8 lg:flex-row lg:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-cyan-300">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
             <Activity className="size-4" />
             {t("agents.center.label")}
           </div>
-          <h1 className="text-3xl font-semibold text-white md:text-4xl">{t("agents.center.title")}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">{t("agents.center.title")}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-subtle">
             {t("agents.center.description")}
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-px bg-white/10">
+        <div className="grid grid-cols-3 gap-px bg-foreground/10">
           {[
             [t("agents.center.metricRunning"), metrics.running],
             [t("agents.center.metricCompleted"), metrics.completed],
             [t("agents.center.metricFailed"), metrics.failed],
           ].map(([label, value]) => (
             <div key={String(label)} className="min-w-24 bg-background px-4 py-3 text-center">
-              <div className="text-xl font-semibold text-white">{value}</div>
-              <div className="mt-1 text-[10px] uppercase tracking-wide text-white/35">{label}</div>
+              <div className="text-xl font-semibold text-foreground">{value}</div>
+              <div className="mt-1 text-[10px] uppercase tracking-wide text-foreground-faint">{label}</div>
             </div>
           ))}
         </div>
@@ -259,12 +260,12 @@ export default function WorkflowCenterPage() {
 
       <section className="mb-12">
         <div className="mb-4">
-          <h2 className="text-sm font-semibold text-white">{t("agents.center.startTitle")}</h2>
-          <p className="mt-1 text-xs text-white/40">
+          <h2 className="text-sm font-semibold text-foreground">{t("agents.center.startTitle")}</h2>
+          <p className="mt-1 text-xs text-foreground-faint">
             {t("agents.center.startDesc")}
           </p>
         </div>
-        <div className="grid border-y border-white/10 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid border-y border-border md:grid-cols-2 xl:grid-cols-4">
           {[
             {
               title: t("agents.center.outcomePlanTitle"),
@@ -295,15 +296,15 @@ export default function WorkflowCenterPage() {
               key={item.title}
               onClick={item.action}
               className={cn(
-                "group min-h-52 px-6 py-7 text-left transition-colors hover:bg-white/[0.04]",
-                index > 0 && "border-t border-white/10 md:border-l md:border-t-0",
+                "group min-h-52 px-6 py-7 text-left transition-colors hover:bg-foreground/[0.04]",
+                index > 0 && "border-t border-border md:border-l md:border-t-0",
                 index === 2 && "md:border-t xl:border-t-0"
               )}
             >
-              <item.icon className="size-5 text-white/55 transition-colors group-hover:text-white" />
-              <h3 className="mt-8 text-lg font-medium text-white">{item.title}</h3>
-              <p className="mt-2 text-sm leading-5 text-white/42">{item.description}</p>
-              <div className="mt-6 flex items-center gap-2 text-xs text-white/45 group-hover:text-white">
+              <item.icon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+              <h3 className="mt-8 text-lg font-medium text-foreground">{item.title}</h3>
+              <p className="mt-2 text-sm leading-5 text-foreground-subtle">{item.description}</p>
+              <div className="mt-6 flex items-center gap-2 text-xs text-foreground-subtle group-hover:text-foreground">
                 {t("agents.center.start")}
                 <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-1" />
               </div>
@@ -315,8 +316,8 @@ export default function WorkflowCenterPage() {
       <section className="mb-12">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-white">Coding Agent Runs</h2>
-            <p className="mt-1 text-xs text-white/40">
+            <h2 className="text-sm font-semibold text-foreground">{t("agents.codingRunsTitle")}</h2>
+            <p className="mt-1 text-xs text-foreground-faint">
               {locale === "tr"
                 ? "Yerel Codex, Claude Code ve Cursor istemcilerine teslim edilen sürümlenmiş işler."
                 : "Versioned work handed to local Codex, Claude Code, and Cursor clients."}
@@ -325,26 +326,26 @@ export default function WorkflowCenterPage() {
           <Button variant="outline" size="sm" onClick={() => void fetchCodingJobs()}>{t("common.refresh")}</Button>
         </div>
         {codingJobs.length === 0 ? (
-          <div className="flex min-h-36 items-center justify-center border-y border-white/10 text-sm text-white/35">
+          <div className="flex min-h-36 items-center justify-center border-y border-border text-sm text-foreground-faint">
             {locale === "tr" ? "Henüz coding agent çalışması yok." : "No coding-agent runs yet."}
           </div>
         ) : (
-          <div className="divide-y divide-white/10 border-y border-white/10">
+          <div className="divide-y divide-border border-y border-border">
             {codingJobs.map((job) => (
-              <Link key={job.id} href={`/dashboard/tasks/${job.task?.id || ""}`} className="grid gap-3 py-4 transition-colors hover:bg-white/[0.02] md:grid-cols-[140px_minmax(0,1fr)_180px]">
+              <Link key={job.id} href={`/dashboard/tasks/${job.task?.id || ""}`} className="grid gap-3 py-4 transition-colors hover:bg-foreground/[0.02] md:grid-cols-[140px_minmax(0,1fr)_180px]">
                 <div>
                   <Badge variant="outline" className={cn(
                     "uppercase",
-                    job.status === "outdated" ? "border-amber-400/25 text-amber-200" :
-                      job.status === "submitted" ? "border-blue-400/25 text-blue-200" :
-                        job.status === "approved" ? "border-emerald-400/25 text-emerald-200" : "border-white/10 text-white/55"
+                    job.status === "outdated" ? "border-amber-400/25 text-amber-800 dark:text-amber-200" :
+                      job.status === "submitted" ? "border-blue-400/25 text-blue-800 dark:text-blue-200" :
+                        job.status === "approved" ? "border-emerald-400/25 text-emerald-800 dark:text-emerald-200" : "border-border text-muted-foreground"
                   )}>{job.status}</Badge>
                 </div>
                 <div>
-                  <p className="font-medium text-white">{job.task?.title || job.id}</p>
-                  <p className="mt-1 text-xs text-white/35">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
+                  <p className="font-medium text-foreground">{job.task?.title || job.id}</p>
+                  <p className="mt-1 text-xs text-foreground-faint">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
                 </div>
-                <div className="text-xs text-white/35 md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
+                <div className="text-xs text-foreground-faint md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
               </Link>
             ))}
           </div>
@@ -354,8 +355,8 @@ export default function WorkflowCenterPage() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-white">{t("agents.center.runsTitle")}</h2>
-            <p className="mt-1 text-xs text-white/40">
+            <h2 className="text-sm font-semibold text-foreground">{t("agents.center.runsTitle")}</h2>
+            <p className="mt-1 text-xs text-foreground-faint">
               {t("agents.center.runsDesc")}
             </p>
           </div>
@@ -365,16 +366,16 @@ export default function WorkflowCenterPage() {
         </div>
 
         {loading ? (
-          <div className="flex min-h-64 items-center justify-center border-y border-white/10">
+          <div className="flex min-h-64 items-center justify-center border-y border-border">
             <Loader2 className="size-5 animate-spin text-muted-foreground" />
           </div>
         ) : runs.length === 0 ? (
-          <div className="flex min-h-64 flex-col items-center justify-center border-y border-white/10 text-center">
-            <Sparkles className="size-7 text-white/30" />
-            <p className="mt-3 text-sm text-white/50">{t("agents.center.noRuns")}</p>
+          <div className="flex min-h-64 flex-col items-center justify-center border-y border-border text-center">
+            <Sparkles className="size-7 text-foreground-faint" />
+            <p className="mt-3 text-sm text-foreground-subtle">{t("agents.center.noRuns")}</p>
           </div>
         ) : (
-          <div className="divide-y divide-white/10 border-y border-white/10">
+          <div className="divide-y divide-border border-y border-border">
             {runs.map((run) => {
               const config = runStatus[run.status] || runStatus.pending;
               const StatusIcon = config.icon;
@@ -391,21 +392,21 @@ export default function WorkflowCenterPage() {
                       />
                       {t(config.labelKey)}
                     </Badge>
-                    <div className="mt-2 font-mono text-[11px] text-white/30">
+                    <div className="mt-2 font-mono text-[11px] text-foreground-faint">
                       {(run.temporalWorkflowId || run.id).slice(0, 24)}
                     </div>
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium capitalize text-white">{getRunName(run, t)}</div>
+                    <div className="font-medium capitalize text-foreground">{getRunName(run, t)}</div>
                     {run.errorMessage ? (
-                      <p className="mt-1 text-sm text-red-300">{run.errorMessage}</p>
+                      <p className="mt-1 text-sm text-red-700 dark:text-red-300">{run.errorMessage}</p>
                     ) : (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {steps.length > 0 ? (
                           steps.map((step, index) => (
                             <span
                               key={`${run.id}-${index}`}
-                              className="border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-white/45"
+                              className="border border-border bg-foreground/[0.03] px-2 py-1 text-[11px] text-foreground-subtle"
                             >
                               {typeof step.agentName === "string"
                                 ? step.agentName.replaceAll("_", " ")
@@ -413,7 +414,7 @@ export default function WorkflowCenterPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-white/35">
+                          <span className="text-xs text-foreground-faint">
                             {run.status === "running"
                               ? t("agents.center.workflowRunning")
                               : t("agents.center.noStepMetadata")}
@@ -422,12 +423,12 @@ export default function WorkflowCenterPage() {
                       </div>
                     )}
                   </div>
-                  <div className="text-left text-xs text-white/35 md:text-right">
+                  <div className="text-left text-xs text-foreground-faint md:text-right">
                     <div>{formatRelativeDate(run.startedAt || run.createdAt, locale)}</div>
                     {run.input?.workflowType === "plan_impact" && (
                       <Link
                         href="/dashboard/changes"
-                        className="mt-2 inline-flex items-center gap-1 text-white/55 hover:text-white"
+                        className="mt-2 inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
                       >
                         {t("agents.center.openReview")}
                         <ArrowRight className="size-3" />
