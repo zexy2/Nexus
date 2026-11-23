@@ -203,6 +203,8 @@ export const docs = pgTable(
     coverUrl: text("cover_url"),
     isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer, sync serialization ile uyumlu
     isAiGenerated: integer("is_ai_generated").notNull().default(0),
+    // Workspace-level "starred" flag (0/1, like is_archived). Client-writable via sync.
+    isFavorite: integer("is_favorite").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
     // pgvector embedding for semantic search
     embedding: vector("embedding", { dimensions: 1536 }),

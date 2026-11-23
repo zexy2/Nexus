@@ -58,6 +58,7 @@ import { formatRelativeDate } from "@/lib/format";
 import { cleanDocTitle } from "@/lib/text";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { setDocFavorite } from "@/lib/sync/doc-favorite";
 import Link from "next/link";
 
 // Document type
@@ -85,7 +86,7 @@ function fromSyncDoc(d: SyncDoc): Document {
     createdAt: new Date(d.createdAt ?? d.updatedAt),
     createdBy: d.createdBy || "User",
     isAI: false,
-    isFavorite: false,
+    isFavorite: Boolean(d.isFavorite),
   };
 }
 
@@ -459,7 +460,7 @@ export default function DocsPage() {
       if (res.ok) {
         const data = await res.json();
         setDocuments(
-          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null; isAiGenerated?: boolean }) => ({
+          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null; isAiGenerated?: boolean; isFavorite?: boolean }) => ({
             id: d.id,
             title: d.title,
             iconEmoji: d.iconEmoji || "📄",
@@ -467,7 +468,7 @@ export default function DocsPage() {
             createdAt: new Date(d.updatedAt),
             createdBy: d.createdBy || "User",
             isAI: d.isAiGenerated === true,
-            isFavorite: false,
+            isFavorite: d.isFavorite === true,
           }))
         );
       }
@@ -640,13 +641,23 @@ export default function DocsPage() {
     showToast.success(t('docs.toastDeleted'));
   }, [archiveDoc, t]);
 
-  const handleToggleFavorite = useCallback((id: string) => {
-    setDocuments((prev) =>
-      prev.map((d) =>
-        d.id === id ? { ...d, isFavorite: !d.isFavorite } : d
-      )
-    );
-  }, []);
+  // Persisted through the sync engine (docs.is_favorite), so the star survives
+  // reloads and the next background sync instead of living only in React state.
+  const handleToggleFavorite = useCallback(async (id: string) => {
+    const current = documents.find((d) => d.id === id);
+    if (!current) return;
+    const next = !current.isFavorite;
+    setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, isFavorite: next } : d)));
+    try {
+      if (!engine) throw new Error("Sync engine not ready");
+      await setDocFavorite(engine, id, next);
+      showToast.success(next ? t('docs.detail.favoriteAdded') : t('ux.favoriteRemoved'));
+    } catch (error) {
+      console.error("Failed to update favorite:", error);
+      setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, isFavorite: !next } : d)));
+      showToast.error(t('ux.favoriteFailed'));
+    }
+  }, [documents, engine, t]);
 
   // Stats
   const stats = useMemo(() => ({

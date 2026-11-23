@@ -603,6 +603,9 @@ async function updateWithBase(table: "docs" | "tasks", existing: Row, data: Row,
 
 /** Map client and server representations of a value onto one comparable form. */
 function normalizeForCompare(key: string, value: unknown): unknown {
+  // 0/1 flag columns are NOT NULL DEFAULT 0; a client cache written before a
+  // flag existed (e.g. is_favorite) reports it as missing, which means 0.
+  if ((key === "isArchived" || key === "isFavorite") && (value === undefined || value === null)) return 0;
   if (value === undefined || value === null) return null;
   if (value instanceof Date) return value.getTime();
   if (typeof value === "boolean") return value ? 1 : 0;
@@ -759,6 +762,7 @@ function pickDocFields(data: Row): Row {
   copyNullableString(data, out, "iconEmoji");
   copyNullableString(data, out, "coverUrl");
   copyArchivedFlag(data, out);
+  copyIntegerFlag(data, out, "isFavorite");
   return out;
 }
 
@@ -836,12 +840,17 @@ function copyNullableId(data: Row, out: Row, key: string) {
 }
 
 function copyArchivedFlag(data: Row, out: Row) {
-  if (!("isArchived" in data) || data.isArchived === null) return;
-  const value = data.isArchived;
-  // is_archived is an integer column (0/1); the client models it as a boolean.
-  if (typeof value === "boolean") out.isArchived = value ? 1 : 0;
-  else if (value === 0 || value === 1) out.isArchived = value;
-  else reject(400, "INVALID_FIELD", "isArchived must be a boolean");
+  copyIntegerFlag(data, out, "isArchived");
+}
+
+function copyIntegerFlag(data: Row, out: Row, key: "isArchived" | "isFavorite") {
+  if (!(key in data) || data[key] === null) return;
+  const value = data[key];
+  // is_archived / is_favorite are integer columns (0/1); the client models
+  // them as booleans.
+  if (typeof value === "boolean") out[key] = value ? 1 : 0;
+  else if (value === 0 || value === 1) out[key] = value;
+  else reject(400, "INVALID_FIELD", `${key} must be a boolean`);
 }
 
 function optionalId(value: unknown, key: string): string | undefined {

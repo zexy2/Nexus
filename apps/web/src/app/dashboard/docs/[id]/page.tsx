@@ -32,6 +32,8 @@ import { LivingPlanInspector } from "./_components/living-plan-inspector";
 import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { useZero } from "@/lib/sync/zero";
+import { setDocFavorite } from "@/lib/sync/doc-favorite";
 
 // BlockNote content type alias
 type BlockNoteContent = PartialBlock[];
@@ -70,6 +72,7 @@ interface Document {
   content: BlockNoteContent;
   createdBy: string | null;
   isAiGenerated: boolean;
+  isFavorite?: boolean;
   updatedAt: string;
 }
 
@@ -98,6 +101,7 @@ export default function DocDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { engine } = useZero();
   const [doc, setDoc] = useState<Document | null>(null);
   const [title, setTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -503,8 +507,19 @@ export default function DocDetailPage() {
     }
   };
 
-  const handleFavorite = () => {
-    alert(t("docs.detail.favoriteAdded"));
+  const handleFavorite = async () => {
+    if (!doc) return;
+    const next = !doc.isFavorite;
+    setDoc((current) => (current ? { ...current, isFavorite: next } : current));
+    try {
+      if (!engine) throw new Error("Sync engine not ready");
+      await setDocFavorite(engine, doc.id, next);
+      showToast.success(next ? t("docs.detail.favoriteAdded") : t("ux.favoriteRemoved"));
+    } catch (err) {
+      console.error("Failed to update favorite:", err);
+      setDoc((current) => (current ? { ...current, isFavorite: !next } : current));
+      showToast.error(t("ux.favoriteFailed"));
+    }
   };
 
   const handleDuplicate = async () => {
@@ -556,9 +571,12 @@ export default function DocDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    // The dashboard <main> already reserves pt-20/md:pt-24 for the floating nav,
+    // so fill exactly the rest of the viewport: the editor scrolls internally
+    // and the AI bar stays pinned on screen.
+    <div className="flex h-[calc(100dvh-5rem)] flex-col overflow-hidden md:h-[calc(100dvh-6rem)]">
       {/* Header */}
-      <header className="flex items-center gap-4 border-b px-6 py-3">
+      <header className="flex shrink-0 items-center gap-4 border-b px-6 py-3">
         <Link href="/dashboard/docs">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="size-4" />
@@ -612,8 +630,8 @@ export default function DocDetailPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleFavorite}>
-                <Star className="size-4 mr-2" />
-                {t("docs.detail.addFavorite")}
+                <Star className={doc.isFavorite ? "size-4 mr-2 fill-amber-400 text-amber-400" : "size-4 mr-2"} />
+                {doc.isFavorite ? t("docs.favRemove") : t("docs.detail.addFavorite")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDuplicate}>
                 <Copy className="size-4 mr-2" />
@@ -630,7 +648,7 @@ export default function DocDetailPage() {
       </header>
 
       {/* Plan editor and traceability inspector */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid min-h-full w-full lg:grid-cols-[minmax(0,1fr)_minmax(440px,28vw)] 2xl:grid-cols-[minmax(0,1fr)_minmax(520px,30vw)]">
           <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10 xl:px-14">
             {session?.user ? (
@@ -656,7 +674,7 @@ export default function DocDetailPage() {
       </div>
 
       {/* AI Assistant Bar */}
-      <div className="border-t px-6 py-3 bg-muted/30">
+      <div className="shrink-0 border-t px-6 py-3 bg-muted/30">
         <div className="max-w-[1420px] mx-auto flex items-center gap-3">
           <Sparkles className="size-4 text-primary" />
           <span className="text-sm text-muted-foreground">

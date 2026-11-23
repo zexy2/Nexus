@@ -50,6 +50,8 @@ export interface Doc {
   coverUrl?: string;
   parentId?: string;
   isArchived: boolean;
+  /** 0/1 from the server, boolean after a local toggle. */
+  isFavorite?: number | boolean;
   creatorId?: string;
   createdBy?: string;
   createdAt: number;
