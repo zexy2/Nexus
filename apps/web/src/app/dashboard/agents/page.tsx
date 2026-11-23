@@ -150,6 +150,7 @@ export default function WorkflowCenterPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void Promise.all([fetchRuns(), fetchDocuments(), fetchCodingJobs()])
       .catch((error) =>
         showToast.error(error instanceof Error ? error.message : t("agents.center.centerLoadError"))

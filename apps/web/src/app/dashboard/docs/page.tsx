@@ -481,6 +481,7 @@ export default function DocsPage() {
 
   // Load on mount, and re-read the local store when background sync updates it.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous. Updates run after awaiting the local store/network; the only pre-await one (setIsLoading(true) with no sync engine) in practice happens on mount, where isLoading is already true.
     fetchDocuments();
     if (!engine || !workspaceId) return;
     return engine.subscribe("docs", async () => {

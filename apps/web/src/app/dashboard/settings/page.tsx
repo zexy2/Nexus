@@ -219,10 +219,10 @@ function SettingsContent() {
     );
   }, [originalSettings, name, defaultModel, autoSaveAiOutputs, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
   
-  // Fetch settings from API
-  const fetchSettings = useCallback(async () => {
+  // Fetch settings from API. isLoading starts true, so the initial load does
+  // not need to set it; explicit reloads go through fetchSettings below.
+  const loadSettings = useCallback(async () => {
     try {
-      setIsLoading(true);
       const response = await fetch("/api/settings");
       if (!response.ok) throw new Error("Failed to fetch settings");
       
@@ -274,12 +274,18 @@ function SettingsContent() {
       setIsLoading(false);
     }
   }, []);
+
+  const fetchSettings = useCallback(async () => {
+    setIsLoading(true);
+    await loadSettings();
+  }, [loadSettings]);
   
   useEffect(() => {
     if (session?.user) {
-      fetchSettings();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
+      void loadSettings();
     }
-  }, [session, fetchSettings]);
+  }, [session, loadSettings]);
   
   const userInitials = name
     .split(" ")
@@ -417,7 +423,7 @@ function SettingsContent() {
         throw new Error(body?.message || body?.error || "Integration could not be connected");
       }
       const url = body.installUrl || body.authUrl;
-      if (url) window.location.href = url;
+      if (url) window.location.assign(url);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Integration could not be connected");
     } finally {

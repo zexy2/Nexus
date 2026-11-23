@@ -652,6 +652,7 @@ export default function TasksPage() {
   }, [engine, workspaceId, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous. Updates run after awaiting the local store/network; the only pre-await one (setIsLoading(true) with no sync engine) in practice happens on mount, where isLoading is already true.
     void fetchTasks();
 
     // Re-read the local store when the background sync updates it, unless a drag

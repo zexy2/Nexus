@@ -124,7 +124,9 @@ export default function TaskDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [agentJob, setAgentJob] = useState<AgentJobDetail | null>(null);
+  const [loadedAgentJob, setAgentJob] = useState<AgentJobDetail | null>(null);
+  // A task without an agent job never shows a previously loaded one.
+  const agentJob = task?.agentJob?.id ? loadedAgentJob : null;
   const [agentAction, setAgentAction] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -160,10 +162,7 @@ export default function TaskDetailPage() {
   }, [router, taskId]);
 
   useEffect(() => {
-    if (!task?.agentJob?.id) {
-      setAgentJob(null);
-      return;
-    }
+    if (!task?.agentJob?.id) return;
     let cancelled = false;
     fetch(`/api/agent-jobs/${task.agentJob.id}`, { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)

@@ -186,6 +186,7 @@ export function LivingPlanInspector({
   }, [docId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void fetchPlan()
       .then(() => fetchImpactGraph())
       .catch(() => setPlan(null))

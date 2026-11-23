@@ -468,7 +468,11 @@ export default function DocDetailPage() {
   }, [saveTitle]);
 
   const flushTitleSaveRef = useRef(flushTitleSave);
-  flushTitleSaveRef.current = flushTitleSave;
+  // Keep the latest flush for the unmount cleanup below (refs are updated in
+  // effects, not during render). Declared first so it runs before that effect.
+  useEffect(() => {
+    flushTitleSaveRef.current = flushTitleSave;
+  }, [flushTitleSave]);
 
   // Flush any pending title save on unmount so the last value is never lost.
   useEffect(() => {
@@ -570,6 +574,12 @@ export default function DocDetailPage() {
     );
   }
 
+  // Only read when an editor mounts (both are keyed by doc.id) or seeds an
+  // empty Yjs doc once after sync. doc.content is kept current with the last
+  // materialized save, so the ref holding unsaved keystrokes is not read
+  // during render.
+  const editorInitialContent = doc.content && doc.content.length > 0 ? doc.content : undefined;
+
   return (
     // The dashboard <main> already reserves pt-20/md:pt-24 for the floating nav,
     // so fill exactly the rest of the viewport: the editor scrolls internally
@@ -657,14 +667,14 @@ export default function DocDetailPage() {
                 documentId={doc.id}
                 userId={session.user.id}
                 userName={session.user.name || session.user.email?.split('@')[0] || t("docs.detail.anonymous")}
-                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                initialContent={editorInitialContent}
                 onChange={handleContentChange}
                 editable={true}
               />
             ) : (
               <EditorWrapper
                 key={`editor-${doc.id}`}
-                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                initialContent={editorInitialContent}
                 editable={false}
               />
             )}

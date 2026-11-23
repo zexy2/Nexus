@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, 
@@ -43,6 +43,18 @@ interface CommandInputProps {
   onCommandCreated?: (command: OfflineCommand) => void;
 }
 
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
+const readOnline = () => navigator.onLine;
+// Assume online on the server and during hydration, as before.
+const readServerOnline = () => true;
+
 const statusConfig: Record<CommandStatus, { icon: typeof Loader2; color: string }> = {
   pending: { icon: Clock, color: 'text-amber-400' },
   syncing: { icon: Loader2, color: 'text-blue-400' },
@@ -62,29 +74,13 @@ export function CommandInput({
   const dateLocale = locale === 'tr' ? 'tr-TR' : 'en-US';
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = useSyncExternalStore(subscribeOnline, readOnline, readServerOnline);
   const [commands, setCommands] = useState<OfflineCommand[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [selectedCommand, setSelectedCommand] = useState<OfflineCommand | null>(null);
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Check online status
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Subscribe to command updates
   useEffect(() => {

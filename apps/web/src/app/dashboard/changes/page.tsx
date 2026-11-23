@@ -104,7 +104,9 @@ export default function ChangesPage() {
   const requestedChangeSetId = searchParams.get("changeSet");
   const [changeSets, setChangeSets] = useState<ChangeSetSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ChangeSetDetail | null>(null);
+  const [loadedDetail, setDetail] = useState<ChangeSetDetail | null>(null);
+  // Clearing the selection hides the detail without an extra state update.
+  const detail = selectedId ? loadedDetail : null;
   const [selectedProposalIds, setSelectedProposalIds] = useState<Set<string>>(new Set());
   const selectionInitializedFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -231,6 +233,7 @@ export default function ChangesPage() {
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void fetchChangeSets()
       .catch((error) => showToast.error(error instanceof Error ? error.message : t("changes.loadError")))
       .finally(() => setLoading(false));
@@ -238,10 +241,10 @@ export default function ChangesPage() {
 
   useEffect(() => {
     if (!selectedId) {
-      setDetail(null);
       selectionInitializedFor.current = null;
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void fetchDetail(selectedId).catch((error) =>
       showToast.error(error instanceof Error ? error.message : t("changes.detailLoadError"))
     );
