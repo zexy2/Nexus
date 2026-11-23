@@ -508,3 +508,70 @@ describe("POST /api/sync/push — limits and input validation", () => {
     expect(JSON.stringify(body)).not.toContain("docs_secret_fk");
   });
 });
+
+describe("POST /api/sync/push — data PostgreSQL cannot store", () => {
+  /** Behaves like PostgreSQL: NUL anywhere in a text/jsonb value is a data exception. */
+  function rejectNulLikePostgres(data: unknown) {
+    if (JSON.stringify(data).includes("\\u0000")) {
+      throw Object.assign(new Error("Failed query"), {
+        cause: Object.assign(new Error("unsupported Unicode escape sequence"), { code: "22P05" }),
+      });
+    }
+  }
+
+  it("NUL in content returns 4xx not 500", async () => {
+    valuesSpy.mockImplementation(rejectNulLikePostgres);
+
+    // Text and jsonb content: NUL is stripped (lone surrogates become U+FFFD),
+    // so the write succeeds instead of failing with a database error.
+    selectResults = [[{ id: "ws-1" }], []];
+    const res = await push("docs", "insert", {
+      id: "d-nul",
+      workspaceId: "ws-1",
+      title: "Ti\u0000tle",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "a\u0000b\ud800" }], "k\u0000": 1 }],
+    });
+    expect(res.status).toBeLessThan(500);
+    expect(res.status).toBe(200);
+    const written = valuesSpy.mock.calls[0][0] as Record<string, unknown>;
+    expect(written.title).toBe("Title");
+    expect(written.content).toEqual([{ type: "paragraph", content: [{ type: "text", text: "ab�" }], k: 1 }]);
+
+    // NUL in an identifier is never rewritten (it would target another row): 400.
+    valuesSpy.mockClear();
+    selectResults = [];
+    selectIndex = 0;
+    const badId = await push("docs", "update", { id: "d\u0000", workspaceId: "ws-1", title: "x" });
+    expect(badId.status).toBe(400);
+    expect(await badId.json()).toMatchObject({ code: "INVALID_FIELD" });
+    expectNoWrites();
+
+    // Any other data exception from PostgreSQL (class 22) is a permanent 422,
+    // so the client moves it to its rejected store instead of retrying forever.
+    selectResults = [[{ id: "ws-1" }], []];
+    selectIndex = 0;
+    valuesSpy.mockImplementationOnce(() => {
+      throw Object.assign(new Error("Failed query"), {
+        cause: Object.assign(new Error("value too long for type character varying(10)"), { code: "22001" }),
+      });
+    });
+    const tooLong = await push("docs", "insert", { id: "d2", workspaceId: "ws-1", title: "x", iconEmoji: "x".repeat(50) });
+    expect(tooLong.status).toBe(422);
+    const body = await tooLong.json();
+    expect(body).toMatchObject({ code: "INVALID_DATA" });
+    expect(JSON.stringify(body)).not.toContain("character varying");
+    expectAuditedRejection("INVALID_DATA");
+
+    valuesSpy.mockReset();
+  });
+
+  it("rejects absurdly deep payloads with 400", async () => {
+    let deep: unknown = "leaf";
+    for (let i = 0; i < 200; i++) deep = [deep];
+    selectResults = [[{ id: "ws-1" }], []];
+    const res = await push("docs", "insert", { id: "d", workspaceId: "ws-1", title: "x", content: deep });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "PAYLOAD_TOO_DEEP" });
+    expectNoWrites();
+  });
+});

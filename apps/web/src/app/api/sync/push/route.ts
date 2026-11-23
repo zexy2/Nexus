@@ -35,6 +35,14 @@
  * - Mutations without `base` (old cached clients that send the whole row) keep
  *   the previous behaviour: allowlisted fields are written as-is.
  *
+ * Input hygiene: strings PostgreSQL cannot store (NUL, lone surrogates) are
+ * cleaned before any query (lib/sync/sanitize.ts); ids containing NUL are
+ * rejected with 400. Any remaining PostgreSQL data exception (class 22, e.g.
+ * an over-long varchar or a malformed uuid) becomes 422 INVALID_DATA and an
+ * integrity violation (class 23) becomes 409 CONSTRAINT_VIOLATION. A payload
+ * the database refuses must never be a 500: the client retries 5xx, so a
+ * permanent 500 would block its offline queue.
+ *
  * Protected: Requires authentication
  * Rate Limited: 60 requests per minute per IP and per user, plus the shared
  * per-user document/task mutation budget used by the REST routes.
@@ -45,6 +53,7 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { toClientFormat } from "@/lib/sync/client-format";
+import { hasNul, PayloadTooDeepError, postgresErrorCode, sanitizePayload } from "@/lib/sync/sanitize";
 import {
   checkPersistentRateLimit,
   rateLimitResponse,
@@ -89,6 +98,8 @@ type ValidTable = (typeof VALID_TABLES)[number];
 type WorkspaceScopedTable = Exclude<ValidTable, "workspaces">;
 
 const VALID_OPERATIONS = new Set<string>(["insert", "update", "delete"]);
+/** Identifier fields: validated (never rewritten) by the sanitizer. */
+const ID_FIELDS: ReadonlySet<string> = new Set(["id", "workspaceId", "parentId", "docId", "assigneeId", "executionId"]);
 const AGENT_TYPES = new Set<string>(["supervisor", "researcher", "writer", "coder", "project_manager"]);
 
 class MutationRejected extends Error {
@@ -162,18 +173,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid mutation" }, { status: 400 });
     }
 
-    const { table, operation, data } = mutation;
+    const { table, operation } = mutation;
 
-    let base: MutationBase | undefined;
-    if (mutation.base !== undefined && mutation.base !== null) {
-      if (!isPlainObject(mutation.base) || !isPlainObject(mutation.base.fields)) {
-        return NextResponse.json({ error: "Invalid mutation base" }, { status: 400 });
+    for (const key of ID_FIELDS) {
+      if (hasNul(mutation.data[key])) {
+        return NextResponse.json(
+          { error: `${key} must not contain NUL characters`, code: "INVALID_FIELD", mutationId: mutation.id },
+          { status: 400 }
+        );
       }
-      const baseUpdatedAt = mutation.base.updatedAt;
-      base = {
-        fields: mutation.base.fields,
-        updatedAt: typeof baseUpdatedAt === "number" ? baseUpdatedAt : undefined,
-      };
+    }
+
+    let data: Row;
+    let base: MutationBase | undefined;
+    try {
+      // Strip what PostgreSQL cannot store (NUL, lone surrogates) instead of
+      // letting the query fail with a 500.
+      data = sanitizePayload(mutation.data, ID_FIELDS);
+      if (mutation.base !== undefined && mutation.base !== null) {
+        if (!isPlainObject(mutation.base) || !isPlainObject(mutation.base.fields)) {
+          return NextResponse.json({ error: "Invalid mutation base" }, { status: 400 });
+        }
+        const baseUpdatedAt = mutation.base.updatedAt;
+        base = {
+          fields: sanitizePayload(mutation.base.fields, ID_FIELDS),
+          updatedAt: typeof baseUpdatedAt === "number" ? baseUpdatedAt : undefined,
+        };
+      }
+    } catch (error) {
+      if (error instanceof PayloadTooDeepError) {
+        return NextResponse.json(
+          { error: error.message, code: "PAYLOAD_TOO_DEEP", mutationId: mutation.id },
+          { status: 400 }
+        );
+      }
+      throw error;
     }
 
     if (!isValidTable(table)) {
@@ -200,7 +234,8 @@ export async function POST(request: NextRequest) {
       success: true,
       mutationId: mutation.id,
     });
-  } catch (error) {
+  } catch (caught) {
+    const error = caught instanceof MutationRejected ? caught : fromDatabaseError(caught) ?? caught;
     if (error instanceof MutationRejected) {
       await writeAuditLog({
         userId,
@@ -231,11 +266,33 @@ export async function POST(request: NextRequest) {
     }
 
     console.error("[Sync Push] Error:", error);
+    // Genuinely unexpected (or transient: connection loss, deadlock, ...):
+    // the client retries with backoff and parks the mutation if it keeps
+    // failing while the server is otherwise healthy.
     return NextResponse.json(
       { error: "Failed to apply mutation", code: "SYNC_PUSH_FAILED" },
       { status: 500 }
     );
   }
+}
+
+/**
+ * A PostgreSQL error caused by the payload itself is permanent: retrying the
+ * same mutation fails the same way, so answer 4xx (the client moves it to its
+ * rejected store and continues) instead of 500 (the client retries).
+ */
+function fromDatabaseError(error: unknown): MutationRejected | undefined {
+  const code = postgresErrorCode(error);
+  if (!code) return undefined;
+  if (code.startsWith("22")) {
+    console.warn(`[Sync Push] Rejected payload the database refused (SQLSTATE ${code})`);
+    return new MutationRejected(422, "INVALID_DATA", "The change contains data the server cannot store");
+  }
+  if (code.startsWith("23")) {
+    console.warn(`[Sync Push] Rejected payload violating a constraint (SQLSTATE ${code})`);
+    return new MutationRejected(409, "CONSTRAINT_VIOLATION", "The change conflicts with existing data");
+  }
+  return undefined;
 }
 
 // ==========================================
@@ -855,7 +912,7 @@ function copyIntegerFlag(data: Row, out: Row, key: "isArchived" | "isFavorite") 
 
 function optionalId(value: unknown, key: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || value.length > 128) {
+  if (typeof value !== "string" || value.length > 128 || hasNul(value)) {
     reject(400, "INVALID_FIELD", `${key} must be a string id`);
   }
   return value;
