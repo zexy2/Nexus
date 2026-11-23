@@ -21,17 +21,12 @@ const DEFAULT_APPEARANCE: Appearance = { theme: "dark", compact: false };
 const COMPACT_CLASS = "compact";
 
 /**
- * Maps a stored preference to the theme that is actually applied.
- *
- * TEMPORARY: "system" is treated as dark. The light palette has not had a
- * visual pass yet (~740 hardcoded white/near-white colors across the
- * dashboard), so following an OS light preference would silently put users
- * on an unverified theme. Only an explicit "light" choice opts in. The stored
- * value stays "system", so restoring OS-following later is a change here (and
- * in APPEARANCE_BOOT_SCRIPT) only.
+ * Maps a stored value to a known preference. "system" is kept as-is and
+ * resolved against prefers-color-scheme by resolveTheme(); anything unknown
+ * falls back to dark, the app-wide default.
  */
 export function normalizeTheme(value: unknown): ThemePreference {
-  return value === "light" ? "light" : "dark";
+  return value === "light" || value === "system" ? value : "dark";
 }
 
 export function resolveTheme(theme: ThemePreference, prefersDark: boolean): "light" | "dark" {
@@ -88,6 +83,7 @@ export const APPEARANCE_BOOT_SCRIPT = `(function(){try{
 if(location.pathname.indexOf('/dashboard')!==0)return;
 var raw=localStorage.getItem(${JSON.stringify(APPEARANCE_STORAGE_KEY)});if(!raw)return;
 var a=JSON.parse(raw)||{};var t=a.theme==='light'?'light':'dark';
+if(a.theme==='system'&&window.matchMedia)t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 var r=document.documentElement;r.classList.remove(t==='dark'?'light':'dark');r.classList.add(t);
 r.style.colorScheme=t;if(a.compact===true)r.classList.add(${JSON.stringify(COMPACT_CLASS)});
 }catch(e){}})();`;

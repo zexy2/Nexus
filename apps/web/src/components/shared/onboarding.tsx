@@ -66,12 +66,12 @@ const controlPoints = [
   {
     id: "version",
     icon: "01",
-    color: "bg-white/10",
+    color: "bg-foreground/10",
   },
   {
     id: "requirements",
     icon: "02",
-    color: "bg-white/10",
+    color: "bg-foreground/10",
   },
   {
     id: "impact",
@@ -81,7 +81,7 @@ const controlPoints = [
   {
     id: "approval",
     icon: "04",
-    color: "bg-white/10",
+    color: "bg-foreground/10",
   },
 ];
 
@@ -178,24 +178,24 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
   const colorClasses = {
     violet: {
-      bg: "bg-white/10",
+      bg: "bg-foreground/10",
       text: "text-foreground",
-      ring: "ring-white/40",
+      ring: "ring-foreground/40",
     },
     blue: {
-      bg: "bg-white/10",
+      bg: "bg-foreground/10",
       text: "text-foreground",
-      ring: "ring-white/40",
+      ring: "ring-foreground/40",
     },
     emerald: {
       bg: "bg-emerald-500/15",
-      text: "text-emerald-400",
+      text: "text-emerald-700 dark:text-emerald-400",
       ring: "ring-emerald-500",
     },
     amber: {
-      bg: "bg-white/10",
+      bg: "bg-foreground/10",
       text: "text-foreground",
-      ring: "ring-white/40",
+      ring: "ring-foreground/40",
     },
     rose: {
       bg: "bg-rose-100",
@@ -228,13 +228,13 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
         {/* Close button */}
         <button
           onClick={handleSkip}
-          className="absolute top-4 right-4 z-10 p-2 rounded-full hover:bg-white/[0.06] transition-colors"
+          className="absolute top-4 right-4 z-10 p-2 rounded-full hover:bg-foreground/[0.06] transition-colors"
         >
           <X className="w-5 h-5 text-muted-foreground" />
         </button>
 
         {/* Progress bar */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-white/[0.06]">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-foreground/[0.06]">
           <motion.div
             className="h-full bg-foreground"
             initial={{ width: 0 }}
@@ -255,8 +255,8 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                   index === currentStep
                     ? "w-8 bg-foreground"
                     : index < currentStep
-                    ? "bg-white/30"
-                    : "bg-white/10"
+                    ? "bg-foreground/30"
+                    : "bg-foreground/10"
                 )}
               />
             ))}
@@ -301,7 +301,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 + index * 0.1 }}
-                      className="p-4 bg-white/[0.04] rounded-xl border border-border"
+                      className="p-4 bg-foreground/[0.04] rounded-xl border border-border"
                     >
                       <feature.icon className="w-6 h-6 text-muted-foreground mb-2" />
                       <h4 className="font-medium text-foreground mb-1">
@@ -329,7 +329,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       autoFocus
                     />
                   </div>
-                  <div className="p-4 bg-white/[0.04] rounded-xl">
+                  <div className="p-4 bg-foreground/[0.04] rounded-xl">
                     <div className="flex items-start gap-3">
                       <Zap className="w-5 h-5 text-foreground mt-0.5" />
                       <div>
@@ -356,8 +356,8 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                       className={cn(
                         "p-4 rounded-xl border-2 text-left transition-all",
                         selectedControlPoints.includes(point.id)
-                          ? "border-white/40 bg-popover/[0.06]"
-                          : "border-border hover:border-white/20"
+                          ? "border-foreground/40 bg-popover/[0.06]"
+                          : "border-border hover:border-foreground/20"
                       )}
                     >
                       <div className="flex items-start gap-3">
@@ -390,9 +390,9 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
               {step.id === "preferences" && (
                 <div className="max-w-sm mx-auto space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg bg-foreground/10 flex items-center justify-center">
                         <Sparkles className="w-5 h-5 text-foreground" />
                       </div>
                       <div>
@@ -408,10 +408,10 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-emerald-400" />
+                        <Shield className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
                       </div>
                       <div>
                         <p className="font-medium text-foreground">{t("onboarding.autoSave")}</p>
@@ -426,9 +426,9 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between p-4 bg-white/[0.04] rounded-xl">
+                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-lg bg-foreground/10 flex items-center justify-center">
                         <Bell className="w-5 h-5 text-foreground" />
                       </div>
                       <div>
@@ -454,21 +454,21 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     transition={{ type: "spring", delay: 0.2 }}
                     className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 mx-auto mb-6 flex items-center justify-center"
                   >
-                    <Check className="w-12 h-12 text-white" />
+                    <Check className="w-12 h-12 text-foreground" />
                   </motion.div>
                   <p className="text-muted-foreground mb-6">
                     {t("onboarding.readyBody")}
                   </p>
                   <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Check className="w-4 h-4 text-emerald-400" />
+                      <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                       {t("onboarding.workspaceCreated").replace(
                         "{name}",
                         workspaceName || t("onboarding.workspaceFallback")
                       )}
                     </span>
                     <span className="flex items-center gap-1">
-                      <Check className="w-4 h-4 text-emerald-400" />
+                      <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                       {t("onboarding.controlPointsReady").replace(
                         "{n}",
                         String(selectedControlPoints.length)
@@ -495,7 +495,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
           <Button
             onClick={handleNext}
-            className="bg-foreground hover:bg-foreground/90 text-white gap-2"
+            className="bg-foreground hover:bg-foreground/90 text-background gap-2"
           >
             {currentStep === steps.length - 1 ? (
               <>

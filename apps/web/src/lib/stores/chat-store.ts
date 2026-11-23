@@ -70,7 +70,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Nexus',
     description: 'Chooses the required workspace tools automatically',
     icon: Sparkles,
-    color: 'text-violet-400',
+    color: 'text-violet-700 dark:text-violet-400',
     gradient: 'from-violet-500 to-purple-600',
   },
   research: {
@@ -78,7 +78,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Research',
     description: 'Workspace analysis and optional web search',
     icon: Search,
-    color: 'text-blue-400',
+    color: 'text-blue-700 dark:text-blue-400',
     gradient: 'from-blue-500 to-cyan-500',
   },
   writer: {
@@ -86,7 +86,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Drafting',
     description: 'Structured document drafting and editing',
     icon: FileText,
-    color: 'text-emerald-400',
+    color: 'text-emerald-700 dark:text-emerald-400',
     gradient: 'from-emerald-500 to-teal-500',
   },
   coder: {
@@ -94,7 +94,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Technical help',
     description: 'Code explanation and technical problem solving',
     icon: Code,
-    color: 'text-orange-400',
+    color: 'text-orange-700 dark:text-orange-400',
     gradient: 'from-orange-500 to-amber-500',
   },
   task: {
@@ -102,7 +102,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Work breakdown',
     description: 'Turns scope into structured delivery tasks',
     icon: ListTodo,
-    color: 'text-rose-400',
+    color: 'text-rose-700 dark:text-rose-400',
     gradient: 'from-rose-500 to-pink-500',
   },
 };

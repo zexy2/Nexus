@@ -7,6 +7,7 @@ import "@blocknote/mantine/style.css";
 import dynamic from "next/dynamic";
 import { useCallback } from "react";
 import { useT } from "@/lib/i18n/provider";
+import { useResolvedTheme } from "@/lib/use-resolved-theme";
 
 interface EditorProps {
   initialContent?: PartialBlock[];
@@ -16,6 +17,7 @@ interface EditorProps {
 
 function EditorComponent({ initialContent, onChange, editable = true }: EditorProps) {
   const t = useT();
+  const resolvedTheme = useResolvedTheme();
   const editorPlaceholder = t("docs.detail.editorPlaceholder");
   const editor = useCreateBlockNote(
     {
@@ -40,12 +42,12 @@ function EditorComponent({ initialContent, onChange, editable = true }: EditorPr
   }, [editor, onChange]);
 
   return (
-    <div className="min-h-[600px] rounded-xl border border-white/[0.06] bg-card shadow-sm shadow-black/20">
+    <div className="min-h-[600px] rounded-xl border border-border bg-card shadow-sm shadow-black/20">
       <BlockNoteView
         editor={editor}
         editable={editable}
         onChange={handleChange}
-        theme="dark"
+        theme={resolvedTheme}
         className="py-8"
       />
     </div>
@@ -61,7 +63,7 @@ export const EditorWrapper = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[600px] rounded-xl border border-white/[0.06] bg-card animate-pulse" />
+      <div className="min-h-[600px] rounded-xl border border-border bg-card animate-pulse" />
     ),
   }
 );

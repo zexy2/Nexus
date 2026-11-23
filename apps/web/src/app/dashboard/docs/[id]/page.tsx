@@ -621,7 +621,7 @@ export default function DocDetailPage() {
           </div>
 
           {doc.isAiGenerated && (
-            <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
+            <div className="hidden items-center gap-1 rounded-full border border-border bg-foreground/10 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
               <Sparkles className="size-3" />
               {t("docs.detail.aiGenerated")}
             </div>
@@ -640,7 +640,7 @@ export default function DocDetailPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleFavorite}>
-                <Star className={doc.isFavorite ? "size-4 mr-2 fill-amber-400 text-amber-400" : "size-4 mr-2"} />
+                <Star className={doc.isFavorite ? "size-4 mr-2 fill-amber-400 text-amber-700 dark:text-amber-400" : "size-4 mr-2"} />
                 {doc.isFavorite ? t("docs.favRemove") : t("docs.detail.addFavorite")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDuplicate}>
@@ -700,7 +700,7 @@ export default function DocDetailPage() {
               {aiLoading === "summarize" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.summarizing")}</>
               ) : aiSuccess === "summarize" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.summarizeDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.summarizeDone")}</>
               ) : (
                 t("docs.detail.summarize")
               )}
@@ -714,7 +714,7 @@ export default function DocDetailPage() {
               {aiLoading === "expand" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.expanding")}</>
               ) : aiSuccess === "expand" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.expandDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.expandDone")}</>
               ) : (
                 t("docs.detail.expand")
               )}
@@ -728,7 +728,7 @@ export default function DocDetailPage() {
               {aiLoading === "improve" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.improving")}</>
               ) : aiSuccess === "improve" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.improveDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.improveDone")}</>
               ) : (
                 t("docs.detail.improve")
               )}

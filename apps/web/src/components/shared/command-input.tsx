@@ -56,11 +56,11 @@ const readOnline = () => navigator.onLine;
 const readServerOnline = () => true;
 
 const statusConfig: Record<CommandStatus, { icon: typeof Loader2; color: string }> = {
-  pending: { icon: Clock, color: 'text-amber-400' },
-  syncing: { icon: Loader2, color: 'text-blue-400' },
-  processing: { icon: Brain, color: 'text-violet-400' },
-  completed: { icon: CheckCircle2, color: 'text-emerald-400' },
-  failed: { icon: AlertCircle, color: 'text-red-400' },
+  pending: { icon: Clock, color: 'text-amber-700 dark:text-amber-400' },
+  syncing: { icon: Loader2, color: 'text-blue-700 dark:text-blue-400' },
+  processing: { icon: Brain, color: 'text-violet-700 dark:text-violet-400' },
+  completed: { icon: CheckCircle2, color: 'text-emerald-700 dark:text-emerald-400' },
+  failed: { icon: AlertCircle, color: 'text-red-700 dark:text-red-400' },
 };
 
 export function CommandInput({ 
@@ -184,9 +184,9 @@ export function CommandInput({
       <div className="relative">
         <div className={cn(
           'relative flex items-end gap-2 p-3 rounded-xl',
-          'bg-zinc-900/80 backdrop-blur-xl',
+          'bg-popover/80 backdrop-blur-xl',
           'border transition-all duration-200',
-          isOnline ? 'border-zinc-700/50' : 'border-amber-500/50',
+          isOnline ? 'border-border' : 'border-amber-500/50',
           'focus-within:border-violet-500/50 focus-within:ring-2 focus-within:ring-violet-500/20'
         )}>
           {/* Offline indicator */}
@@ -194,8 +194,8 @@ export function CommandInput({
             'absolute -top-2 left-4 px-2 py-0.5 rounded-full text-[10px] font-medium',
             'flex items-center gap-1',
             isOnline 
-              ? 'bg-emerald-500/20 text-emerald-400' 
-              : 'bg-amber-500/20 text-amber-400'
+              ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' 
+              : 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
           )}>
             {isOnline ? (
               <>
@@ -212,7 +212,7 @@ export function CommandInput({
 
           {/* Icon */}
           <div className="p-2 rounded-lg bg-violet-500/20">
-            <Sparkles className="w-5 h-5 text-violet-400" />
+            <Sparkles className="w-5 h-5 text-violet-700 dark:text-violet-400" />
           </div>
 
           {/* Textarea */}
@@ -225,7 +225,7 @@ export function CommandInput({
             rows={1}
             className={cn(
               'flex-1 bg-transparent resize-none',
-              'text-sm text-zinc-100 placeholder:text-zinc-500',
+              'text-sm text-foreground placeholder:text-foreground-subtle',
               'focus:outline-none',
               'min-h-[24px] max-h-[120px]'
             )}
@@ -248,7 +248,7 @@ export function CommandInput({
               'p-2 rounded-lg transition-all duration-200',
               input.trim() && !isSubmitting
                 ? 'bg-violet-500 text-white hover:bg-violet-600'
-                : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                : 'bg-muted text-foreground-subtle cursor-not-allowed'
             )}
           >
             {isSubmitting ? (
@@ -263,8 +263,8 @@ export function CommandInput({
             onClick={() => setShowHistory(!showHistory)}
             className={cn(
               'relative p-2 rounded-lg transition-all duration-200',
-              'bg-zinc-800 hover:bg-zinc-700',
-              showHistory ? 'text-violet-400' : 'text-zinc-400',
+              'bg-muted hover:bg-foreground/15',
+              showHistory ? 'text-violet-700 dark:text-violet-400' : 'text-muted-foreground',
               commands.length > 0 && 'ring-1 ring-violet-500/30'
             )}
             title={t('commandInput.history')}
@@ -289,7 +289,7 @@ export function CommandInput({
               onClick={() => setShowHistory(true)}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1 rounded-full',
-                'bg-amber-500/20 text-amber-400 text-xs font-medium',
+                'bg-amber-500/20 text-amber-700 dark:text-amber-400 text-xs font-medium',
                 'hover:bg-amber-500/30 transition-colors'
               )}
             >
@@ -310,18 +310,18 @@ export function CommandInput({
             exit={{ opacity: 0, height: 0 }}
             className="mt-8 overflow-hidden"
           >
-            <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-700/50 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
-                <span className="text-xs font-medium text-zinc-400">{t('commandInput.history')}</span>
+            <div className="bg-popover/80 backdrop-blur-xl border border-border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                <span className="text-xs font-medium text-muted-foreground">{t('commandInput.history')}</span>
                 <button
                   onClick={() => setShowHistory(false)}
-                  className="p-1 rounded hover:bg-zinc-800 transition-colors"
+                  className="p-1 rounded hover:bg-muted transition-colors"
                 >
-                  <X className="w-3.5 h-3.5 text-zinc-500" />
+                  <X className="w-3.5 h-3.5 text-foreground-subtle" />
                 </button>
               </div>
               
-              <div className="max-h-60 overflow-y-auto divide-y divide-zinc-800/50">
+              <div className="max-h-60 overflow-y-auto divide-y divide-border">
                 {commands.slice(0, 10).map((cmd) => {
                   const config = statusConfig[cmd.status];
                   const StatusIcon = config.icon;
@@ -336,13 +336,13 @@ export function CommandInput({
                       className={cn(
                         "px-4 py-3 transition-colors",
                         isClickable 
-                          ? "hover:bg-zinc-800/50 cursor-pointer" 
-                          : "hover:bg-zinc-800/30"
+                          ? "hover:bg-muted/50 cursor-pointer" 
+                          : "hover:bg-muted/30"
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-zinc-200 truncate">
+                          <p className="text-sm text-foreground truncate">
                             {cmd.command}
                           </p>
                           <div className="flex items-center gap-2 mt-1">
@@ -354,21 +354,21 @@ export function CommandInput({
                             <span className={cn('text-xs', config.color)}>
                               {t(`commandInput.status.${cmd.status}`)}
                             </span>
-                            <span className="text-xs text-zinc-600">
+                            <span className="text-xs text-foreground-faint">
                               {formatTime(cmd.createdAt)}
                             </span>
                             {isClickable && (
-                              <span className="text-xs text-zinc-600 flex items-center gap-1">
+                              <span className="text-xs text-foreground-faint flex items-center gap-1">
                                 <ExternalLink className="w-3 h-3" />
                                 {t('commandInput.details')}
                               </span>
                             )}
                           </div>
                           {cmd.error && (
-                            <p className="text-xs text-red-400 mt-1 truncate">{cmd.error}</p>
+                            <p className="text-xs text-red-700 dark:text-red-400 mt-1 truncate">{cmd.error}</p>
                           )}
                           {cmd.result && (
-                            <p className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                            <p className="text-xs text-foreground-subtle mt-1 line-clamp-2">
                               {cmd.result.output.substring(0, 100)}...
                             </p>
                           )}
@@ -378,7 +378,7 @@ export function CommandInput({
                         {cmd.status === 'failed' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleRetry(cmd.id); }}
-                            className="px-2 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+                            className="px-2 py-1 text-xs bg-muted hover:bg-foreground/15 rounded transition-colors"
                           >
                             Tekrar Dene
                           </button>
@@ -386,7 +386,7 @@ export function CommandInput({
                         {cmd.status === 'pending' && (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleCancel(cmd.id); }}
-                            className="p-1 text-zinc-500 hover:text-red-400 transition-colors"
+                            className="p-1 text-foreground-subtle hover:text-red-700 dark:hover:text-red-400 transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -403,10 +403,10 @@ export function CommandInput({
 
       {/* Command Result Modal */}
       <Dialog open={!!selectedCommand} onOpenChange={(open) => !open && setSelectedCommand(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col bg-zinc-900 border-zinc-700">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col bg-popover border-border">
           <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-zinc-100">
-              <Brain className="w-5 h-5 text-violet-400" />
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <Brain className="w-5 h-5 text-violet-700 dark:text-violet-400" />
               {t('commandInput.resultTitle')}
             </DialogTitle>
           </DialogHeader>
@@ -414,22 +414,22 @@ export function CommandInput({
           {selectedCommand && (
             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
               {/* Command */}
-              <div className="bg-zinc-800/50 rounded-lg p-4">
+              <div className="bg-muted/50 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-xs text-zinc-500 uppercase tracking-wider">{t('commandInput.command')}</span>
-                    <p className="text-sm text-zinc-200 mt-1">{selectedCommand.command}</p>
+                    <span className="text-xs text-foreground-subtle uppercase tracking-wider">{t('commandInput.command')}</span>
+                    <p className="text-sm text-foreground mt-1">{selectedCommand.command}</p>
                   </div>
                   <div className={cn(
                     "px-2 py-1 rounded-full text-xs font-medium",
                     selectedCommand.status === 'completed' 
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-red-500/20 text-red-400"
+                      ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                      : "bg-red-500/20 text-red-700 dark:text-red-400"
                   )}>
                     {t(`commandInput.status.${selectedCommand.status === 'completed' ? 'completed' : 'failed'}`)}
                   </div>
                 </div>
-                <p className="text-xs text-zinc-600 mt-2">
+                <p className="text-xs text-foreground-faint mt-2">
                   {formatDate(selectedCommand.createdAt)}
                 </p>
               </div>
@@ -437,11 +437,11 @@ export function CommandInput({
               {/* Error */}
               {selectedCommand.error && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-red-400">
+                  <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
                     <AlertCircle className="w-4 h-4" />
                     <span className="text-sm font-medium">{t('commandInput.error')}</span>
                   </div>
-                  <p className="text-sm text-red-300 mt-2">{selectedCommand.error}</p>
+                  <p className="text-sm text-red-700 dark:text-red-300 mt-2">{selectedCommand.error}</p>
                 </div>
               )}
 
@@ -451,12 +451,12 @@ export function CommandInput({
                   {/* Agents Used */}
                   {selectedCommand.result.agentsUsed.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Bot className="w-4 h-4 text-violet-400" />
-                      <span className="text-xs text-zinc-500">{t('commandInput.agentsUsed')}</span>
+                      <Bot className="w-4 h-4 text-violet-700 dark:text-violet-400" />
+                      <span className="text-xs text-foreground-subtle">{t('commandInput.agentsUsed')}</span>
                       {selectedCommand.result.agentsUsed.map((agent) => (
                         <span 
                           key={agent}
-                          className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs"
+                          className="px-2 py-0.5 bg-violet-500/20 text-violet-700 dark:text-violet-300 rounded-full text-xs"
                         >
                           {agent}
                         </span>
@@ -467,45 +467,45 @@ export function CommandInput({
                   {/* Stats */}
                   <div className="grid grid-cols-3 gap-3">
                     {selectedCommand.result.documentsCreated.length > 0 && (
-                      <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
-                        <FileText className="w-5 h-5 text-blue-400 mx-auto" />
-                        <p className="text-lg font-semibold text-zinc-200 mt-1">
+                      <div className="bg-muted/50 rounded-lg p-3 text-center">
+                        <FileText className="w-5 h-5 text-blue-700 dark:text-blue-400 mx-auto" />
+                        <p className="text-lg font-semibold text-foreground mt-1">
                           {selectedCommand.result.documentsCreated.length}
                         </p>
-                        <p className="text-xs text-zinc-500">{t('commandInput.documents')}</p>
+                        <p className="text-xs text-foreground-subtle">{t('commandInput.documents')}</p>
                       </div>
                     )}
                     {selectedCommand.result.tasksCreated.length > 0 && (
-                      <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
-                        <ListTodo className="w-5 h-5 text-amber-400 mx-auto" />
-                        <p className="text-lg font-semibold text-zinc-200 mt-1">
+                      <div className="bg-muted/50 rounded-lg p-3 text-center">
+                        <ListTodo className="w-5 h-5 text-amber-700 dark:text-amber-400 mx-auto" />
+                        <p className="text-lg font-semibold text-foreground mt-1">
                           {selectedCommand.result.tasksCreated.length}
                         </p>
-                        <p className="text-xs text-zinc-500">{t('commandInput.tasks')}</p>
+                        <p className="text-xs text-foreground-subtle">{t('commandInput.tasks')}</p>
                       </div>
                     )}
                     {selectedCommand.result.duration > 0 && (
-                      <div className="bg-zinc-800/50 rounded-lg p-3 text-center">
-                        <Clock className="w-5 h-5 text-emerald-400 mx-auto" />
-                        <p className="text-lg font-semibold text-zinc-200 mt-1">
+                      <div className="bg-muted/50 rounded-lg p-3 text-center">
+                        <Clock className="w-5 h-5 text-emerald-700 dark:text-emerald-400 mx-auto" />
+                        <p className="text-lg font-semibold text-foreground mt-1">
                           {(selectedCommand.result.duration / 1000).toFixed(1)}s
                         </p>
-                        <p className="text-xs text-zinc-500">{t('commandInput.duration')}</p>
+                        <p className="text-xs text-foreground-subtle">{t('commandInput.duration')}</p>
                       </div>
                     )}
                   </div>
 
                   {/* Output */}
-                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                  <div className="bg-muted/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-zinc-500 uppercase tracking-wider">{t('commandInput.aiResponse')}</span>
+                      <span className="text-xs text-foreground-subtle uppercase tracking-wider">{t('commandInput.aiResponse')}</span>
                       <button
                         onClick={() => handleCopyResult(selectedCommand.result?.output || '')}
                         className={cn(
                           "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
                           copied
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-zinc-700 text-zinc-400 hover:bg-zinc-600"
+                            ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400"
+                            : "bg-foreground/15 text-muted-foreground hover:bg-foreground/20"
                         )}
                       >
                         {copied ? (
@@ -522,7 +522,7 @@ export function CommandInput({
                       </button>
                     </div>
                     <div className="prose prose-sm prose-invert max-w-none">
-                      <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                      <p className="text-sm text-foreground-secondary whitespace-pre-wrap leading-relaxed">
                         {selectedCommand.result.output}
                       </p>
                     </div>

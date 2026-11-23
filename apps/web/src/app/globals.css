@@ -14,6 +14,10 @@
   --breakpoint-xs: 30rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Text tiers between foreground and muted (see :root / .dark). */
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-foreground-subtle: var(--foreground-subtle);
+  --color-foreground-faint: var(--foreground-faint);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
   --font-display: var(--font-display);
@@ -67,26 +71,33 @@
 
   /* Light mode - Notion White */
   --background: #ffffff;
-  --foreground: #191919;
+  --foreground: #171717;
+
+  /* Text tiers. The dashboard grades text by emphasis; in dark mode these are
+     white at fixed alphas, here they are solid greys that all clear WCAG AA
+     (>= 4.5:1) on background, card and muted surfaces. */
+  --foreground-secondary: #404040;
+  --foreground-subtle: #5e5e5e;
+  --foreground-faint: #696969;
 
   --card: #ffffff;
-  --card-foreground: #191919;
+  --card-foreground: #171717;
 
   --popover: #ffffff;
-  --popover-foreground: #191919;
+  --popover-foreground: #171717;
 
   /* Primary - Pure Black */
   --primary: #000000;
   --primary-foreground: #ffffff;
 
-  --secondary: #f7f7f7;
-  --secondary-foreground: #191919;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
 
-  --muted: #f7f7f7;
-  --muted-foreground: #787878;
+  --muted: #f5f5f5;
+  --muted-foreground: #595959;
 
-  --accent: #f7f7f7;
-  --accent-foreground: #191919;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
 
   /* Electric Indigo accent */
   --accent-electric: 99 102 241;
@@ -95,7 +106,7 @@
   --destructive: #eb5757;
 
   --border: #e5e5e5;
-  --input: #e5e5e5;
+  --input: #d4d4d4;
   --ring: #000000;
 
   /* Charts - Grayscale */
@@ -126,6 +137,12 @@
   /* Base surface (not pure black) */
   --background: #0a0a0a;
   --foreground: #fafafa;
+
+  /* Text tiers (white at fixed alpha, matching the original dark design;
+     faint was nudged from 0.35-0.40 to 0.47 to reach AA on base and muted). */
+  --foreground-secondary: rgba(255, 255, 255, 0.72);
+  --foreground-subtle: rgba(255, 255, 255, 0.5);
+  --foreground-faint: rgba(255, 255, 255, 0.47);
 
   /* Elevated card surface — visibly raised from the base */
   --card: #151515;
@@ -1256,7 +1273,7 @@
 /* Dashboard hero gradient */
 .dashboard-hero-gradient {
   /* A single, barely-there top wash instead of layered glowy ellipses. */
-  background: radial-gradient(ellipse 70% 40% at 50% -30%, rgba(255, 255, 255, 0.04), transparent);
+  background: radial-gradient(ellipse 70% 40% at 50% -30%, color-mix(in srgb, var(--foreground) 4%, transparent), transparent);
 }
 
 /* Card hover: just a quiet border change, no lift/float. */
@@ -1265,7 +1282,7 @@
 }
 
 .bento-card:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
 }
 
 /* Tracking tighter utility for headlines */
@@ -1387,31 +1404,38 @@
 
 /* ===========================================
    BlockNote editor theming
-   The editor shipped with theme="light" — a white card on a black app, which
-   looked pasted-in. It now renders dark; these overrides drop BlockNote's grey
-   surface to transparent so it sits directly on the app's own background, and
-   align its font + accents with the rest of the UI.
+   The editor's theme prop follows the applied app theme (useResolvedTheme);
+   these overrides drop BlockNote's own surface to transparent so it sits on
+   the app background, and derive every colour from the app tokens so light
+   and dark both match the rest of the UI. The [data-color-scheme] selector
+   outranks BlockNote's built-in per-scheme variables.
    =========================================== */
-.bn-container {
+.bn-container,
+.bn-container[data-color-scheme] {
   --bn-colors-editor-background: transparent;
   --bn-colors-editor-text: var(--foreground);
-  --bn-colors-menu-background: #0c0c0c;
-  --bn-colors-menu-text: var(--foreground);
-  --bn-colors-tooltip-background: #0c0c0c;
-  --bn-colors-tooltip-text: var(--foreground);
-  --bn-colors-hovered-background: rgba(255, 255, 255, 0.06);
+  --bn-colors-menu-background: var(--popover);
+  --bn-colors-menu-text: var(--popover-foreground);
+  --bn-colors-tooltip-background: var(--popover);
+  --bn-colors-tooltip-text: var(--popover-foreground);
+  --bn-colors-hovered-background: color-mix(in srgb, var(--foreground) 6%, transparent);
   --bn-colors-hovered-text: var(--foreground);
-  --bn-colors-selected-background: rgba(255, 255, 255, 0.12);
+  --bn-colors-selected-background: color-mix(in srgb, var(--foreground) 12%, transparent);
   --bn-colors-selected-text: var(--foreground);
-  --bn-colors-disabled-background: rgba(255, 255, 255, 0.04);
-  --bn-colors-disabled-text: rgba(255, 255, 255, 0.35);
-  --bn-colors-shadow: rgba(0, 0, 0, 0.5);
-  --bn-colors-border: rgba(255, 255, 255, 0.1);
-  --bn-colors-side-menu: rgba(255, 255, 255, 0.45);
+  --bn-colors-disabled-background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  --bn-colors-disabled-text: var(--foreground-faint);
+  --bn-colors-shadow: rgba(0, 0, 0, 0.12);
+  --bn-colors-border: var(--border);
+  --bn-colors-side-menu: var(--foreground-subtle);
   --bn-font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
 }
 
-/* Make the editing surface transparent so it blends with the dark container. */
+.dark .bn-container,
+.dark .bn-container[data-color-scheme] {
+  --bn-colors-shadow: rgba(0, 0, 0, 0.5);
+}
+
+/* Make the editing surface transparent so it blends with the container. */
 .bn-container .bn-editor,
 .bn-container .ProseMirror {
   background: transparent !important;
@@ -1429,12 +1453,9 @@
    APPEARANCE SETTINGS (lib/appearance.ts)
    =========================================== */
 
-/* Light theme. The dashboard was designed dark-first and uses white overlays
-   (text-white, bg-white/5, border-white/10) throughout; swapping the palette's
-   white/black keeps those legible on the light surface. */
+/* Light theme: every dashboard colour derives from the :root tokens above,
+   so the class only needs to set the native control colour scheme. */
 html.light {
-  --color-white: #191919;
-  --color-black: #ffffff;
   color-scheme: light;
 }
 

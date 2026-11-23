@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
@@ -146,18 +147,18 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, selectedIndex, flatCommands, executeCommand, onOpenChange]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm animate-fade-in"
+        className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={() => onOpenChange(false)}
       />
 
       {/* Dialog */}
-      <div className="fixed left-1/2 top-[18%] z-50 -translate-x-1/2 w-full max-w-xl px-4 animate-fade-up">
+      <div className="fixed left-1/2 top-[18%] z-[100] -translate-x-1/2 w-full max-w-xl px-4 animate-fade-up">
         <div className="bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
           {/* Search Input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
@@ -280,6 +281,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
