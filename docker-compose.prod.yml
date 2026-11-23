@@ -16,7 +16,11 @@ services:
       retries: 5
 
   temporal:
-    image: temporalio/auto-setup:latest
+    # Pinned: `latest` silently upgrades the server on a pull. auto-setup is
+    # only published up to 1.29.x (Temporal deprecated it); moving to 1.30+
+    # means temporalio/server + admin-tools schema setup. Compatible with
+    # @temporalio/* 1.18 in packages/workflows.
+    image: temporalio/auto-setup:1.29.7
     restart: unless-stopped
     depends_on:
       postgres:
@@ -136,6 +140,10 @@ services:
     # SIGTERM drains the worker; in-flight activities get WORKER_SHUTDOWN_GRACE_TIME
     # to finish, so the container stop timeout must be longer than that.
     stop_grace_period: 60s
+    # The image HEALTHCHECK probes the web port; the worker serves no HTTP.
+    # Its liveness is reported through the worker heartbeat in /api/health.
+    healthcheck:
+      disable: true
     environment:
       WORKER_SHUTDOWN_GRACE_TIME: ${WORKER_SHUTDOWN_GRACE_TIME:-45 seconds}
       NODE_ENV: production
@@ -165,6 +173,14 @@ services:
         NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
     restart: unless-stopped
     command: ["pnpm", "--filter", "@nexus/web", "collab"]
+    # Overrides the image's web HEALTHCHECK: the collaboration server answers
+    # any HTTP GET on its port with 200 when Postgres persistence is active.
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:1234').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 5
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexus}
       COLLABORATION_HOST: 0.0.0.0
@@ -179,7 +195,7 @@ services:
       - "${COLLABORATION_BIND:-127.0.0.1}:${COLLABORATION_PORT:-1234}:1234"
 
   temporal-ui:
-    image: temporalio/ui:latest
+    image: temporalio/ui:2.58.1
     profiles: ["ops"]
     restart: unless-stopped
     depends_on:
