@@ -1,3 +1,4 @@
+import { isErrorCode, logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
@@ -102,9 +103,13 @@ export async function GET(request: NextRequest) {
 
     return redirectToSettings(request, { integration: "linear", connected: "true" });
   } catch (error) {
+    // Only machine-readable codes go into the redirect URL; anything else
+    // (provider/database errors) is logged server-side.
+    const message = error instanceof Error ? error.message : "";
+    if (!isErrorCode(message)) logInternalError("linear OAuth callback", error, request.headers);
     return redirectToSettings(request, {
       integration: "linear",
-      error: error instanceof Error ? error.message : "linear_callback_failed",
+      error: isErrorCode(message) ? message : "linear_callback_failed",
     });
   }
 }

@@ -79,6 +79,13 @@ describe("POST /api/chat — gate logic (real handler)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("AI budget charged before request validation (finding): invalid bodies do not consume budget", async () => {
+    getSession.mockResolvedValue(authed);
+    expect((await POST(chatReq(undefined, "{not json"))).status).toBe(400);
+    expect((await POST(chatReq({ messages: [] }))).status).toBe(400);
+    expect(enforceAiBudget).not.toHaveBeenCalled();
+  });
+
   it("returns 400 for an empty messages array (used to crash with 500)", async () => {
     getSession.mockResolvedValue(authed);
     const res = await POST(chatReq({ messages: [] }));

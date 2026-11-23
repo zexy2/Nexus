@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, 
@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useLocale } from '@/lib/i18n/provider';
 
 interface CommandInputProps {
   workspaceId: string;
@@ -42,46 +43,44 @@ interface CommandInputProps {
   onCommandCreated?: (command: OfflineCommand) => void;
 }
 
-const statusConfig: Record<CommandStatus, { icon: typeof Loader2; color: string; label: string }> = {
-  pending: { icon: Clock, color: 'text-amber-400', label: 'Bekliyor' },
-  syncing: { icon: Loader2, color: 'text-blue-400', label: 'Senkronize ediliyor' },
-  processing: { icon: Brain, color: 'text-violet-400', label: 'İşleniyor' },
-  completed: { icon: CheckCircle2, color: 'text-emerald-400', label: 'Tamamlandı' },
-  failed: { icon: AlertCircle, color: 'text-red-400', label: 'Hata' },
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener('online', onChange);
+  window.addEventListener('offline', onChange);
+  return () => {
+    window.removeEventListener('online', onChange);
+    window.removeEventListener('offline', onChange);
+  };
+}
+const readOnline = () => navigator.onLine;
+// Assume online on the server and during hydration, as before.
+const readServerOnline = () => true;
+
+const statusConfig: Record<CommandStatus, { icon: typeof Loader2; color: string }> = {
+  pending: { icon: Clock, color: 'text-amber-400' },
+  syncing: { icon: Loader2, color: 'text-blue-400' },
+  processing: { icon: Brain, color: 'text-violet-400' },
+  completed: { icon: CheckCircle2, color: 'text-emerald-400' },
+  failed: { icon: AlertCircle, color: 'text-red-400' },
 };
 
 export function CommandInput({ 
   workspaceId, 
   userId, 
   className,
-  placeholder = "Bir şey yap... (ör: 'Pazarlama planı oluştur ve görevleri ata')",
+  placeholder,
   onCommandCreated,
 }: CommandInputProps) {
+  const { t, locale } = useLocale();
+  const dateLocale = locale === 'tr' ? 'tr-TR' : 'en-US';
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = useSyncExternalStore(subscribeOnline, readOnline, readServerOnline);
   const [commands, setCommands] = useState<OfflineCommand[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [selectedCommand, setSelectedCommand] = useState<OfflineCommand | null>(null);
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Check online status
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Subscribe to command updates
   useEffect(() => {
@@ -149,7 +148,7 @@ export function CommandInput({
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleTimeString('tr-TR', {
+    return date.toLocaleTimeString(dateLocale, {
       hour: '2-digit',
       minute: '2-digit',
     });
@@ -157,7 +156,7 @@ export function CommandInput({
 
   const formatDate = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleDateString('tr-TR', {
+    return date.toLocaleDateString(dateLocale, {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
@@ -201,12 +200,12 @@ export function CommandInput({
             {isOnline ? (
               <>
                 <Wifi className="w-3 h-3" />
-                <span>Çevrimiçi</span>
+                <span>{t('commandInput.online')}</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-3 h-3" />
-                <span>Çevrimdışı</span>
+                <span>{t('commandInput.offline')}</span>
               </>
             )}
           </div>
@@ -222,7 +221,7 @@ export function CommandInput({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={placeholder ?? t('commandInput.placeholder')}
             rows={1}
             className={cn(
               'flex-1 bg-transparent resize-none',
@@ -268,7 +267,7 @@ export function CommandInput({
               showHistory ? 'text-violet-400' : 'text-zinc-400',
               commands.length > 0 && 'ring-1 ring-violet-500/30'
             )}
-            title="Komut Geçmişi"
+            title={t('commandInput.history')}
           >
             <Clock className="w-5 h-5" />
             {pendingCount > 0 && (
@@ -295,7 +294,7 @@ export function CommandInput({
               )}
             >
               <Clock className="w-3 h-3" />
-              <span>{pendingCount} bekleyen komut</span>
+              <span>{pendingCount} {t('commandInput.pendingCommands')}</span>
               <ChevronUp className="w-3 h-3" />
             </button>
           </motion.div>
@@ -313,7 +312,7 @@ export function CommandInput({
           >
             <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-700/50 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
-                <span className="text-xs font-medium text-zinc-400">Komut Geçmişi</span>
+                <span className="text-xs font-medium text-zinc-400">{t('commandInput.history')}</span>
                 <button
                   onClick={() => setShowHistory(false)}
                   className="p-1 rounded hover:bg-zinc-800 transition-colors"
@@ -353,7 +352,7 @@ export function CommandInput({
                               cmd.status === 'syncing' || cmd.status === 'processing' ? 'animate-spin' : ''
                             )} />
                             <span className={cn('text-xs', config.color)}>
-                              {config.label}
+                              {t(`commandInput.status.${cmd.status}`)}
                             </span>
                             <span className="text-xs text-zinc-600">
                               {formatTime(cmd.createdAt)}
@@ -361,7 +360,7 @@ export function CommandInput({
                             {isClickable && (
                               <span className="text-xs text-zinc-600 flex items-center gap-1">
                                 <ExternalLink className="w-3 h-3" />
-                                Detay
+                                {t('commandInput.details')}
                               </span>
                             )}
                           </div>
@@ -408,7 +407,7 @@ export function CommandInput({
           <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2 text-zinc-100">
               <Brain className="w-5 h-5 text-violet-400" />
-              AI Komut Sonucu
+              {t('commandInput.resultTitle')}
             </DialogTitle>
           </DialogHeader>
           
@@ -418,7 +417,7 @@ export function CommandInput({
               <div className="bg-zinc-800/50 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div>
-                    <span className="text-xs text-zinc-500 uppercase tracking-wider">Komut</span>
+                    <span className="text-xs text-zinc-500 uppercase tracking-wider">{t('commandInput.command')}</span>
                     <p className="text-sm text-zinc-200 mt-1">{selectedCommand.command}</p>
                   </div>
                   <div className={cn(
@@ -427,7 +426,7 @@ export function CommandInput({
                       ? "bg-emerald-500/20 text-emerald-400"
                       : "bg-red-500/20 text-red-400"
                   )}>
-                    {selectedCommand.status === 'completed' ? 'Tamamlandı' : 'Hata'}
+                    {t(`commandInput.status.${selectedCommand.status === 'completed' ? 'completed' : 'failed'}`)}
                   </div>
                 </div>
                 <p className="text-xs text-zinc-600 mt-2">
@@ -440,7 +439,7 @@ export function CommandInput({
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
                   <div className="flex items-center gap-2 text-red-400">
                     <AlertCircle className="w-4 h-4" />
-                    <span className="text-sm font-medium">Hata</span>
+                    <span className="text-sm font-medium">{t('commandInput.error')}</span>
                   </div>
                   <p className="text-sm text-red-300 mt-2">{selectedCommand.error}</p>
                 </div>
@@ -453,7 +452,7 @@ export function CommandInput({
                   {selectedCommand.result.agentsUsed.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap">
                       <Bot className="w-4 h-4 text-violet-400" />
-                      <span className="text-xs text-zinc-500">Kullanılan Ajanlar:</span>
+                      <span className="text-xs text-zinc-500">{t('commandInput.agentsUsed')}</span>
                       {selectedCommand.result.agentsUsed.map((agent) => (
                         <span 
                           key={agent}
@@ -473,7 +472,7 @@ export function CommandInput({
                         <p className="text-lg font-semibold text-zinc-200 mt-1">
                           {selectedCommand.result.documentsCreated.length}
                         </p>
-                        <p className="text-xs text-zinc-500">Döküman</p>
+                        <p className="text-xs text-zinc-500">{t('commandInput.documents')}</p>
                       </div>
                     )}
                     {selectedCommand.result.tasksCreated.length > 0 && (
@@ -482,7 +481,7 @@ export function CommandInput({
                         <p className="text-lg font-semibold text-zinc-200 mt-1">
                           {selectedCommand.result.tasksCreated.length}
                         </p>
-                        <p className="text-xs text-zinc-500">Görev</p>
+                        <p className="text-xs text-zinc-500">{t('commandInput.tasks')}</p>
                       </div>
                     )}
                     {selectedCommand.result.duration > 0 && (
@@ -491,7 +490,7 @@ export function CommandInput({
                         <p className="text-lg font-semibold text-zinc-200 mt-1">
                           {(selectedCommand.result.duration / 1000).toFixed(1)}s
                         </p>
-                        <p className="text-xs text-zinc-500">Süre</p>
+                        <p className="text-xs text-zinc-500">{t('commandInput.duration')}</p>
                       </div>
                     )}
                   </div>
@@ -499,7 +498,7 @@ export function CommandInput({
                   {/* Output */}
                   <div className="bg-zinc-800/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-zinc-500 uppercase tracking-wider">AI Yanıtı</span>
+                      <span className="text-xs text-zinc-500 uppercase tracking-wider">{t('commandInput.aiResponse')}</span>
                       <button
                         onClick={() => handleCopyResult(selectedCommand.result?.output || '')}
                         className={cn(
@@ -512,12 +511,12 @@ export function CommandInput({
                         {copied ? (
                           <>
                             <Check className="w-3 h-3" />
-                            Kopyalandı
+                            {t('commandInput.copied')}
                           </>
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            Kopyala
+                            {t('commandInput.copy')}
                           </>
                         )}
                       </button>

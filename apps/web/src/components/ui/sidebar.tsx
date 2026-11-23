@@ -18,6 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
+import { isEditableTarget } from "@/lib/shortcuts"
 import {
   Tooltip,
   TooltipContent,
@@ -96,9 +97,11 @@ function SidebarProvider({
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // While typing, ⌘B/Ctrl+B is "bold" in the editor and inputs; leave it.
       if (
         event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
+        (event.metaKey || event.ctrlKey) &&
+        !isEditableTarget(event.target)
       ) {
         event.preventDefault()
         toggleSidebar()

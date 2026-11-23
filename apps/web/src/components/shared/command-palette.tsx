@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
+import { navShortcutLabel } from "@/lib/shortcuts";
 import {
   Home,
   FileText,
@@ -30,17 +31,17 @@ interface CommandDef {
 const commands: CommandDef[] = [
   // Navigation
   { id: "home", labelKey: "nav.home", icon: Home, action: "/dashboard", group: "navigation" },
-  { id: "plans", labelKey: "nav.plans", icon: FileText, action: "/dashboard/docs", group: "navigation" },
-  { id: "work", labelKey: "nav.work", icon: ListTodo, action: "/dashboard/tasks", group: "navigation" },
-  { id: "changes", labelKey: "nav.changes", icon: GitPullRequestArrow, action: "/dashboard/changes", group: "navigation" },
-  { id: "runs", labelKey: "nav.runs", icon: Activity, action: "/dashboard/agents", group: "navigation" },
+  { id: "plans", labelKey: "nav.plans", icon: FileText, action: "/dashboard/docs", shortcut: navShortcutLabel("/dashboard/docs"), group: "navigation" },
+  { id: "work", labelKey: "nav.work", icon: ListTodo, action: "/dashboard/tasks", shortcut: navShortcutLabel("/dashboard/tasks"), group: "navigation" },
+  { id: "changes", labelKey: "nav.changes", icon: GitPullRequestArrow, action: "/dashboard/changes", shortcut: navShortcutLabel("/dashboard/changes"), group: "navigation" },
+  { id: "runs", labelKey: "nav.runs", icon: Activity, action: "/dashboard/agents", shortcut: navShortcutLabel("/dashboard/agents"), group: "navigation" },
   { id: "chat", labelKey: "nav.chat", icon: MessageSquare, action: "/dashboard/chat", group: "navigation" },
   { id: "settings", labelKey: "nav.settings", icon: Settings, action: "/dashboard/settings", group: "navigation" },
 
   // Actions
-  { id: "new-doc", labelKey: "docs.newDoc", descKey: "palette.newDocDesc", icon: Plus, action: "/dashboard/docs/new", shortcut: "⌘N", group: "actions" },
-  { id: "new-task", labelKey: "tasks.newTask", descKey: "palette.newTaskDesc", icon: Plus, action: "/dashboard/tasks/new", shortcut: "⌘T", group: "actions" },
-  { id: "start-chat", labelKey: "palette.startChat", descKey: "palette.startChatDesc", icon: MessageSquare, action: "/dashboard/chat", shortcut: "⌘J", group: "actions" },
+  { id: "new-doc", labelKey: "docs.newDoc", descKey: "palette.newDocDesc", icon: Plus, action: "/dashboard/docs/new", group: "actions" },
+  { id: "new-task", labelKey: "tasks.newTask", descKey: "palette.newTaskDesc", icon: Plus, action: "/dashboard/tasks/new", group: "actions" },
+  { id: "start-chat", labelKey: "palette.startChat", descKey: "palette.startChatDesc", icon: MessageSquare, action: "/dashboard/chat", group: "actions" },
 ];
 
 interface CommandPaletteProps {
@@ -249,7 +250,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                           >
                             {cmd.label}
                           </span>
-                          {isSelected && <ArrowRight className="size-4 text-muted-foreground ml-auto" />}
+                          <span className="ml-auto flex items-center gap-2">
+                            {cmd.shortcut && <kbd className={KBD}>{cmd.shortcut}</kbd>}
+                            {isSelected && <ArrowRight className="size-4 text-muted-foreground" />}
+                          </span>
                         </button>
                       );
                     })}

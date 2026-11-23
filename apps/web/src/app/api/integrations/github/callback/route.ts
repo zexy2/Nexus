@@ -1,3 +1,4 @@
+import { isErrorCode, logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { workspaceIntegrations } from "@nexus/database/schema";
@@ -168,9 +169,13 @@ export async function GET(request: NextRequest) {
 
     return redirectToSettings(request, { integration: "github", connected: "true" });
   } catch (error) {
+    // Only machine-readable codes go into the redirect URL; anything else
+    // (provider/database errors) is logged server-side.
+    const message = error instanceof Error ? error.message : "";
+    if (!isErrorCode(message)) logInternalError("github OAuth callback", error, request.headers);
     return redirectToSettings(request, {
       integration: "github",
-      error: error instanceof Error ? error.message : "github_callback_failed",
+      error: isErrorCode(message) ? message : "github_callback_failed",
     });
   }
 }

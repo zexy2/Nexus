@@ -19,6 +19,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { PartialBlock } from "@blocknote/core";
+import { withCollaboration } from "@blocknote/core/yjs";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
@@ -36,7 +37,7 @@ import {
   fetchCollabToken,
 } from "@/lib/collab/token-refresh";
 import { openCollabOfflineStore } from "@/lib/collab/offline-store";
-import { setCollabDocUnsynced } from "@/lib/collab/unsynced";
+import { markCollabDocPendingSync, setCollabDocUnsynced } from "@/lib/collab/unsynced";
 import { seedFragmentIfEmpty } from "@/lib/collab/seed";
 import {
   type CollabPersistenceEvent,
@@ -119,7 +120,7 @@ function CollaborativeEditorInner({
   
   // Create BlockNote editor WITH provider ready
   const editor = useCreateBlockNote(
-    {
+    withCollaboration({
       collaboration: {
         provider: provider,
         fragment: fragment,
@@ -132,7 +133,7 @@ function CollaborativeEditorInner({
         default: editorPlaceholder,
         emptyDocument: editorPlaceholder,
       },
-    },
+    }),
     [editorPlaceholder]
   );
 
@@ -453,6 +454,13 @@ export function CollaborativeEditor({
     });
 
     const applyPersistenceEvent = (event: CollabPersistenceEvent) => {
+      // Persist "has edits the server has not confirmed" beyond this editor's
+      // lifetime, so sign-out still warns after the doc is closed offline.
+      markCollabDocPendingSync(
+        userId,
+        documentId,
+        event === "local-update" || event === "ack-error"
+      );
       queueMicrotask(() => {
         if (!cancelled) {
           setPersistenceStatus((current) => nextPersistenceStatus(current, event));

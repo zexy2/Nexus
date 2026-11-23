@@ -150,6 +150,7 @@ export default function WorkflowCenterPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void Promise.all([fetchRuns(), fetchDocuments(), fetchCodingJobs()])
       .catch((error) =>
         showToast.error(error instanceof Error ? error.message : t("agents.center.centerLoadError"))
@@ -315,7 +316,7 @@ export default function WorkflowCenterPage() {
       <section className="mb-12">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-white">Coding Agent Runs</h2>
+            <h2 className="text-sm font-semibold text-white">{t("agents.codingRunsTitle")}</h2>
             <p className="mt-1 text-xs text-white/40">
               {locale === "tr"
                 ? "Yerel Codex, Claude Code ve Cursor istemcilerine teslim edilen sürümlenmiş işler."

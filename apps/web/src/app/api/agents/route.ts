@@ -4,6 +4,7 @@
  * The current UI uses /api/chat. This route keeps the former SSE/JSON wire
  * format without maintaining a second provider stack or hard-coded model list.
  */
+import { logInternalError } from "@/lib/api-response";
 import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
@@ -90,13 +91,6 @@ async function prepareRequest(request: NextRequest): Promise<
     };
   }
 
-  const budget = await enforceAiBudget({
-    userId: authorized.value.userId,
-    email: authorized.value.email,
-    kind: "chat",
-  });
-  if (!budget.ok) return { ok: false, response: budget.response };
-
   const access = await requireWorkspaceAccess(
     authorized.value.userId,
     body.context?.workspaceId
@@ -107,6 +101,14 @@ async function prepareRequest(request: NextRequest): Promise<
       response: NextResponse.json({ error: access.error }, { status: access.status }),
     };
   }
+
+  // Budget is consumed only after validation and workspace authorization.
+  const budget = await enforceAiBudget({
+    userId: authorized.value.userId,
+    email: authorized.value.email,
+    kind: "chat",
+  });
+  if (!budget.ok) return { ok: false, response: budget.response };
 
   try {
     const modelConfig = await getUserModelConfig(authorized.value.userId);
@@ -121,16 +123,15 @@ async function prepareRequest(request: NextRequest): Promise<
       },
     };
   } catch (error) {
+    const requestId = logInternalError("Agents model config", error, request.headers);
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "AI_PROVIDER_UNAVAILABLE",
-          message:
-            error instanceof Error
-              ? error.message
-              : "No server-managed AI provider is configured",
+          message: "No server-managed AI provider is configured",
           retryable: false,
+          requestId,
         },
         { status: 503 }
       ),

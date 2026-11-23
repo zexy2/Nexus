@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { useChatStore, AGENT_DEFINITIONS, type AgentMode, type Message } from '@/lib/stores/chat-store';
 import { showToast } from '@/components/shared/toast-provider';
 import { useT } from '@/lib/i18n/provider';
+import { readTextStream } from '@/lib/stream-text';
+import { isNewChatShortcut } from '@/lib/shortcuts';
 import { 
   X,
   Sparkles,
@@ -447,10 +449,11 @@ export default function ChatPage() {
     setAgentMode("auto");
   }, [setAgentMode]);
 
-  // Keyboard shortcuts
+  // New chat: Alt+Shift+N (⌘K belongs to the global command palette; see
+  // lib/shortcuts.ts).
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if (isNewChatShortcut(e)) {
         e.preventDefault();
         createSession();
         showToast.success(t('chat.newChatCreated'));
@@ -508,16 +511,10 @@ export default function ChatPage() {
         );
       }
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let assistantContent = '';
-
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        assistantContent += decoder.decode(value);
-        setStreamingContent(assistantContent);
-      }
+      // Streaming UTF-8 decode: Turkish characters split across chunks stay intact.
+      const assistantContent = await readTextStream(response.body, (_text, accumulated) => {
+        setStreamingContent(accumulated);
+      });
 
       addMessage({ role: 'assistant', content: assistantContent, agentMode });
       setStreamingContent('');

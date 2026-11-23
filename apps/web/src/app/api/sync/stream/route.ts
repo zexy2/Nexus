@@ -1,7 +1,7 @@
-import postgres from "postgres";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized, apiError } from "@/lib/api-response";
 import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
+import { subscribeToChanges } from "@/lib/realtime-change-feed";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,10 @@ export const dynamic = "force-dynamic";
  * for workspaces the caller can access. The client reacts by pulling
  * immediately instead of waiting for the 10s poll. Polling remains as a
  * fallback, so this is a pure enhancement.
+ *
+ * All streams in this process share ONE Postgres LISTEN connection
+ * (lib/realtime-change-feed) with in-memory fan-out, instead of one
+ * connection per connected client.
  */
 export async function GET() {
   const session = await verifySession();
@@ -29,8 +33,8 @@ export async function GET() {
   const accessible = new Set(await getAccessibleWorkspaceIds(session.user.id));
 
   const encoder = new TextEncoder();
-  let sql: ReturnType<typeof postgres> | null = null;
-  let unlisten: (() => Promise<void>) | null = null;
+  let unsubscribe: (() => Promise<void>) | null = null;
+  let cancelled = false;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream({
@@ -45,19 +49,17 @@ export async function GET() {
 
       send("ready", JSON.stringify({ ts: Date.now() }));
 
-      sql = postgres(databaseUrl, { max: 1 });
       try {
-        const sub = await sql.listen("nexus_changes", (payload) => {
-          try {
-            const { workspaceId } = JSON.parse(payload);
-            if (workspaceId && accessible.has(workspaceId)) {
-              send("change", JSON.stringify({ workspaceId }));
-            }
-          } catch {
-            // ignore malformed payloads
+        const stop = await subscribeToChanges(databaseUrl, ({ workspaceId }) => {
+          if (accessible.has(workspaceId)) {
+            send("change", JSON.stringify({ workspaceId }));
           }
         });
-        unlisten = sub.unlisten;
+        if (cancelled) {
+          await stop();
+          return;
+        }
+        unsubscribe = stop;
       } catch (err) {
         console.error("[sync/stream] LISTEN failed:", err);
         controller.error(err);
@@ -69,15 +71,18 @@ export async function GET() {
         try {
           controller.enqueue(encoder.encode(`: ping\n\n`));
         } catch {
-          // closed
+          // Stream closed without cancel(): release the shared subscription.
+          if (heartbeat) clearInterval(heartbeat);
+          cancelled = true;
+          void unsubscribe?.().catch(() => {});
         }
       }, 25000);
     },
 
     async cancel() {
       if (heartbeat) clearInterval(heartbeat);
-      if (unlisten) await unlisten().catch(() => {});
-      if (sql) await sql.end({ timeout: 1 }).catch(() => {});
+      cancelled = true;
+      if (unsubscribe) await unsubscribe().catch(() => {});
     },
   });
 

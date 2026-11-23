@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { db } from "@/lib/db";
@@ -320,8 +321,14 @@ export async function POST(request: NextRequest) {
       request,
     });
 
+    const requestId = logInternalError("Workflow start", error, request.headers);
     return NextResponse.json(
-      { error: "WORKFLOW_START_FAILED", message, executionId: execution.id },
+      {
+        error: "WORKFLOW_START_FAILED",
+        message: "The workflow engine is unavailable. Please try again.",
+        executionId: execution.id,
+        requestId,
+      },
       { status: 503 }
     );
   }

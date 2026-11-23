@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
+import { applyAppearance, normalizeTheme, storeAppearance } from "@/lib/appearance";
 
 interface SettingsData {
   profile: {
@@ -164,6 +165,7 @@ function SettingsContent() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [agentNotifications, setAgentNotifications] = useState(true);
   const [taskReminders, setTaskReminders] = useState(true);
+  const router = useRouter();
   const [theme, setTheme] = useState("system");
   const [compactMode, setCompactMode] = useState(false);
   const [offlineMode, setOfflineMode] = useState(true);
@@ -217,10 +219,10 @@ function SettingsContent() {
     );
   }, [originalSettings, name, defaultModel, autoSaveAiOutputs, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
   
-  // Fetch settings from API
-  const fetchSettings = useCallback(async () => {
+  // Fetch settings from API. isLoading starts true, so the initial load does
+  // not need to set it; explicit reloads go through fetchSettings below.
+  const loadSettings = useCallback(async () => {
     try {
-      setIsLoading(true);
       const response = await fetch("/api/settings");
       if (!response.ok) throw new Error("Failed to fetch settings");
       
@@ -272,12 +274,18 @@ function SettingsContent() {
       setIsLoading(false);
     }
   }, []);
+
+  const fetchSettings = useCallback(async () => {
+    setIsLoading(true);
+    await loadSettings();
+  }, [loadSettings]);
   
   useEffect(() => {
     if (session?.user) {
-      fetchSettings();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
+      void loadSettings();
     }
-  }, [session, fetchSettings]);
+  }, [session, loadSettings]);
   
   const userInitials = name
     .split(" ")
@@ -339,6 +347,13 @@ function SettingsContent() {
       if (!response.ok) throw new Error("Failed to save settings");
       
       setSaveSuccess(true);
+
+      // Apply the saved appearance right away and refresh the dashboard layout
+      // so <AppearanceSync> receives the new server values.
+      const appearance = { theme: normalizeTheme(theme), compact: compactMode };
+      applyAppearance(document.documentElement, appearance);
+      storeAppearance(appearance);
+      router.refresh();
       
       // Refresh settings to get the latest server-managed AI availability and quota.
       await fetchSettings();
@@ -408,7 +423,7 @@ function SettingsContent() {
         throw new Error(body?.message || body?.error || "Integration could not be connected");
       }
       const url = body.installUrl || body.authUrl;
-      if (url) window.location.href = url;
+      if (url) window.location.assign(url);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Integration could not be connected");
     } finally {

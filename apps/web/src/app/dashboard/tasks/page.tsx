@@ -152,11 +152,11 @@ function fromSyncTask(t: SyncTask): Task {
 }
 
 // Column config
-const columns: { id: TaskStatus; title: string; color: string; icon: typeof Circle }[] = [
-  { id: "todo", title: "Yapılacak", color: "neutral", icon: Circle },
-  { id: "in_progress", title: "Devam Ediyor", color: "amber", icon: Clock },
-  { id: "in_review", title: "İncelemede", color: "blue", icon: GitPullRequestArrow },
-  { id: "done", title: "Tamamlandı", color: "emerald", icon: CheckCircle2 },
+const columns: { id: TaskStatus; color: string; icon: typeof Circle }[] = [
+  { id: "todo", color: "neutral", icon: Circle },
+  { id: "in_progress", color: "amber", icon: Clock },
+  { id: "in_review", color: "blue", icon: GitPullRequestArrow },
+  { id: "done", color: "emerald", icon: CheckCircle2 },
 ];
 
 const kanbanCollisionDetection: CollisionDetection = (args) => {
@@ -181,11 +181,11 @@ function getDragTargetStatus(overId: string | number | null | undefined, taskLis
 }
 
 // Priority config
-const priorityConfig: Record<TaskPriority, { label: string; color: string; icon: typeof Flag }> = {
-  low: { label: "Düşük", color: "bg-neutral-100 text-neutral-600", icon: Flag },
-  medium: { label: "Orta", color: "bg-blue-100 text-blue-600", icon: Flag },
-  high: { label: "Yüksek", color: "bg-amber-100 text-amber-600", icon: ArrowUpCircle },
-  urgent: { label: "Acil", color: "bg-red-100 text-red-600", icon: AlertCircle },
+const priorityConfig: Record<TaskPriority, { color: string; icon: typeof Flag }> = {
+  low: { color: "bg-neutral-100 text-neutral-600", icon: Flag },
+  medium: { color: "bg-blue-100 text-blue-600", icon: Flag },
+  high: { color: "bg-amber-100 text-amber-600", icon: ArrowUpCircle },
+  urgent: { color: "bg-red-100 text-red-600", icon: AlertCircle },
 };
 
 // Sortable Task Card
@@ -382,7 +382,7 @@ function SortableTaskCard({
               className="flex items-center gap-2"
             >
               <Edit3 className="w-4 h-4" />
-              Düzenle
+              {t('common.edit')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -390,7 +390,7 @@ function SortableTaskCard({
               className="flex items-center gap-2 text-red-600 focus:text-red-600"
             >
               <Trash2 className="w-4 h-4" />
-              Sil
+              {t('common.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -652,6 +652,7 @@ export default function TasksPage() {
   }, [engine, workspaceId, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous. Updates run after awaiting the local store/network; the only pre-await one (setIsLoading(true) with no sync engine) in practice happens on mount, where isLoading is already true.
     void fetchTasks();
 
     // Re-read the local store when the background sync updates it, unless a drag

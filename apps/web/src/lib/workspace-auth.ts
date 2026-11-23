@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@nexus/database/schema";
-import { and, eq, or } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 
 export type WorkspaceAccess = {
   id: string;
@@ -17,19 +17,70 @@ export async function getAccessibleWorkspaceIds(userId: string): Promise<string[
   return Array.from(new Set(rows.map((row) => row.id).filter(Boolean)));
 }
 
+const DEFAULT_WORKSPACE_INDEX = "workspaces_owner_default_idx";
+
+function isDefaultWorkspaceConflict(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: unknown; constraint_name?: unknown; constraint?: unknown; cause?: unknown };
+    if (candidate.code === "23505") {
+      const name = candidate.constraint_name ?? candidate.constraint;
+      return typeof name !== "string" || name === DEFAULT_WORKSPACE_INDEX;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+async function findDefaultWorkspace(userId: string) {
+  return db.query.workspaces.findFirst({
+    where: and(eq(workspaces.ownerId, userId), eq(workspaces.isDefault, true)),
+  });
+}
+
+/**
+ * The caller's default workspace, created on first use.
+ *
+ * At most one default per owner is enforced by the partial unique index
+ * `workspaces_owner_default_idx`, so concurrent first requests converge on
+ * one row instead of each inserting its own "My Workspace" (previous
+ * find-then-insert race). Owners without a flagged default (workspaces made
+ * through sync or before the flag existed) get their oldest workspace
+ * promoted.
+ */
 export async function ensureDefaultWorkspace(userId: string, name = "My Workspace") {
-  const existing = await db.query.workspaces.findFirst({
+  const current = await findDefaultWorkspace(userId);
+  if (current) return current;
+
+  const oldest = await db.query.workspaces.findFirst({
     where: eq(workspaces.ownerId, userId),
+    orderBy: [asc(workspaces.createdAt), asc(workspaces.id)],
   });
 
-  if (existing) return existing;
+  try {
+    if (oldest) {
+      const [promoted] = await db
+        .update(workspaces)
+        .set({ isDefault: true })
+        .where(and(eq(workspaces.id, oldest.id), eq(workspaces.ownerId, userId)))
+        .returning();
+      if (promoted) return promoted;
+    } else {
+      const [created] = await db
+        .insert(workspaces)
+        .values({ name, ownerId: userId, isDefault: true })
+        .onConflictDoNothing()
+        .returning();
+      if (created) return created;
+    }
+  } catch (error) {
+    if (!isDefaultWorkspaceConflict(error)) throw error;
+  }
 
-  const [workspace] = await db
-    .insert(workspaces)
-    .values({ name, ownerId: userId })
-    .returning();
-
-  return workspace;
+  // Another request won the race: use its default.
+  const winner = await findDefaultWorkspace(userId);
+  if (!winner) throw new Error("Failed to resolve the default workspace");
+  return winner;
 }
 
 export async function requireWorkspaceAccess(

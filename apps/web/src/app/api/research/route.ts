@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { internalError } from "@/lib/api-response";
 import { generateText } from "ai";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { enforceAiBudget } from "@/lib/production-guardrails";
@@ -52,13 +53,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const aiBudget = await enforceAiBudget({
-      userId: protection.user.id,
-      email: protection.user.email,
-      kind: "research",
-    });
-    if (!aiBudget.ok) return aiBudget.response;
-
     const access = await requireWorkspaceAccess(
       protection.user.id,
       typeof workspaceId === "string" ? workspaceId : undefined
@@ -66,6 +60,14 @@ export async function POST(request: NextRequest) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
+
+    // Budget is consumed only after the request is valid and authorized.
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "research",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const [workspaceContext, webResult, modelConfig] = await Promise.all([
       useDocSearch ? getRAGContext(query, access.workspaceId) : Promise.resolve(""),
@@ -109,11 +111,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }
 
@@ -170,10 +168,6 @@ export async function GET(request: NextRequest) {
       results: results.results,
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }

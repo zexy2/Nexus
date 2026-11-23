@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { changeSets } from "@nexus/database/schema";
@@ -99,19 +100,23 @@ export async function POST(
       try {
         return await rejectWithoutWorkflow("workflow_closed");
       } catch (recoveryError) {
+        const requestId = logInternalError("Change set reject recovery", recoveryError, request.headers);
         return NextResponse.json(
           {
             error: "CHANGE_SET_RECOVERY_FAILED",
-            message: recoveryError instanceof Error ? recoveryError.message : "Could not reject the change set.",
+            message: "Could not reject the change set.",
+            requestId,
           },
           { status: 500 }
         );
       }
     }
+    const requestId = logInternalError("Change set reject", error, request.headers);
     return NextResponse.json(
       {
         error: "TEMPORAL_UNAVAILABLE",
-        message,
+        message: "Workflow engine is unavailable.",
+        requestId,
       },
       { status: 503 }
     );

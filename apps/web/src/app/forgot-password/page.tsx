@@ -40,7 +40,12 @@ export default function ForgotPasswordPage() {
       });
 
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { message?: string } | null;
+        const body = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+        // Production without an email provider: better-auth refuses reset
+        // requests instead of creating a link nobody can receive.
+        if (body?.code === "RESET_PASSWORD_DISABLED") {
+          throw new Error(t("auth.resetDisabled"));
+        }
         throw new Error(body?.message || t("auth.resetFailed"));
       }
 

@@ -151,6 +151,10 @@ export const workspaces = pgTable("workspaces", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   iconUrl: text("icon_url"),
+  // The workspace ensureDefaultWorkspace() hands out. At most one per owner
+  // (partial unique index) so concurrent first requests cannot create
+  // duplicate default workspaces. Other owned workspaces stay false.
+  isDefault: boolean("is_default").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -158,7 +162,12 @@ export const workspaces = pgTable("workspaces", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex("workspaces_owner_default_idx")
+    .on(table.ownerId)
+    .where(sql`${table.isDefault}`),
+  index("workspaces_owner_idx").on(table.ownerId),
+]);
 
 // ==========================================
 // WORKSPACE MEMBERS (Çoklu Kullanıcı Desteği)
@@ -203,6 +212,8 @@ export const docs = pgTable(
     coverUrl: text("cover_url"),
     isArchived: integer("is_archived").notNull().default(0), // Boolean yerine integer, sync serialization ile uyumlu
     isAiGenerated: integer("is_ai_generated").notNull().default(0),
+    // Workspace-level "starred" flag (0/1, like is_archived). Client-writable via sync.
+    isFavorite: integer("is_favorite").notNull().default(0),
     createdBy: text("created_by").references(() => users.id),
     // pgvector embedding for semantic search
     embedding: vector("embedding", { dimensions: 1536 }),

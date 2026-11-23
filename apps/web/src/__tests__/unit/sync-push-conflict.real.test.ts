@@ -225,3 +225,53 @@ describe("POST /api/sync/push — base-aware updates", () => {
     expect(written).not.toHaveProperty("alignmentStatus");
   });
 });
+
+describe("POST /api/sync/push — doc favorites", () => {
+  const serverDoc = (over: Record<string, unknown> = {}) => ({
+    id: "d1",
+    workspaceId: "ws-1",
+    parentId: null,
+    title: "Plan",
+    isArchived: 0,
+    isFavorite: 0,
+    updatedAt: new Date("2026-05-01T00:00:00Z"),
+    ...over,
+  });
+
+  it("writes isFavorite as 0/1, treating a missing cached base as 0", async () => {
+    selectResults = [
+      [{ id: "ws-1" }],
+      [{ id: "d1", workspaceId: "ws-1", parentId: null }],
+      [serverDoc()],
+    ];
+
+    // A cache written before the column existed has no isFavorite: base null.
+    const res = await push({
+      table: "docs",
+      operation: "update",
+      data: { id: "d1", workspaceId: "ws-1", isFavorite: true },
+      base: { updatedAt: 1, fields: { isFavorite: null } },
+    });
+
+    expect(res.status).toBe(200);
+    expect(updateSetSpy.mock.calls[0][0]).toMatchObject({ isFavorite: 1 });
+  });
+
+  it("rejects a non-boolean isFavorite", async () => {
+    selectResults = [
+      [{ id: "ws-1" }],
+      [{ id: "d1", workspaceId: "ws-1", parentId: null }],
+      [serverDoc()],
+    ];
+
+    const res = await push({
+      table: "docs",
+      operation: "update",
+      data: { id: "d1", workspaceId: "ws-1", isFavorite: "yes" },
+      base: { updatedAt: 1, fields: { isFavorite: 0 } },
+    });
+
+    expect(res.status).toBe(400);
+    expect(updateSetSpy).not.toHaveBeenCalled();
+  });
+});

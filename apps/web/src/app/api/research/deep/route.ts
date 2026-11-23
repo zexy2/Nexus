@@ -115,17 +115,24 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let rawQuery: unknown;
+  try {
+    ({ query: rawQuery } = await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+  if (!rawQuery || typeof rawQuery !== "string") {
+    return NextResponse.json({ error: "Query is required" }, { status: 400 });
+  }
+  const query: string = rawQuery;
+
+  // Budget is consumed only after the request is validated.
   const aiBudget = await enforceAiBudget({
     userId: protection.user.id,
     email: protection.user.email,
     kind: "research",
   });
   if (!aiBudget.ok) return aiBudget.response;
-
-  const { query } = await request.json();
-  if (!query || typeof query !== "string") {
-    return NextResponse.json({ error: "Query is required" }, { status: 400 });
-  }
 
   const encoder = new TextEncoder();
   
