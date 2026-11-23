@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { changeProposals, changeSets, docs } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
@@ -30,43 +30,53 @@ export async function GET(request: NextRequest) {
   if (status) conditions.push(eq(changeSets.status, status));
   if (docId) conditions.push(eq(changeSets.docId, docId));
 
+  // One round trip: proposal counts are aggregated per change set in a
+  // grouped subquery and LEFT JOINed (previously one query per change set).
+  const proposalCounts = db
+    .select({
+      changeSetId: changeProposals.changeSetId,
+      total: sql<number>`count(*)::int`.as("total"),
+      pending: sql<number>`count(*) filter (where ${changeProposals.status} = 'pending')::int`.as("pending"),
+      applied: sql<number>`count(*) filter (where ${changeProposals.status} = 'applied')::int`.as("applied"),
+      rejected: sql<number>`count(*) filter (where ${changeProposals.status} = 'rejected')::int`.as("rejected"),
+    })
+    .from(changeProposals)
+    .groupBy(changeProposals.changeSetId)
+    .as("proposal_counts");
+
   const rows = await db
     .select({
       changeSet: changeSets,
       docTitle: docs.title,
+      total: proposalCounts.total,
+      pending: proposalCounts.pending,
+      applied: proposalCounts.applied,
+      rejected: proposalCounts.rejected,
     })
     .from(changeSets)
     .innerJoin(docs, eq(docs.id, changeSets.docId))
+    .leftJoin(proposalCounts, eq(proposalCounts.changeSetId, changeSets.id))
     .where(and(...conditions))
     .orderBy(desc(changeSets.createdAt))
     .limit(limit);
 
-  const result = await Promise.all(
-    rows.map(async ({ changeSet, docTitle }) => {
-      const proposals = await db
-        .select({ status: changeProposals.status })
-        .from(changeProposals)
-        .where(eq(changeProposals.changeSetId, changeSet.id));
-
-      return {
-        id: changeSet.id,
-        docId: changeSet.docId,
-        docTitle,
-        status: changeSet.status,
-        summary: changeSet.summary,
-        stats: changeSet.stats,
-        workflowId: changeSet.temporalWorkflowId,
-        proposals: {
-          total: proposals.length,
-          pending: proposals.filter((proposal) => proposal.status === "pending").length,
-          applied: proposals.filter((proposal) => proposal.status === "applied").length,
-          rejected: proposals.filter((proposal) => proposal.status === "rejected").length,
-        },
-        createdAt: changeSet.createdAt.toISOString(),
-        resolvedAt: changeSet.resolvedAt?.toISOString() || null,
-      };
-    })
-  );
+  const result = rows.map(({ changeSet, docTitle, total, pending, applied, rejected }) => ({
+    id: changeSet.id,
+    docId: changeSet.docId,
+    docTitle,
+    status: changeSet.status,
+    summary: changeSet.summary,
+    stats: changeSet.stats,
+    workflowId: changeSet.temporalWorkflowId,
+    proposals: {
+      total: Number(total ?? 0),
+      pending: Number(pending ?? 0),
+      applied: Number(applied ?? 0),
+      rejected: Number(rejected ?? 0),
+    },
+    createdAt: changeSet.createdAt.toISOString(),
+    resolvedAt: changeSet.resolvedAt?.toISOString() || null,
+  }));
 
   return NextResponse.json(result);
 }
