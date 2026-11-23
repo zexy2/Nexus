@@ -28,13 +28,13 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.4",
     "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@nexus/typescript-config": "workspace:*",
     "@types/node": "^25.0.9",
-    "drizzle-kit": "^0.30.6",
+    "drizzle-kit": "^0.31.11",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3"
   }
