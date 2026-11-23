@@ -8,14 +8,17 @@
  *
  * Order:
  *   1. Final sync while the session cookie is still valid.
- *   2. If changes are still unsynced, ask the user (`confirmDiscard`). If they
- *      choose to stay, nothing is signed out or deleted and a sync is retried.
+ *   2. If anything would be lost, ask the user (`confirmDiscard`): queued
+ *      mutations, collaborative edits, mutations kept in the rejected store
+ *      (refused or parked after server errors) and offline AI commands the
+ *      server has not taken over. If they choose to stay, nothing is signed
+ *      out or deleted and a sync is retried.
  *   3. Sign out.
  *   4. Delete local data. This runs even when sign-out itself fails, so a
  *      shared machine never hands the next user a previous user's cache.
  */
 import type { SyncEngine } from "./engine";
-import { clearOfflineCommands } from "./offline-commands";
+import { clearOfflineCommands, countQueuedOfflineCommands } from "./offline-commands";
 
 export const CHAT_STORE_KEY = "nexus-chat-store";
 
@@ -28,6 +31,17 @@ export interface UnsyncedChanges {
    * in the y-indexeddb copy that sign-out deletes). See lib/collab/unsynced.ts.
    */
   documents: number;
+  /**
+   * Mutations in the engine's rejected store (refused by the server, or
+   * parked after repeated server errors). Not queued any more, but still the
+   * only copy of those edits.
+   */
+  rejected: number;
+  /** Offline AI commands not yet accepted by the server (queued or failed). */
+  commands: number;
+  /** "Unsynced" changes: mutations + documents + commands. */
+  unsynced: number;
+  /** Everything sign-out would delete: unsynced + rejected. */
   total: number;
 }
 
@@ -39,6 +53,8 @@ export async function signOutAndClearLocalData(options: {
   storage?: Pick<Storage, "removeItem"> | null;
   /** Number of documents (open or closed) with unconfirmed collaborative edits. */
   countUnsyncedDocuments?: () => number;
+  /** Offline AI commands that would be lost (default: the command queue DB). */
+  countQueuedCommands?: () => Promise<number>;
   /**
    * Called when changes are still unsynced after the final sync. Resolve
    * true to sign out anyway (the changes are lost), false to stay signed in.
@@ -61,13 +77,28 @@ export async function signOutAndClearLocalData(options: {
   }
 
   const mutations = liveEngine?.pendingCount ?? 0;
+  const rejected = liveEngine?.rejectedCount ?? 0;
   let documents = 0;
   try {
     documents = options.countUnsyncedDocuments?.() ?? 0;
   } catch {
     documents = 0;
   }
-  const unsynced: UnsyncedChanges = { mutations, documents, total: mutations + documents };
+  let commands = 0;
+  try {
+    commands = await (options.countQueuedCommands ?? countQueuedOfflineCommands)();
+  } catch {
+    commands = 0;
+  }
+  const unsyncedCount = mutations + documents + commands;
+  const unsynced: UnsyncedChanges = {
+    mutations,
+    documents,
+    rejected,
+    commands,
+    unsynced: unsyncedCount,
+    total: unsyncedCount + rejected,
+  };
 
   if (unsynced.total > 0 && confirmDiscard) {
     const discard = await confirmDiscard(unsynced);
@@ -78,7 +109,9 @@ export async function signOutAndClearLocalData(options: {
     }
   }
   if (unsynced.total > 0) {
-    console.warn(`[Sync] Signing out with ${unsynced.total} unsynced change(s); they are discarded.`);
+    console.warn(
+      `[Sync] Signing out with ${unsynced.unsynced} unsynced and ${unsynced.rejected} rejected change(s); they are discarded.`
+    );
   }
 
   try {

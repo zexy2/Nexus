@@ -50,7 +50,6 @@ vi.mock("@/lib/ai/agent", () => ({ runAgent: vi.fn() }));
 
 import { POST as researchPOST } from "@/app/api/research/route";
 import { POST as deepResearchPOST } from "@/app/api/research/deep/route";
-import { POST as writeStreamPOST } from "@/app/api/ai/write-stream/route";
 import { POST as commandPOST } from "@/app/api/commands/process/route";
 import { POST as embeddingsPOST } from "@/app/api/embeddings/route";
 
@@ -84,12 +83,6 @@ describe("AI budget charged before request validation/authorization", () => {
   it("/api/research/deep: missing or malformed query does not consume budget", async () => {
     expect((await deepResearchPOST(req("/api/research/deep", {}))).status).toBe(400);
     expect((await deepResearchPOST(req("/api/research/deep", undefined, "{nope"))).status).toBe(400);
-    expect(enforceAiBudget).not.toHaveBeenCalled();
-  });
-
-  it("/api/ai/write-stream: missing prompt does not consume budget", async () => {
-    expect((await writeStreamPOST(req("/api/ai/write-stream", {}))).status).toBe(400);
-    expect((await writeStreamPOST(req("/api/ai/write-stream", undefined, "{nope"))).status).toBe(400);
     expect(enforceAiBudget).not.toHaveBeenCalled();
   });
 

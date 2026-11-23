@@ -14,7 +14,9 @@
  * Conflict policy: updates send only changed fields plus the cached base
  * values; the server merges per field and rejects (409 STALE_BASE) when
  * another user changed the same field in between. Rejected mutations are kept
- * in a local "rejected" store and surfaced as a toast. See ./engine.ts and
+ * in a local "rejected" store, surfaced as a toast and listed in the
+ * sync-issues panel (components/shared/sync-issues-panel.tsx), where they can
+ * be retried or discarded. See ./engine.ts and
  * app/api/sync/push/route.ts. Doc *body* collaboration uses Yjs separately.
  *
  * Note: the subscription hooks intentionally call refresh() in useEffect to load
@@ -143,6 +145,8 @@ interface ZeroContextType {
   status: SyncStatus;
   isOnline: boolean;
   pendingMutations: number;
+  /** Mutations in the rejected store (shown in the sync-issues panel). */
+  rejectedMutations: number;
   lastSyncedAt: Date | null;
 }
 
@@ -151,6 +155,7 @@ const ZeroContext = createContext<ZeroContextType>({
   status: "disconnected",
   isOnline: false,
   pendingMutations: 0,
+  rejectedMutations: 0,
   lastSyncedAt: null,
 });
 
@@ -176,6 +181,7 @@ export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps)
   const [status, setStatus] = useState<SyncStatus>("connecting");
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [pendingMutations, setPendingMutations] = useState(0);
+  const [rejectedMutations, setRejectedMutations] = useState(0);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -188,9 +194,19 @@ export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps)
     });
     const unsubscribeRejected = syncEngine.onMutationRejected((rejection: RejectedMutation) => {
       setPendingMutations(syncEngine.pendingCount);
+      if (rejection.reason === "server_error") {
+        showToast.error(tRef.current("syncStatus.changeParked"), {
+          description: tRef.current("syncStatus.changeParkedDescription"),
+        });
+        return;
+      }
       showToast.error(tRef.current("syncStatus.changeRejected"), {
         description: rejection.error || tRef.current("syncStatus.changeRejectedDescription"),
       });
+    });
+    const unsubscribeRejectedCount = syncEngine.onRejectedCountChange((count) => {
+      setRejectedMutations(count);
+      setPendingMutations(syncEngine.pendingCount);
     });
 
     syncEngine
@@ -200,6 +216,7 @@ export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps)
         setEngine(syncEngine);
         setStatus(syncEngine.status);
         setPendingMutations(syncEngine.pendingCount);
+        setRejectedMutations(syncEngine.rejectedCount);
       })
       .catch((error) => {
         console.error("[Sync] Local store unavailable:", error);
@@ -214,6 +231,7 @@ export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps)
     return () => {
       unsubscribeStatus();
       unsubscribeRejected();
+      unsubscribeRejectedCount();
       syncEngine.destroy();
       setEngine((current) => (current === syncEngine ? null : current));
       window.removeEventListener("online", handleOnline);
@@ -228,6 +246,7 @@ export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps)
         status,
         isOnline,
         pendingMutations,
+        rejectedMutations,
         lastSyncedAt,
       }}
     >
@@ -245,11 +264,12 @@ export function useZero() {
 }
 
 export function useZeroStatus() {
-  const { status, isOnline, pendingMutations, lastSyncedAt } = useZero();
+  const { status, isOnline, pendingMutations, rejectedMutations, lastSyncedAt } = useZero();
   return {
     status,
     isOnline,
     pendingMutations,
+    rejectedMutations,
     lastSyncedAt,
     isConnected: status === "connected",
     isSyncing: status === "syncing",

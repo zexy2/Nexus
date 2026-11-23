@@ -11,14 +11,14 @@
  */
 export type ThemePreference = "light" | "dark" | "system";
 
-export interface Appearance {
+interface Appearance {
   theme: ThemePreference;
   compact: boolean;
 }
 
 export const APPEARANCE_STORAGE_KEY = "nexus-appearance";
-export const DEFAULT_APPEARANCE: Appearance = { theme: "dark", compact: false };
-export const COMPACT_CLASS = "compact";
+const DEFAULT_APPEARANCE: Appearance = { theme: "dark", compact: false };
+const COMPACT_CLASS = "compact";
 
 /**
  * Maps a stored preference to the theme that is actually applied.
@@ -39,7 +39,7 @@ export function resolveTheme(theme: ThemePreference, prefersDark: boolean): "lig
   return theme;
 }
 
-export function prefersDarkScheme(): boolean {
+function prefersDarkScheme(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }

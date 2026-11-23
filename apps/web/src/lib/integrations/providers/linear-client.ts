@@ -9,19 +9,13 @@ type LinearTokenPayload = {
 
 type LinearGraphqlError = Error & { body?: unknown };
 
-export type LinearTeam = {
+type LinearTeam = {
   id: string;
   key: string;
   name: string;
 };
 
-export type LinearProject = {
-  id: string;
-  name: string;
-  teamIds: string[];
-};
-
-export type LinearIssue = {
+type LinearIssue = {
   id: string;
   identifier: string;
   title: string;
@@ -36,11 +30,11 @@ export type LinearIssue = {
 };
 
 /** Per-request timeout for Linear API and OAuth calls. */
-export const LINEAR_FETCH_TIMEOUT_MS = 15_000;
+const LINEAR_FETCH_TIMEOUT_MS = 15_000;
 /** Upper bound on issue pages followed per sync (100 issues per page). */
-export const LINEAR_MAX_PAGES = 10;
+const LINEAR_MAX_PAGES = 10;
 
-export function getLinearConfig() {
+function getLinearConfig() {
   const clientId = process.env.LINEAR_CLIENT_ID;
   const clientSecret = process.env.LINEAR_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
@@ -111,7 +105,7 @@ export async function resolveLinearAccessToken(encrypted: string) {
   return { encrypted: null, accessToken: token.accessToken };
 }
 
-export async function linearGraphql<T>(
+async function linearGraphql<T>(
   accessToken: string,
   query: string,
   variables?: Record<string, unknown>
@@ -216,54 +210,4 @@ export async function listLinearIssues(
     after = pageInfo.endCursor;
   }
   return issues;
-}
-
-export async function performLinearWrite(
-  accessToken: string,
-  operationType: string,
-  payload: Record<string, unknown>
-) {
-  if (operationType === "linear_comment") {
-    const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
-    const body = typeof payload.body === "string" ? payload.body : payload.comment;
-    if (!issueId || typeof body !== "string" || body.trim().length === 0) {
-      throw new Error("Linear comment requires payload.issueId and payload.body");
-    }
-    return linearGraphql(accessToken, `mutation NexusComment($issueId: String!, $body: String!) {
-      commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id url } }
-    }`, { issueId, body });
-  }
-
-  if (operationType === "linear_update_issue") {
-    const issueId = typeof payload.issueId === "string" ? payload.issueId : null;
-    if (!issueId) throw new Error("Linear update requires payload.issueId");
-    const input: Record<string, unknown> = {};
-    if (typeof payload.title === "string") input.title = payload.title;
-    if (typeof payload.description === "string") input.description = payload.description;
-    if (typeof payload.stateId === "string") input.stateId = payload.stateId;
-    if (Object.keys(input).length === 0) {
-      throw new Error("Linear update requires at least one mutable field");
-    }
-    return linearGraphql(accessToken, `mutation NexusIssueUpdate($id: String!, $input: IssueUpdateInput!) {
-      issueUpdate(id: $id, input: $input) { success issue { id identifier url } }
-    }`, { id: issueId, input });
-  }
-
-  if (operationType === "linear_create_issue") {
-    const teamId = typeof payload.teamId === "string" ? payload.teamId : null;
-    const title = typeof payload.title === "string" ? payload.title : null;
-    if (!teamId || !title) throw new Error("Linear create requires payload.teamId and payload.title");
-    return linearGraphql(accessToken, `mutation NexusIssueCreate($input: IssueCreateInput!) {
-      issueCreate(input: $input) { success issue { id identifier url } }
-    }`, {
-      input: {
-        teamId,
-        title,
-        description: typeof payload.description === "string" ? payload.description : undefined,
-        projectId: typeof payload.projectId === "string" ? payload.projectId : undefined,
-      },
-    });
-  }
-
-  throw new Error(`Unsupported Linear operation: ${operationType}`);
 }

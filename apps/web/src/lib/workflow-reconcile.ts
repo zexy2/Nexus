@@ -66,7 +66,7 @@ export function normalizeTemporalStatus(status: string): ExecutionStatus {
 }
 
 /** Default error for closed non-success states that carry no failure message. */
-export function temporalClosedStatusMessage(status: string): string | undefined {
+function temporalClosedStatusMessage(status: string): string | undefined {
   return TEMPORAL_CLOSED_FAILURE_MESSAGES[temporalStatusKey(status)];
 }
 

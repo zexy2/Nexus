@@ -487,8 +487,9 @@ export function createCollaborationServer(options: CollaborationServerOptions) {
         status: persistenceStatus === "postgres" ? "ok" : "degraded",
         server: "Nexus Collaboration",
         documents: activeDocs.size,
+        // Public endpoint: never expose raw DB error text. The detail is
+        // logged by markPersistenceError and available via getPersistenceStatus.
         persistence: persistenceStatus,
-        persistenceError,
       })
     );
   });

@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { internalError } from "@/lib/api-response";
-import { and, gte, inArray, or, eq } from "drizzle-orm";
+import { and, gte, inArray, or, eq, getTableColumns } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { toClientFormat } from "@/lib/sync/client-format";
@@ -23,6 +23,11 @@ import {
   workspaceMembers,
   workspaces,
 } from "@nexus/database/schema";
+
+// Every docs column except the server-only embedding vector: it is never read
+// by the client and is the bulk of a doc row (toClientFormat strips it too).
+const { embedding: _embedding, ...DOC_PULL_COLUMNS } = getTableColumns(docs);
+void _embedding;
 
 export async function GET(request: NextRequest) {
   // Auth + Rate Limit check
@@ -82,7 +87,7 @@ export async function GET(request: NextRequest) {
       agentExecutionsData,
     ] = await Promise.all([
       db
-        .select()
+        .select(DOC_PULL_COLUMNS)
         .from(docs)
         .where(and(inArray(docs.workspaceId, workspaceIds), gte(docs.updatedAt, sinceDate))),
       db

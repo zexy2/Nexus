@@ -7,7 +7,7 @@
  * for recent timestamps, absolute (locale-aware) once they age out.
  */
 
-export type AppLocale = "tr" | "en";
+type AppLocale = "tr" | "en";
 
 type DateInput = Date | string | number;
 
@@ -52,9 +52,4 @@ export function formatRelativeDate(value: DateInput, locale: AppLocale = "tr"): 
   if (hours < 24) return s.hours(hours);
   if (days < 7) return s.days(days);
   return date.toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US");
-}
-
-/** Absolute date+time, for detail views and tooltips. */
-export function formatDateTime(value: DateInput, locale: AppLocale = "tr"): string {
-  return toDate(value).toLocaleString(locale === "tr" ? "tr-TR" : "en-US");
 }
