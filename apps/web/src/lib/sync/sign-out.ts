@@ -22,7 +22,11 @@ export const CHAT_STORE_KEY = "nexus-chat-store";
 export interface UnsyncedChanges {
   /** Sync-engine mutations still queued after the final sync. */
   mutations: number;
-  /** Open collaborative documents with edits the server has not confirmed. */
+  /**
+   * Collaborative documents with edits the server has not confirmed: open
+   * editors plus documents edited earlier and closed (their edits live only
+   * in the y-indexeddb copy that sign-out deletes). See lib/collab/unsynced.ts.
+   */
   documents: number;
   total: number;
 }
@@ -33,7 +37,7 @@ export async function signOutAndClearLocalData(options: {
   engine: SyncEngine | null;
   signOut: () => Promise<unknown>;
   storage?: Pick<Storage, "removeItem"> | null;
-  /** Number of open documents with unconfirmed collaborative edits. */
+  /** Number of documents (open or closed) with unconfirmed collaborative edits. */
   countUnsyncedDocuments?: () => number;
   /**
    * Called when changes are still unsynced after the final sync. Resolve

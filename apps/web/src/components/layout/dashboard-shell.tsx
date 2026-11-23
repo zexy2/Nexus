@@ -274,7 +274,8 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       const result = await signOutAndClearLocalData({
         engine,
         signOut: () => signOut(),
-        countUnsyncedDocuments: countUnsyncedCollabDocs,
+        // Open editors plus docs edited earlier (even if closed offline).
+        countUnsyncedDocuments: () => countUnsyncedCollabDocs(user?.id),
         confirmDiscard: ({ total }) =>
           new Promise<boolean>((resolve) => {
             confirmResolver.current = resolve;
@@ -292,7 +293,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       // Full navigation: drops every in-memory store and the sync engine.
       if (navigate) window.location.assign('/login');
     }
-  }, [engine]);
+  }, [engine, user?.id]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setClientReady(true), 0);

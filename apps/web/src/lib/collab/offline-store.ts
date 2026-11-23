@@ -8,6 +8,7 @@
  */
 import type * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
+import { clearPendingCollabDocs } from "./unsynced";
 
 export const COLLAB_OFFLINE_DB_PREFIX = "nexus-collab:";
 const REGISTRY_KEY = "nexus-collab-offline-dbs";
@@ -104,4 +105,6 @@ export async function clearCollabOfflineData(): Promise<void> {
 
   await Promise.all(Array.from(names, deleteDatabase));
   writeRegistry([]);
+  // The offline copies are gone, so nothing is pending any more.
+  clearPendingCollabDocs();
 }
