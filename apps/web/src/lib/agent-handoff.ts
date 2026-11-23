@@ -13,6 +13,7 @@ import {
   workspaceRepositories,
 } from "@nexus/database/schema";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 // Keep in sync with the partial unique index "agent_jobs_task_active_idx"
 // (packages/database/src/schema/index.ts): at most one job per task may be in
@@ -306,6 +307,12 @@ export async function authenticateAgentToken(request: Request) {
     ),
   });
   if (!row || row.expiresAt.getTime() <= Date.now()) return null;
+
+  // A token only acts for its creator. If that user has since lost access to
+  // the token's workspace (removed as member, ownership transferred), the
+  // token must stop working even though it was never revoked.
+  const access = await requireWorkspaceAccess(row.userId, row.workspaceId);
+  if (!access.ok) return null;
 
   await db
     .update(agentAccessTokens)
