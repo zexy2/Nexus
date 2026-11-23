@@ -138,7 +138,7 @@ For the public demo VPS, install the maintenance timers once:
 BASE_URL=https://your-domain.com pnpm maintenance:install-vps
 ```
 
-This installs three systemd timers:
+This installs four systemd timers:
 
 - `nexus-health-check.timer` runs every five minutes and calls `/api/health`.
   It does not call AI endpoints and does not create fake CPU/network load.
@@ -147,6 +147,15 @@ This installs three systemd timers:
 - `nexus-docker-cleanup.timer` runs a conservative weekly cleanup for old
   build cache, dangling images, and stopped containers. It does not prune
   volumes.
+- `nexus-db-cleanup.timer` runs daily (`scripts/maintenance-db-cleanup.sh`,
+  also `pnpm maintenance:db-cleanup`) and deletes `workflow_activity_receipts`
+  rows older than `RECEIPT_RETENTION_DAYS` (default 30, minimum 7). Receipts
+  only matter while a workflow can still retry the activity, and the longest
+  workflow wait is the 72h plan-impact review. Results are logged to
+  `logs/maintenance/db-cleanup-*.log`.
+
+Already-installed VPSes pick up a new timer by re-running
+`pnpm maintenance:install-vps`; it is idempotent.
 
 Verify restore periodically on a staging database and confirm `CREATE EXTENSION vector` exists.
 
