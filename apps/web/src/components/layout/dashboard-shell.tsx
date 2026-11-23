@@ -244,6 +244,13 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       // command queue and chat store so the next user starts clean.
       await signOutAndClearLocalData({ engine, signOut: () => signOut() });
     } finally {
+      // Drop locally cached collaborative document bodies (shared machines).
+      // Loaded lazily so the shell bundle does not pull in Yjs.
+      await import('@/lib/collab/offline-store')
+        .then(({ clearCollabOfflineData }) => clearCollabOfflineData())
+        .catch((error) => {
+          console.error('[Collab] Failed to clear offline documents:', error);
+        });
       // Full navigation: drops every in-memory store and the sync engine.
       window.location.assign('/login');
     }
