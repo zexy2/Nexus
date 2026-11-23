@@ -20,8 +20,18 @@ export const APPEARANCE_STORAGE_KEY = "nexus-appearance";
 export const DEFAULT_APPEARANCE: Appearance = { theme: "dark", compact: false };
 export const COMPACT_CLASS = "compact";
 
+/**
+ * Maps a stored preference to the theme that is actually applied.
+ *
+ * TEMPORARY: "system" is treated as dark. The light palette has not had a
+ * visual pass yet (~740 hardcoded white/near-white colors across the
+ * dashboard), so following an OS light preference would silently put users
+ * on an unverified theme. Only an explicit "light" choice opts in. The stored
+ * value stays "system", so restoring OS-following later is a change here (and
+ * in APPEARANCE_BOOT_SCRIPT) only.
+ */
 export function normalizeTheme(value: unknown): ThemePreference {
-  return value === "light" || value === "dark" || value === "system" ? value : "dark";
+  return value === "light" ? "light" : "dark";
 }
 
 export function resolveTheme(theme: ThemePreference, prefersDark: boolean): "light" | "dark" {
@@ -77,8 +87,7 @@ export function storeAppearance(appearance: Appearance): void {
 export const APPEARANCE_BOOT_SCRIPT = `(function(){try{
 if(location.pathname.indexOf('/dashboard')!==0)return;
 var raw=localStorage.getItem(${JSON.stringify(APPEARANCE_STORAGE_KEY)});if(!raw)return;
-var a=JSON.parse(raw)||{};var t=a.theme==='light'||a.theme==='system'?a.theme:'dark';
-if(t==='system')t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+var a=JSON.parse(raw)||{};var t=a.theme==='light'?'light':'dark';
 var r=document.documentElement;r.classList.remove(t==='dark'?'light':'dark');r.classList.add(t);
 r.style.colorScheme=t;if(a.compact===true)r.classList.add(${JSON.stringify(COMPACT_CLASS)});
 }catch(e){}})();`;

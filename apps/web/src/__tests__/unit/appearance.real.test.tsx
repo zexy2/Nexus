@@ -8,6 +8,7 @@ import { AppearanceSync } from "@/components/shared/appearance-sync";
 import {
   APPEARANCE_BOOT_SCRIPT,
   APPEARANCE_STORAGE_KEY,
+  normalizeTheme,
   readStoredAppearance,
   resolveTheme,
 } from "@/lib/appearance";
@@ -39,6 +40,17 @@ describe("resolveTheme", () => {
   });
 });
 
+describe("normalizeTheme", () => {
+  // Light mode is visually unverified, so only an explicit "light" opts in.
+  it("treats stored 'system' as dark", () => {
+    expect(normalizeTheme("system")).toBe("dark");
+    expect(normalizeTheme("dark")).toBe("dark");
+    expect(normalizeTheme("light")).toBe("light");
+    expect(normalizeTheme("neon")).toBe("dark");
+    expect(normalizeTheme(undefined)).toBe("dark");
+  });
+});
+
 describe("AppearanceSync", () => {
   it("applies light theme + compact mode and caches it", () => {
     render(<AppearanceSync theme="light" compact />);
@@ -48,10 +60,11 @@ describe("AppearanceSync", () => {
     expect(readStoredAppearance()).toEqual({ theme: "light", compact: true });
   });
 
-  it("follows the OS for 'system'", () => {
+  it("keeps 'system' dark even when the OS prefers light", () => {
     mockPrefersDark(false);
     render(<AppearanceSync theme="system" compact={false} />);
-    expect(root.classList.contains("light")).toBe(true);
+    expect(root.classList.contains("dark")).toBe(true);
+    expect(root.classList.contains("light")).toBe(false);
     expect(root.classList.contains("compact")).toBe(false);
   });
 
@@ -79,6 +92,14 @@ describe("APPEARANCE_BOOT_SCRIPT", () => {
     expect(root.classList.contains("light")).toBe(true);
     expect(root.classList.contains("dark")).toBe(false);
     expect(root.classList.contains("compact")).toBe(true);
+  });
+
+  it("treats a cached 'system' as dark even when the OS prefers light", () => {
+    mockPrefersDark(false);
+    window.localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ theme: "system", compact: false }));
+    runBootScript("/dashboard");
+    expect(root.classList.contains("dark")).toBe(true);
+    expect(root.classList.contains("light")).toBe(false);
   });
 
   it("leaves marketing pages dark", () => {
