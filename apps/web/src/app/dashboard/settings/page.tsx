@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
+import { applyAppearance, normalizeTheme, storeAppearance } from "@/lib/appearance";
 
 interface SettingsData {
   profile: {
@@ -164,6 +165,7 @@ function SettingsContent() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [agentNotifications, setAgentNotifications] = useState(true);
   const [taskReminders, setTaskReminders] = useState(true);
+  const router = useRouter();
   const [theme, setTheme] = useState("system");
   const [compactMode, setCompactMode] = useState(false);
   const [offlineMode, setOfflineMode] = useState(true);
@@ -339,6 +341,13 @@ function SettingsContent() {
       if (!response.ok) throw new Error("Failed to save settings");
       
       setSaveSuccess(true);
+
+      // Apply the saved appearance right away and refresh the dashboard layout
+      // so <AppearanceSync> receives the new server values.
+      const appearance = { theme: normalizeTheme(theme), compact: compactMode };
+      applyAppearance(document.documentElement, appearance);
+      storeAppearance(appearance);
+      router.refresh();
       
       // Refresh settings to get the latest server-managed AI availability and quota.
       await fetchSettings();

@@ -777,8 +777,6 @@ export const messages = {
     },
     shell: {
       userMenuLoading: "Kullanıcı menüsü yükleniyor",
-      onboardingWelcomeToast: "Hoş geldiniz! Nexus'u keşfetmeye başlayın.",
-      onboardingSkipToast: "Daha sonra Ayarlar'dan onboarding'i tamamlayabilirsiniz.",
     },
     palette: {
       placeholder: "Komut yaz veya ara...",
@@ -804,6 +802,21 @@ export const messages = {
       newDocDesc: "Yeni bir doküman oluştur",
       newTaskDesc: "Yeni bir görev oluştur",
       startChatDesc: "Planlarınız ve işleriniz hakkında Nexus'a sorun",
+    },
+    ux: {
+      errorTitle: "Bir şeyler yanlış gitti",
+      errorDesc: "Beklenmedik bir hata oluştu. Tekrar deneyebilir veya sayfayı yenileyebilirsiniz.",
+      errorRef: "Hata kodu",
+      retry: "Tekrar dene",
+      reload: "Sayfayı yenile",
+      goDashboard: "Panele dön",
+      goHome: "Ana sayfaya dön",
+      notFoundTitle: "Sayfa bulunamadı",
+      notFoundDesc: "Aradığınız sayfa taşınmış, silinmiş ya da hiç var olmamış olabilir.",
+      onboardingDone: "Hoş geldiniz! Nexus'u keşfetmeye başlayın.",
+      onboardingSkipped: "Tanıtımı atladınız. ⌘K / Ctrl+K ile istediğiniz yere hızla ulaşabilirsiniz.",
+      favoriteRemoved: "Favorilerden çıkarıldı.",
+      favoriteFailed: "Favori güncellenemedi.",
     },
   },
   en: {
@@ -1576,8 +1589,6 @@ export const messages = {
     },
     shell: {
       userMenuLoading: "Loading user menu",
-      onboardingWelcomeToast: "Welcome! Start exploring Nexus.",
-      onboardingSkipToast: "You can finish onboarding later from Settings.",
     },
     palette: {
       placeholder: "Type a command or search...",
@@ -1603,6 +1614,21 @@ export const messages = {
       newDocDesc: "Create a new document",
       newTaskDesc: "Create a new task",
       startChatDesc: "Ask Nexus about your plans and work",
+    },
+    ux: {
+      errorTitle: "Something went wrong",
+      errorDesc: "An unexpected error occurred. You can try again or reload the page.",
+      errorRef: "Error code",
+      retry: "Try again",
+      reload: "Reload page",
+      goDashboard: "Back to dashboard",
+      goHome: "Back to home",
+      notFoundTitle: "Page not found",
+      notFoundDesc: "The page you are looking for may have moved, been deleted, or never existed.",
+      onboardingDone: "Welcome! Start exploring Nexus.",
+      onboardingSkipped: "Introduction skipped. Press ⌘K / Ctrl+K to jump anywhere.",
+      favoriteRemoved: "Removed from favorites.",
+      favoriteFailed: "Could not update favorite.",
     },
   },
 } as const;

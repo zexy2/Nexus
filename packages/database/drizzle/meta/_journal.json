@@ -120,6 +120,13 @@
       "when": 1795424277805,
       "tag": "0016_backfill_vector_embeddings",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795424627843,
+      "tag": "0017_docs_is_favorite",
+      "breakpoints": true
     }
   ]
 }

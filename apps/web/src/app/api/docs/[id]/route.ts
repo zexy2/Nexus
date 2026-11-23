@@ -102,6 +102,7 @@ export async function GET(
       content: doc.content || [],
       createdBy: doc.createdBy,
       isAiGenerated: doc.isAiGenerated === 1,
+      isFavorite: doc.isFavorite === 1,
       updatedAt: doc.updatedAt.toISOString(),
     });
   } catch (error) {

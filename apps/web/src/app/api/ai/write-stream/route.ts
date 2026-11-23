@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { createLineSplitter } from "@/lib/stream-text";
 import {
   aiUnavailableResponse,
   enforceAiBudget,
@@ -143,31 +144,37 @@ Kurallar:
       return aiUnavailableResponse(`Gemini writing failed with status ${response.status}.`);
     }
 
-    // Transform Gemini SSE to our format
-    const transformStream = new TransformStream({
-      transform(chunk, controller) {
-        const text = new TextDecoder().decode(chunk);
-        const lines = text.split("\n");
-        
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6);
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (content) {
-                controller.enqueue(
-                  new TextEncoder().encode(`data: ${JSON.stringify({ content })}\n\n`)
-                );
-              }
-            } catch {
-              // Skip unparseable chunks
-            }
+    // Transform Gemini SSE to our format. One decoder in streaming mode plus a
+    // line buffer: a chunk can end mid-character (Turkish letters are 2 bytes)
+    // or mid-event, and both must carry over to the next chunk.
+    const decoder = new TextDecoder();
+    const encoder = new TextEncoder();
+    const lines = createLineSplitter();
+    const emitLines = (
+      batch: string[],
+      controller: TransformStreamDefaultController<Uint8Array>
+    ) => {
+      for (const line of batch) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          const content = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (content) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content })}\n\n`));
           }
+        } catch {
+          // Skip unparseable lines
         }
+      }
+    };
+    const transformStream = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        emitLines(lines.push(decoder.decode(chunk, { stream: true })), controller);
       },
       flush(controller) {
-        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        emitLines(lines.push(decoder.decode()), controller);
+        emitLines(lines.flush(), controller);
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       },
     });
 

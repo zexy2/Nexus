@@ -33,6 +33,7 @@ export async function GET() {
         updatedAt: d.updatedAt.toISOString(),
         createdBy: d.createdBy,
         isAiGenerated: d.isAiGenerated === 1,
+        isFavorite: d.isFavorite === 1,
       }))
     );
   } catch (error) {

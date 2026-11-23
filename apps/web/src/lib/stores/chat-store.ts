@@ -419,6 +419,9 @@ export const useChatStore = create<ChatStore>()(
                 appendStreamingContent(chunk);
               }
             }
+            // Flush bytes of a character left incomplete by the last chunk.
+            const tail = decoder.decode();
+            if (tail) appendStreamingContent(tail);
           }
           
           // Add assistant message with streamed content

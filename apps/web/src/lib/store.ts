@@ -137,9 +137,10 @@ interface UserPreferences {
 export const useUserPreferences = create<UserPreferences>()(
   persist(
     (set) => ({
-      // Onboarding - default to true to skip onboarding for testing
-      // New users will have localStorage cleared which resets to this
-      hasCompletedOnboarding: true,
+      // Onboarding. Whether to show it at all is decided server-side
+      // (lib/onboarding-server.ts) so existing users never see it; this flag
+      // only records that this browser has completed or skipped it.
+      hasCompletedOnboarding: false,
       setHasCompletedOnboarding: (completed) => set({ hasCompletedOnboarding: completed }),
 
       // AI preferences

@@ -8,6 +8,25 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { userSettings } from "@nexus/database/schema";
+import { eq } from "drizzle-orm";
+import { AppearanceSync } from "@/components/shared/appearance-sync";
+import { getOnboardingEligibility } from "@/lib/onboarding-server";
+
+async function getAppearance(userId: string) {
+  try {
+    const [row] = await db
+      .select({ theme: userSettings.theme, compactMode: userSettings.compactMode })
+      .from(userSettings)
+      .where(eq(userSettings.userId, userId))
+      .limit(1);
+    return { theme: row?.theme ?? "system", compact: row?.compactMode ?? false };
+  } catch (error) {
+    console.error("[Dashboard] Could not load appearance settings:", error);
+    return null;
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +41,17 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  const [appearance, onboardingEligible] = await Promise.all([
+    getAppearance(session.user.id),
+    getOnboardingEligibility(session.user.id, session.user.createdAt),
+  ]);
+
   return (
     <ZeroProvider userId={session.user.id}>
       <AIWriteProvider>
         <ToastProvider />
-        <OnboardingWrapper />
+        {appearance && <AppearanceSync theme={appearance.theme} compact={appearance.compact} />}
+        <OnboardingWrapper eligible={onboardingEligible} />
         <ModalProvider />
         <SidebarProvider className="contents">
           <DashboardShell>{children}</DashboardShell>

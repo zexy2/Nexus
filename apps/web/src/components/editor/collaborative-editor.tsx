@@ -37,7 +37,7 @@ import {
   fetchCollabToken,
 } from "@/lib/collab/token-refresh";
 import { openCollabOfflineStore } from "@/lib/collab/offline-store";
-import { setCollabDocUnsynced } from "@/lib/collab/unsynced";
+import { markCollabDocPendingSync, setCollabDocUnsynced } from "@/lib/collab/unsynced";
 import { seedFragmentIfEmpty } from "@/lib/collab/seed";
 import {
   type CollabPersistenceEvent,
@@ -454,6 +454,13 @@ export function CollaborativeEditor({
     });
 
     const applyPersistenceEvent = (event: CollabPersistenceEvent) => {
+      // Persist "has edits the server has not confirmed" beyond this editor's
+      // lifetime, so sign-out still warns after the doc is closed offline.
+      markCollabDocPendingSync(
+        userId,
+        documentId,
+        event === "local-update" || event === "ack-error"
+      );
       queueMicrotask(() => {
         if (!cancelled) {
           setPersistenceStatus((current) => nextPersistenceStatus(current, event));
