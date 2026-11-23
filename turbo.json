@@ -17,6 +17,11 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": []
     },
+    "test:coverage": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["coverage/**"]
+    },
     "type-check": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
