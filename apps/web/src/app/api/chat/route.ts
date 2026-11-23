@@ -189,7 +189,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
 
     try {
       const { text } = await generateTextTraced(
-        { model, system: enhancedSystem, messages: chatMessages },
+        { model, instructions: enhancedSystem, messages: chatMessages },
         { name: `chat.${agentMode}`, agentType: "chat", userId, workspaceId, modelName, provider }
       );
 

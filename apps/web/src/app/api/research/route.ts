@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
 
     const result = await generateTextTraced({
       model: modelConfig.model,
-      system: "You are a research assistant. Separate verified facts from inference, state uncertainty, and cite only the supplied web URLs. Never invent a source.",
+      instructions: "You are a research assistant. Separate verified facts from inference, state uncertainty, and cite only the supplied web URLs. Never invent a source.",
       prompt: `Research question: ${query}\n\n${context || "No external or workspace sources were requested. Provide an analysis and explicitly state that no sources were used."}`,
     }, {
       name: "research",

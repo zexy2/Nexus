@@ -7,7 +7,7 @@
  * server-managed in v1 (BYOK is disabled). The `any` model type is required
  * because AI SDK model types vary between providers.
  */
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGoogle } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { db } from "@/lib/db";
@@ -24,7 +24,7 @@ interface ModelConfig {
 }
 
 // Configure AI providers - Server defaults (fallback)
-const gemini = createGoogleGenerativeAI({
+const gemini = createGoogle({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
