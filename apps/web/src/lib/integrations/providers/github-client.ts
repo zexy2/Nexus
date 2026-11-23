@@ -187,9 +187,17 @@ function base64Url(value: Buffer | string) {
     .replace(/=+$/g, "");
 }
 
-function githubPrivateKey() {
-  const key = process.env.GITHUB_APP_PRIVATE_KEY;
+/**
+ * Normalizes GITHUB_APP_PRIVATE_KEY: accepts a raw PEM, a PEM with literal `\n`
+ * escapes (single-line env files), or a base64-encoded PEM.
+ */
+export function githubPrivateKey() {
+  const key = process.env.GITHUB_APP_PRIVATE_KEY?.trim();
   if (!key) throw new Error("GITHUB_APP_PRIVATE_KEY is not configured");
+  if (!key.includes("-----BEGIN")) {
+    const decoded = Buffer.from(key, "base64").toString("utf8");
+    if (decoded.includes("-----BEGIN")) return decoded.replace(/\\n/g, "\n");
+  }
   return key.includes("\\n") ? key.replace(/\\n/g, "\n") : key;
 }
 

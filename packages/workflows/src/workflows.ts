@@ -156,7 +156,10 @@ function parseJsonTaskCandidates(output: string): unknown[] | null {
   for (const candidate of candidates.filter(Boolean)) {
     try {
       const taskArray = coerceTaskArray(JSON.parse(candidate));
-      if (taskArray) return taskArray;
+      // An empty array is not an answer: markdown checkboxes ("- [ ] ...")
+      // match the array regex and parse as `[]`, which must fall through to
+      // the list parser instead of failing the workflow.
+      if (taskArray && taskArray.length > 0) return taskArray;
     } catch {
       // Try next candidate.
     }

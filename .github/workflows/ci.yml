@@ -100,8 +100,45 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pnpm test
+      # Runs every package's vitest suite with v8 coverage (text + lcov +
+      # json-summary). No thresholds yet; numbers are reported only.
+      - name: Run tests with coverage
+        run: pnpm test:coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require("fs");
+          const reports = [
+            ["@nexus/web", "apps/web/coverage/coverage-summary.json"],
+            ["@nexus/workflows", "packages/workflows/coverage/coverage-summary.json"],
+          ];
+          const pct = (m) => `${m.pct}% (${m.covered}/${m.total})`;
+          console.log("### Test coverage\n");
+          console.log("| Package | Lines | Branches | Functions | Statements |");
+          console.log("| --- | --- | --- | --- | --- |");
+          for (const [name, file] of reports) {
+            if (!fs.existsSync(file)) {
+              console.log(`| ${name} | n/a | n/a | n/a | n/a |`);
+              continue;
+            }
+            const t = JSON.parse(fs.readFileSync(file, "utf8")).total;
+            console.log(`| ${name} | ${pct(t.lines)} | ${pct(t.branches)} | ${pct(t.functions)} | ${pct(t.statements)} |`);
+          }
+          NODE
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            apps/web/coverage/
+            packages/workflows/coverage/
+          retention-days: 14
+          if-no-files-found: warn
+
   e2e:
     name: E2E Tests
     runs-on: ubuntu-24.04

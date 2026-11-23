@@ -42,7 +42,22 @@ AI_DEMO_PER_MINUTE_LIMIT=1
 AI_DEMO_WORKFLOW_DAILY_LIMIT=2
 AI_DEMO_CHAT_DAILY_LIMIT=1
 AI_MAX_STEPS_PER_WORKFLOW=5
+TRUSTED_PROXY_COUNT=1
+HEALTH_CHECK_TOKEN=generate-with-openssl-rand-hex-32
+WORKER_SHUTDOWN_GRACE_TIME=45 seconds
+ONBOARDING_LAUNCH_AT=
 ```
+
+Operational settings (all optional; defaults shown in `.env.production.example`):
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `TRUSTED_PROXY_COUNT` | web | Number of reverse proxies that append to `X-Forwarded-For` (Caddy/Nginx only = `1`, Cloudflare + Caddy = `2`). The client IP for rate limits and audit logs is taken that many hops from the right. Too low trusts a spoofable header; too high collapses everyone onto the proxy IP. Default `1`. |
+| `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
+| `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
+| `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+
+`docker-compose.prod.yml` passes environment variables to each service explicitly, so a value in `.env.production` only reaches a container when the service's `environment:` block lists it.
 
 `GEMINI_API_KEY` is required for AI chat and workflows. `OPENAI_API_KEY` is only required for embeddings/RAG search. `TAVILY_API_KEY` is optional; web research returns a clear not-configured response when it is absent.
 
@@ -62,6 +77,30 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
+
+### Updating a running deployment (deploy order)
+
+Roll out in this order so new code never runs against an old schema and the
+worker understands every workflow the new web can start:
+
+1. **Migrate** with the new image, before any new code serves traffic.
+   Migrations must stay backward compatible with the code still running.
+2. **Worker**: SIGTERM drains in-flight activities for
+   `WORKER_SHUTDOWN_GRACE_TIME`, then it restarts on the new workflow code.
+3. **Web and collaboration together**: they share `COLLAB_AUTH_SECRET` and the
+   collaboration token format, so do not run mismatched versions.
+
+```bash
+export APP_COMMIT_SHA="$(git rev-parse HEAD)"
+COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
+$COMPOSE build web worker collaboration
+$COMPOSE run --rm --no-deps web pnpm db:migrate   # 1. migrate
+$COMPOSE up -d --no-deps worker                   # 2. worker
+$COMPOSE up -d --no-deps web collaboration        # 3. web + collab
+SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
+```
+
+The block above under **Start** is for the first install only.
 
 Use migrations in production. `db:push` is local-development only and should not be part of a VPS deploy.
 `pnpm db:migrate` also performs a guarded one-time baseline when it detects an
@@ -138,7 +177,7 @@ For the public demo VPS, install the maintenance timers once:
 BASE_URL=https://your-domain.com pnpm maintenance:install-vps
 ```
 
-This installs three systemd timers:
+This installs four systemd timers:
 
 - `nexus-health-check.timer` runs every five minutes and calls `/api/health`.
   It does not call AI endpoints and does not create fake CPU/network load.
@@ -147,6 +186,15 @@ This installs three systemd timers:
 - `nexus-docker-cleanup.timer` runs a conservative weekly cleanup for old
   build cache, dangling images, and stopped containers. It does not prune
   volumes.
+- `nexus-db-cleanup.timer` runs daily (`scripts/maintenance-db-cleanup.sh`,
+  also `pnpm maintenance:db-cleanup`) and deletes `workflow_activity_receipts`
+  rows older than `RECEIPT_RETENTION_DAYS` (default 30, minimum 7). Receipts
+  only matter while a workflow can still retry the activity, and the longest
+  workflow wait is the 72h plan-impact review. Results are logged to
+  `logs/maintenance/db-cleanup-*.log`.
+
+Already-installed VPSes pick up a new timer by re-running
+`pnpm maintenance:install-vps`; it is idempotent.
 
 Verify restore periodically on a staging database and confirm `CREATE EXTENSION vector` exists.
 
