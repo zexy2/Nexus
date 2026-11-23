@@ -238,6 +238,13 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
 
   const handleSignOut = useCallback(async () => {
     await signOut();
+    // Drop locally cached collaborative document bodies (shared machines).
+    // Loaded lazily so the shell bundle does not pull in Yjs.
+    await import('@/lib/collab/offline-store')
+      .then(({ clearCollabOfflineData }) => clearCollabOfflineData())
+      .catch((error) => {
+        console.error('[Collab] Failed to clear offline documents:', error);
+      });
     router.push('/login');
   }, [router]);
 
