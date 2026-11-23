@@ -18,9 +18,9 @@
     "smoke:collab": "tsx scripts/yjs-persistence-smoke.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.15",
-    "@ai-sdk/google": "^3.0.9",
-    "@ai-sdk/openai": "^3.0.11",
+    "@ai-sdk/anthropic": "^4.0.107",
+    "@ai-sdk/google": "^4.0.124",
+    "@ai-sdk/openai": "^4.0.122",
     "@blocknote/core": "^0.57.0",
     "@blocknote/mantine": "^0.57.0",
     "@blocknote/react": "^0.57.0",
@@ -50,7 +50,7 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@types/ws": "^8.18.1",
-    "ai": "^6.0.37",
+    "ai": "^7.0.180",
     "better-auth": "^1.7.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

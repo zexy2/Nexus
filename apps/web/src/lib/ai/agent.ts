@@ -11,7 +11,7 @@
  * All tools are bound to a verified userId + workspaceId, so the agent can only
  * read/write the caller's own workspace.
  */
-import { tool, stepCountIs } from "ai";
+import { tool, isStepCount } from "ai";
 import { z } from "zod";
 import { searchWeb } from "@/lib/ai/tavily";
 import { getRAGContext } from "@/lib/ai/chat-rag";
@@ -151,10 +151,10 @@ export async function runAgent(opts: {
   const result = await generateTextTraced(
     {
       model,
-      system: SUPERVISOR_SYSTEM,
+      instructions: SUPERVISOR_SYSTEM,
       messages: messages as any,
       tools: activeTools,
-      stopWhen: stepCountIs(maxSteps),
+      stopWhen: isStepCount(maxSteps),
     },
     {
       name: trace?.name ?? "agent.run",

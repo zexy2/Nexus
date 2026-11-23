@@ -185,7 +185,7 @@ async function executeRequest(input: PreparedRequest) {
     const result = await generateTextTraced(
       {
         model,
-        system: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
+        instructions: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
         prompt: input.message,
       },
       {
