@@ -17,7 +17,23 @@
  * - Foreign ids (docId, parentId, executionId, assigneeId) must point into the
  *   same workspace as the row being written.
  * - Deletes are soft (archive) for docs/tasks; other tables cannot be deleted.
- * - Rejections are written to the audit log.
+ * - Rejections are written to the audit log. When the caller can still read the
+ *   row, the rejection body carries `current` (the server row in client format)
+ *   so the client can replace its optimistic copy instead of guessing.
+ *
+ * Conflict strategy (docs/tasks updates):
+ * - New clients send only the changed fields in `data` plus
+ *   `base: { updatedAt, fields }`, where `base.fields` holds the value each
+ *   changed field had in the client's cache when the edit was made.
+ * - Under a row lock, every changed field is checked three-way: if the server
+ *   value still equals the base value (nobody else touched it) or already
+ *   equals the new value, the field is applied. Otherwise someone else changed
+ *   that same field since the client last saw it, and the whole mutation is
+ *   rejected with 409 STALE_BASE (nothing is written) and `current` returned.
+ *   Edits to different fields of the same row therefore merge (per-field
+ *   last-write-wins); edits to the same field never silently overwrite.
+ * - Mutations without `base` (old cached clients that send the whole row) keep
+ *   the previous behaviour: allowlisted fields are written as-is.
  *
  * Protected: Requires authentication
  * Rate Limited: 60 requests per minute per IP and per user, plus the shared
@@ -28,6 +44,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
+import { toClientFormat } from "@/lib/sync/client-format";
 import {
   checkPersistentRateLimit,
   rateLimitResponse,
@@ -58,6 +75,13 @@ interface PendingMutation {
   operation: Operation;
   data: Row;
   timestamp?: number;
+  /** Optional (new clients): cache state the edit was based on. */
+  base?: unknown;
+}
+
+interface MutationBase {
+  updatedAt?: number;
+  fields: Row;
 }
 
 const VALID_TABLES = ["docs", "tasks", "workspaces", "chat_messages"] as const;
@@ -72,14 +96,21 @@ class MutationRejected extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
-    readonly workspaceId?: string | null
+    readonly workspaceId?: string | null,
+    readonly details?: Row
   ) {
     super(message);
   }
 }
 
-function reject(status: number, code: string, message: string, workspaceId?: string | null): never {
-  throw new MutationRejected(status, code, message, workspaceId);
+function reject(
+  status: number,
+  code: string,
+  message: string,
+  workspaceId?: string | null,
+  details?: Row
+): never {
+  throw new MutationRejected(status, code, message, workspaceId, details);
 }
 
 function isValidTable(table: unknown): table is ValidTable {
@@ -133,6 +164,18 @@ export async function POST(request: NextRequest) {
 
     const { table, operation, data } = mutation;
 
+    let base: MutationBase | undefined;
+    if (mutation.base !== undefined && mutation.base !== null) {
+      if (!isPlainObject(mutation.base) || !isPlainObject(mutation.base.fields)) {
+        return NextResponse.json({ error: "Invalid mutation base" }, { status: 400 });
+      }
+      const baseUpdatedAt = mutation.base.updatedAt;
+      base = {
+        fields: mutation.base.fields,
+        updatedAt: typeof baseUpdatedAt === "number" ? baseUpdatedAt : undefined,
+      };
+    }
+
     if (!isValidTable(table)) {
       return NextResponse.json(
         { error: `Unknown table: ${String(table)}` },
@@ -150,7 +193,7 @@ export async function POST(request: NextRequest) {
     if (table === "workspaces") {
       await applyWorkspaceMutation(operation, data, userId);
     } else {
-      await applyScopedMutation(table, operation, data, userId);
+      await applyScopedMutation(table, operation, data, userId, base);
     }
 
     return NextResponse.json({
@@ -174,8 +217,15 @@ export async function POST(request: NextRequest) {
         },
         request,
       });
+      const current = await loadCurrentForClient(mutation, userId);
       return NextResponse.json(
-        { error: error.message, code: error.code },
+        {
+          error: error.message,
+          code: error.code,
+          mutationId: mutation?.id,
+          ...(error.details ?? {}),
+          ...(current ? { current } : {}),
+        },
         { status: error.status }
       );
     }
@@ -282,7 +332,8 @@ async function applyScopedMutation(
   table: WorkspaceScopedTable,
   operation: Operation,
   data: Row,
-  userId: string
+  userId: string,
+  base?: MutationBase
 ) {
   const accessibleWorkspaceIds = await getAccessibleWorkspaceIds(userId);
   const id = optionalId(data.id, "id");
@@ -310,7 +361,7 @@ async function applyScopedMutation(
       // Chat messages are immutable; a re-sent insert is an idempotent retry.
       return;
     }
-    await updateExistingRow(table, existing, data);
+    await updateExistingRow(table, existing, data, base);
     return;
   }
 
@@ -329,7 +380,7 @@ async function applyScopedMutation(
     reject(405, "UPDATE_NOT_ALLOWED", "Chat messages cannot be modified via sync", existing.workspaceId as string);
   }
 
-  await updateExistingRow(table, existing, data);
+  await updateExistingRow(table, existing, data, base);
 }
 
 function assertRowAccess(existing: Row, accessibleWorkspaceIds: string[]) {
@@ -440,15 +491,46 @@ async function insertNewRow(table: WorkspaceScopedTable, data: Row, workspaceId:
   }
 }
 
-async function updateExistingRow(table: "docs" | "tasks", existing: Row, data: Row) {
-  const workspaceId = existing.workspaceId as string;
-  const fields = table === "docs" ? pickDocFields(data) : pickTaskFields(data);
+async function updateExistingRow(
+  table: "docs" | "tasks",
+  existing: Row,
+  data: Row,
+  base?: MutationBase
+) {
+  if (base) {
+    await updateWithBase(table, existing, data, base);
+    return;
+  }
 
+  // Legacy path (no base): old clients send the whole cached row. Allowlisted
+  // fields are written as-is, exactly as before.
+  const workspaceId = existing.workspaceId as string;
+  const fields = await finalizeUpdateFields(
+    table,
+    existing,
+    table === "docs" ? pickDocFields(data) : pickTaskFields(data),
+    db
+  );
+
+  if (Object.keys(fields).length === 0) return;
+
+  const schemaTable = table === "docs" ? docs : tasks;
+  await db
+    .update(schemaTable)
+    .set({ ...fields, updatedAt: new Date() } as never)
+    .where(and(eq(schemaTable.id, existing.id as string), eq(schemaTable.workspaceId, workspaceId)));
+}
+
+type QueryDb = Pick<typeof db, "query">;
+
+/** Reference checks and business rules shared by both update paths. */
+async function finalizeUpdateFields(table: "docs" | "tasks", existing: Row, fields: Row, queryDb: QueryDb) {
+  const workspaceId = existing.workspaceId as string;
   await assertReferences(table, fields, workspaceId, existing);
 
   if (table === "tasks" && "status" in fields && fields.status !== existing.status) {
     if (fields.status === "done") {
-      const pendingReview = await db.query.agentJobs.findFirst({
+      const pendingReview = await queryDb.query.agentJobs.findFirst({
         where: and(
           eq(agentJobs.taskId, existing.id as string),
           inArray(agentJobs.status, ["submitted", "outdated"])
@@ -465,14 +547,119 @@ async function updateExistingRow(table: "docs" | "tasks", existing: Row, data: R
     }
     fields.completedAt = fields.status === "done" ? new Date() : null;
   }
+  return fields;
+}
 
-  if (Object.keys(fields).length === 0) return;
+/**
+ * Field-level conflict-checked update (see the header comment). Runs under a
+ * row lock so the check and the write see the same row.
+ */
+async function updateWithBase(table: "docs" | "tasks", existing: Row, data: Row, base: MutationBase) {
+  const workspaceId = existing.workspaceId as string;
+  const picked = table === "docs" ? pickDocFields(data) : pickTaskFields(data);
+  if (Object.keys(picked).length === 0) return;
 
-  const schemaTable = table === "docs" ? docs : tasks;
-  await db
-    .update(schemaTable)
-    .set({ ...fields, updatedAt: new Date() } as never)
-    .where(and(eq(schemaTable.id, existing.id as string), eq(schemaTable.workspaceId, workspaceId)));
+  // docs and tasks share the id/workspaceId columns used here; the cast keeps
+  // drizzle's overloads happy for the union.
+  const schemaTable = (table === "docs" ? docs : tasks) as typeof tasks;
+
+  await db.transaction(async (tx) => {
+    const [current] = (await tx
+      .select()
+      .from(schemaTable)
+      .where(and(eq(schemaTable.id, existing.id as string), eq(schemaTable.workspaceId, workspaceId)))
+      .limit(1)
+      .for("update")) as Row[];
+    if (!current) {
+      reject(404, "RECORD_NOT_FOUND", "Record no longer exists", workspaceId);
+    }
+
+    const conflicts = Object.keys(picked).filter((key) => {
+      if (!(key in base.fields)) return false; // no base for this field: plain LWW
+      const serverValue = normalizeForCompare(key, current[key]);
+      return (
+        !sameValue(serverValue, normalizeForCompare(key, base.fields[key])) &&
+        !sameValue(serverValue, normalizeForCompare(key, data[key]))
+      );
+    });
+    if (conflicts.length > 0) {
+      reject(
+        409,
+        "STALE_BASE",
+        "This record was changed by someone else since you last synced",
+        workspaceId,
+        { conflicts }
+      );
+    }
+
+    const fields = await finalizeUpdateFields(table, current, picked, tx);
+    if (Object.keys(fields).length === 0) return;
+    await tx
+      .update(schemaTable)
+      .set({ ...fields, updatedAt: new Date() } as never)
+      .where(and(eq(schemaTable.id, existing.id as string), eq(schemaTable.workspaceId, workspaceId)));
+  });
+}
+
+/** Map client and server representations of a value onto one comparable form. */
+function normalizeForCompare(key: string, value: unknown): unknown {
+  if (value === undefined || value === null) return null;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value === "" && key.endsWith("Id")) return null;
+  if (key === "dueDate" && typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? value : ms;
+  }
+  return value;
+}
+
+/** Structural equality; object key order is ignored (jsonb reorders keys). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    const bArr = b as unknown[];
+    return a.length === bArr.length && a.every((item, i) => sameValue(item, bArr[i]));
+  }
+  const aRow = a as Row;
+  const bRow = b as Row;
+  const aKeys = Object.keys(aRow);
+  return (
+    aKeys.length === Object.keys(bRow).length &&
+    aKeys.every((key) => key in bRow && sameValue(aRow[key], bRow[key]))
+  );
+}
+
+/**
+ * The server copy of the mutated row, when the caller may still read it, so a
+ * rejected client can replace its optimistic copy. Best effort: any failure
+ * just omits it.
+ */
+async function loadCurrentForClient(mutation: PendingMutation | undefined, userId: string) {
+  try {
+    if (!mutation || !isPlainObject(mutation.data) || !isValidTable(mutation.table)) return undefined;
+    const id = mutation.data.id;
+    if (typeof id !== "string" || !id) return undefined;
+    const accessible = await getAccessibleWorkspaceIds(userId);
+    if (mutation.table === "workspaces") {
+      if (!accessible.includes(id)) return undefined;
+      const [row] = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+      return row ? toClientFormat(row) : undefined;
+    }
+    const schemaTable = scopedTables[mutation.table] as typeof tasks;
+    const [row] = (await db.select().from(schemaTable).where(eq(schemaTable.id, id)).limit(1)) as Row[];
+    if (!row || typeof row.workspaceId !== "string" || !accessible.includes(row.workspaceId)) {
+      return undefined;
+    }
+    const clientRow = toClientFormat(row);
+    // Embeddings are server-only and large; never ship them to the browser.
+    delete clientRow.embedding;
+    return clientRow;
+  } catch {
+    return undefined;
+  }
 }
 
 async function softDeleteRow(table: WorkspaceScopedTable, existing: Row) {

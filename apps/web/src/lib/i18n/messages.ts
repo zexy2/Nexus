@@ -131,6 +131,8 @@ export const messages = {
       changes: "değişiklik",
       offlineMode: "Çevrimdışı mod",
       allChangesSynced: "Tüm değişiklikler eşitlendi",
+      changeRejected: "Bir değişiklik sunucu tarafından reddedildi",
+      changeRejectedDescription: "Kayıt sunucudaki son haliyle güncellendi.",
     },
     settings: {
       title: "Ayarlar",
@@ -875,6 +877,8 @@ export const messages = {
       changes: "changes",
       offlineMode: "Offline mode",
       allChangesSynced: "All changes synced",
+      changeRejected: "A change was rejected by the server",
+      changeRejectedDescription: "The record was refreshed from the server.",
     },
     settings: {
       title: "Settings",
