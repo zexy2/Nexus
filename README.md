@@ -128,7 +128,7 @@ scripts
 
 Requirements:
 
-- Node.js 20+
+- Node.js 22 (used by CI and the Docker image; `engines` allows 20+)
 - pnpm 10+
 - Docker
 - Gemini API key for AI workflows
@@ -146,7 +146,7 @@ pnpm dev:local
 
 Open [http://localhost:3000](http://localhost:3000).
 
-`pnpm dev:local` starts Docker services, prepares the database, seeds the demo user, and runs the web app, Temporal worker, and collaboration server. When restarted, it clears old local Node processes before starting new ones.
+`pnpm dev:local` starts Docker services, applies migrations (`pnpm db:migrate`, falling back to `db:push` for the local DB only), seeds the demo user, and runs the web app, Temporal worker, and collaboration server. When restarted, it clears old local Node processes before starting new ones.
 
 ## Useful Scripts
 
@@ -155,7 +155,8 @@ pnpm dev:local          # one-command local demo
 pnpm build              # production build
 pnpm lint               # lint packages
 pnpm type-check         # TypeScript checks
-pnpm test               # test suite
+pnpm test               # unit tests (web + workflows)
+pnpm test:coverage      # tests with v8 coverage reports
 pnpm db:migrate         # production-safe migrations + guarded legacy baseline
 pnpm db:push            # local disposable DB only
 pnpm smoke:prod         # Docker VPS smoke test
@@ -175,7 +176,7 @@ SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 
 Production uses migrations. `db:push` is local-only and should not be used for deploys.
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables, reverse proxy notes, smoke checks, and backups.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables (see also `.env.production.example`), the deploy order, reverse proxy notes, smoke checks, backups, and the maintenance timers.
 See [docs/INTEGRATIONS_SETUP.md](docs/INTEGRATIONS_SETUP.md) for GitHub App, Linear OAuth, callback URLs, and integration smoke checks.
 
 ## What Makes It Different From a Chat Prompt

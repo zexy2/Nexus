@@ -15,3 +15,7 @@
 
 - Documentation must not claim complete distributed tracing in deployments where `OTEL_ENABLED` is unset.
 - Enabling the ops profile consumes additional VPS memory and should be deliberate on the free-tier host.
+
+## Status update (2026-11)
+
+OpenTelemetry instrumentation covers the **web app only** (`apps/web/src/instrumentation.ts`, enabled by `OTEL_ENABLED=true`). The Temporal worker and the collaboration server are not instrumented, so traces do not span workflow executions. Worker liveness is reported through the database heartbeat surfaced by `/api/health`.
