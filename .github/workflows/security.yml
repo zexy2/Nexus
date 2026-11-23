@@ -13,8 +13,6 @@ permissions:
 jobs:
   dependency-audit:
     runs-on: ubuntu-24.04
-    # TODO: remove continue-on-error after PR #46 merges (main has known high advisories until then).
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
