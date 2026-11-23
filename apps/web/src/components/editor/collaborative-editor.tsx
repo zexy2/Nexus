@@ -19,6 +19,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { PartialBlock } from "@blocknote/core";
+import { withCollaboration } from "@blocknote/core/yjs";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
@@ -119,7 +120,7 @@ function CollaborativeEditorInner({
   
   // Create BlockNote editor WITH provider ready
   const editor = useCreateBlockNote(
-    {
+    withCollaboration({
       collaboration: {
         provider: provider,
         fragment: fragment,
@@ -132,7 +133,7 @@ function CollaborativeEditorInner({
         default: editorPlaceholder,
         emptyDocument: editorPlaceholder,
       },
-    },
+    }),
     [editorPlaceholder]
   );
 
