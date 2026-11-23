@@ -187,33 +187,3 @@ export const useSyncStore = create<SyncState>((set) => ({
   setLastSyncedAt: (date) => set({ lastSyncedAt: date }),
   setPendingChanges: (count) => set({ pendingChanges: count }),
 }));
-
-// Active agents store
-interface Agent {
-  id: string;
-  name: string;
-  status: 'idle' | 'thinking' | 'working' | 'error';
-  currentTask?: string;
-  progress?: number;
-}
-
-interface AgentsState {
-  agents: Agent[];
-  activeAgentId: string | null;
-  setAgents: (agents: Agent[]) => void;
-  updateAgent: (id: string, updates: Partial<Agent>) => void;
-  setActiveAgent: (id: string | null) => void;
-}
-
-export const useAgentsStore = create<AgentsState>((set) => ({
-  agents: [],
-  activeAgentId: null,
-  setAgents: (agents) => set({ agents }),
-  updateAgent: (id, updates) =>
-    set((state) => ({
-      agents: state.agents.map((agent) =>
-        agent.id === id ? { ...agent, ...updates } : agent
-      ),
-    })),
-  setActiveAgent: (id) => set({ activeAgentId: id }),
-}));

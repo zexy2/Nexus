@@ -5,12 +5,12 @@
  * format without maintaining a second provider stack or hard-coded model list.
  */
 import { logInternalError } from "@/lib/api-response";
-import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { runAgent } from "@/lib/ai/agent";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { aiQuotaResponse, isAiQuotaError } from "@/lib/ai/quota";
@@ -175,17 +175,28 @@ async function executeRequest(input: PreparedRequest) {
       messages: [{ role: "user", content: input.message }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      trace: { name: "agents.auto", modelName, provider },
     });
     message = result.text;
     toolsUsed = result.toolsUsed;
   } else {
     const capability = CHAT_CAPABILITIES[input.mode];
     const context = await buildCapabilityContext(input);
-    const result = await generateText({
-      model,
-      system: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
-      prompt: input.message,
-    });
+    const result = await generateTextTraced(
+      {
+        model,
+        system: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
+        prompt: input.message,
+      },
+      {
+        name: `agents.${input.mode}`,
+        agentType: "chat",
+        userId: input.userId,
+        workspaceId: input.workspaceId,
+        modelName,
+        provider,
+      }
+    );
     message = result.text;
   }
 

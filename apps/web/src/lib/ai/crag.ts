@@ -41,7 +41,7 @@ async function searchSimilarDocuments(query: string, workspaceId?: string): Prom
   }
 }
 
-export interface CRAGResult {
+interface CRAGResult {
   query: string;
   relevantDocuments: Array<{
     content: string;
@@ -325,60 +325,4 @@ export async function correctiveRAG(
   console.log(`[CRAG] Completed with ${result.corrections} corrections, ${result.relevantDocuments.length} documents`);
   
   return result;
-}
-
-/**
- * Generate answer using CRAG results
- */
-export async function generateCRAGAnswer(
-  query: string,
-  cragResult: CRAGResult
-): Promise<string> {
-  const relevantDocs = cragResult.relevantDocuments.filter(d => d.isRelevant);
-  
-  if (relevantDocs.length === 0 && !cragResult.finalAnswer) {
-    return "I couldn't find relevant information to answer your question. Please try rephrasing or provide more context.";
-  }
-
-  if (cragResult.finalAnswer) {
-    return cragResult.finalAnswer;
-  }
-
-  if (!process.env.GEMINI_API_KEY) {
-    return relevantDocs.map(d => d.content).join("\n\n---\n\n");
-  }
-
-  try {
-    const context = relevantDocs
-      .slice(0, 3)
-      .map((d, i) => `[Source ${i + 1}: ${d.source}]\n${d.content}`)
-      .join("\n\n");
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: `You are a helpful assistant. Answer the user's question based on the provided context. 
-If the context doesn't fully answer the question, say so but provide what information you can.
-Always cite your sources using [Source X] format.` }] },
-        contents: [{ role: "user", parts: [{ text: `Context:\n${context}\n\nQuestion: ${query}` }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Unable to generate answer.";
-  } catch (error) {
-    console.error("[CRAG] Answer generation error:", error);
-    return relevantDocs.map(d => d.content).join("\n\n---\n\n");
-  }
 }

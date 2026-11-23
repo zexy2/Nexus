@@ -19,7 +19,7 @@ export const PLAN_CHANGE_REVIEW_WINDOW_MS = 72 * 60 * 60 * 1000;
 /** Slack so the workflow's own expiry timer normally wins. */
 export const PLAN_CHANGE_EXPIRY_GRACE_MS = 60 * 60 * 1000;
 
-export type PlanWorkflowLiveness = "running" | "closed" | "not_found" | "unknown";
+type PlanWorkflowLiveness = "running" | "closed" | "not_found" | "unknown";
 
 type PendingChangeSetLike = {
   id: string;
@@ -29,7 +29,7 @@ type PendingChangeSetLike = {
   temporalWorkflowId: string | null;
 };
 
-export function changeSetIsPastReviewWindow(
+function changeSetIsPastReviewWindow(
   changeSet: Pick<PendingChangeSetLike, "createdAt">,
   now: Date = new Date()
 ) {
@@ -59,7 +59,7 @@ function isWorkflowNotFound(error: unknown) {
   return name === "WorkflowNotFoundError" || /not found/i.test(message);
 }
 
-export async function getPlanWorkflowLiveness(
+async function getPlanWorkflowLiveness(
   workflowId: string | null
 ): Promise<PlanWorkflowLiveness> {
   if (!workflowId) return "not_found";

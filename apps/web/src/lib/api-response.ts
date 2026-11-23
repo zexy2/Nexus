@@ -30,9 +30,6 @@ export const unauthorized = (message = "Authentication required") =>
 export const forbidden = (message = "Access denied") =>
   apiError(403, "Forbidden", message);
 
-export const notFound = (message = "Resource not found") =>
-  apiError(404, "Not Found", message);
-
 export const serverError = (message = "Internal server error") =>
   apiError(500, "Internal Server Error", message);
 

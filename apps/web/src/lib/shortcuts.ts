@@ -15,10 +15,10 @@
  * with the browser; they are ignored while focus is in an editable field.
  */
 
-export const NAV_SEQUENCE_PREFIX = "g";
-export const NAV_SEQUENCE_TIMEOUT_MS = 1500;
+const NAV_SEQUENCE_PREFIX = "g";
+const NAV_SEQUENCE_TIMEOUT_MS = 1500;
 
-export const NAV_SHORTCUTS: Record<string, string> = {
+const NAV_SHORTCUTS: Record<string, string> = {
   p: "/dashboard/docs",
   w: "/dashboard/tasks",
   c: "/dashboard/changes",

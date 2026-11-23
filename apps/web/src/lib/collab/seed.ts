@@ -15,13 +15,13 @@ import * as Y from "yjs";
 import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { blocksToYXmlFragment } from "@blocknote/core/yjs";
 
-export const SEED_ORIGIN = Symbol("nexus-collab-seed");
+const SEED_ORIGIN = Symbol("nexus-collab-seed");
 
 type AnyEditor = BlockNoteEditor<any, any, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type SeedBlock = PartialBlock<any, any, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /** Fill in missing block ids with ids derived from the block's position. */
-export function normalizeSeedBlocks(blocks: SeedBlock[], path = "seed"): SeedBlock[] {
+function normalizeSeedBlocks(blocks: SeedBlock[], path = "seed"): SeedBlock[] {
   return blocks.map((block, index) => {
     const id = typeof block.id === "string" && block.id ? block.id : `${path}-${index}`;
     const children = Array.isArray(block.children)
@@ -32,7 +32,7 @@ export function normalizeSeedBlocks(blocks: SeedBlock[], path = "seed"): SeedBlo
 }
 
 /** 32-bit FNV-1a hash mapped onto a valid, non-zero Yjs clientID. */
-export function seedClientId(input: string): number {
+function seedClientId(input: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
     hash ^= input.charCodeAt(i);

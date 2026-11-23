@@ -12,12 +12,13 @@ import {
   tasks,
   workspaceRepositories,
 } from "@nexus/database/schema";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 // Keep in sync with the partial unique index "agent_jobs_task_active_idx"
 // (packages/database/src/schema/index.ts): at most one job per task may be in
 // one of these statuses at a time.
-export const ACTIVE_AGENT_JOB_STATUSES = [
+const ACTIVE_AGENT_JOB_STATUSES = [
   "queued",
   "claimed",
   "running",
@@ -47,7 +48,7 @@ export function isUniqueViolation(error: unknown, constraint?: string): boolean 
   return false;
 }
 
-export type AgentContextSnapshot = {
+type AgentContextSnapshot = {
   task: {
     id: string;
     title: string;
@@ -307,37 +308,17 @@ export async function authenticateAgentToken(request: Request) {
   });
   if (!row || row.expiresAt.getTime() <= Date.now()) return null;
 
+  // A token only acts for its creator. If that user has since lost access to
+  // the token's workspace (removed as member, ownership transferred), the
+  // token must stop working even though it was never revoked.
+  const access = await requireWorkspaceAccess(row.userId, row.workspaceId);
+  if (!access.ok) return null;
+
   await db
     .update(agentAccessTokens)
     .set({ lastUsedAt: new Date() })
     .where(eq(agentAccessTokens.id, row.id));
   return row;
-}
-
-export async function markAgentJobsOutdatedForDocument(docId: string, workspaceId: string) {
-  const affected = await db
-    .update(agentJobs)
-    .set({ status: "outdated", updatedAt: new Date() })
-    .where(
-      and(
-        eq(agentJobs.workspaceId, workspaceId),
-        inArray(agentJobs.status, [...ACTIVE_AGENT_JOB_STATUSES]),
-        sql`${agentJobs.taskId} in (select id from ${tasks} where ${tasks.docId} = ${docId})`
-      )
-    )
-    .returning({ id: agentJobs.id });
-
-  if (affected.length > 0) {
-    await db.insert(agentJobEvents).values(
-      affected.map(({ id }) => ({
-        jobId: id,
-        workspaceId,
-        type: "outdated",
-        message: "The approved plan changed. Refresh the agent brief before review.",
-      }))
-    );
-  }
-  return affected.length;
 }
 
 export async function getAgentJobDetail(jobId: string, workspaceId: string) {

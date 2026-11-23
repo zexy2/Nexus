@@ -6,7 +6,7 @@ import { getOllamaConfig, hasAnyLlmProvider, isLocalOnly } from "@/lib/ai/provid
 import { isEphemeralDemoEmail } from "@/lib/demo-sessions";
 import { getTrustedProxyClientIP } from "@/lib/request-ip";
 
-export type PersistentLimitResult = {
+type PersistentLimitResult = {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -50,12 +50,12 @@ export function isPublicSignupEnabled() {
   return boolEnv("PUBLIC_SIGNUP_ENABLED", process.env.NODE_ENV !== "production");
 }
 
-export function isAiEnabled() {
+function isAiEnabled() {
   return boolEnv("AI_ENABLED", true);
 }
 
 /** True when the address is on the ADMIN_EMAILS allow-list (no verification check). */
-export function isAdminEmailListed(email?: string | null) {
+function isAdminEmailListed(email?: string | null) {
   if (!email) return false;
   return (process.env.ADMIN_EMAILS || "")
     .split(",")

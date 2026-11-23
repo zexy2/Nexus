@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
  * the TTL the row is marked failed (retryable) the next time anyone reads it.
  */
 export const COMMAND_LEASE_TTL_MS = 5 * 60_000;
-export const COMMAND_HEARTBEAT_INTERVAL_MS = 30_000;
+const COMMAND_HEARTBEAT_INTERVAL_MS = 30_000;
 export const COMMAND_LEASE_EXPIRED_ERROR =
   "COMMAND_LEASE_EXPIRED: the command stopped reporting progress (the server was likely restarted). Retry the command.";
 
@@ -19,7 +19,7 @@ const LEASED_STATUSES = ["pending", "running"] as const;
 
 export const COMMAND_WORKFLOW_ID_PREFIX = "cmd-";
 
-export function isCommandExecution(row: Pick<ExecutionRow, "temporalWorkflowId">) {
+function isCommandExecution(row: Pick<ExecutionRow, "temporalWorkflowId">) {
   return Boolean(row.temporalWorkflowId?.startsWith(COMMAND_WORKFLOW_ID_PREFIX));
 }
 

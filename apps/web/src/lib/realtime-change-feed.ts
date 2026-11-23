@@ -11,10 +11,10 @@ import postgres from "postgres";
  * postgres.js re-issues LISTEN automatically after a reconnect.
  */
 
-export const CHANGE_CHANNEL = "nexus_changes";
+const CHANGE_CHANNEL = "nexus_changes";
 
-export type ChangeEvent = { workspaceId: string };
-export type ChangeHandler = (event: ChangeEvent) => void;
+type ChangeEvent = { workspaceId: string };
+type ChangeHandler = (event: ChangeEvent) => void;
 
 type FeedState = {
   handlers: Set<ChangeHandler>;
@@ -117,9 +117,4 @@ export async function subscribeToChanges(
     state.handlers.delete(handler);
     if (state.handlers.size === 0) await teardownIfIdle(state);
   };
-}
-
-/** Number of in-process subscribers (diagnostics/tests). */
-export function changeFeedSubscriberCount() {
-  return feedState().handlers.size;
 }

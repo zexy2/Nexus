@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@nexus/database/schema";
 import { and, asc, eq, or } from "drizzle-orm";
 
-export type WorkspaceAccess = {
+type WorkspaceAccess = {
   id: string;
   role: "owner" | "admin" | "member";
 };

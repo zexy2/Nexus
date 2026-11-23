@@ -15,9 +15,9 @@ import { userSettings } from "@nexus/database/schema";
 import { eq } from "drizzle-orm";
 import { getOllamaConfig, isLocalOnly } from "@/lib/ai/providers";
 
-export type ModelProvider = "gemini" | "openai" | "anthropic" | "groq" | "ollama";
+type ModelProvider = "gemini" | "openai" | "anthropic" | "groq" | "ollama";
 
-export interface ModelConfig {
+interface ModelConfig {
   model: any;
   modelName: string;
   provider: ModelProvider;

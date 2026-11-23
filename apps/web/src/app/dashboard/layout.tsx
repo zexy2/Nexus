@@ -1,6 +1,5 @@
 import { DashboardShell } from "@/components/layout";
 import { ZeroProvider } from "@/lib/sync/zero";
-import { AIWriteProvider } from "@/lib/ai/ai-write";
 import { ToastProvider } from "@/components/shared/toast-provider";
 import { OnboardingWrapper } from "@/components/shared/onboarding-wrapper";
 import { ModalProvider } from "@/components/shared/modal-provider";
@@ -48,15 +47,13 @@ export default async function DashboardLayout({
 
   return (
     <ZeroProvider userId={session.user.id}>
-      <AIWriteProvider>
-        <ToastProvider />
-        {appearance && <AppearanceSync theme={appearance.theme} compact={appearance.compact} />}
-        <OnboardingWrapper eligible={onboardingEligible} />
-        <ModalProvider />
-        <SidebarProvider className="contents">
-          <DashboardShell>{children}</DashboardShell>
-        </SidebarProvider>
-      </AIWriteProvider>
+      <ToastProvider />
+      {appearance && <AppearanceSync theme={appearance.theme} compact={appearance.compact} />}
+      <OnboardingWrapper eligible={onboardingEligible} />
+      <ModalProvider />
+      <SidebarProvider className="contents">
+        <DashboardShell>{children}</DashboardShell>
+      </SidebarProvider>
     </ZeroProvider>
   );
 }

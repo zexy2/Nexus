@@ -32,6 +32,7 @@ vi.mock("ai", () => ({
 }));
 
 import { runAgent } from "@/lib/ai/agent";
+import { getAllTraces, cleanupTraces } from "@/lib/observability";
 
 const baseOpts = {
   model: {} as never,
@@ -107,5 +108,22 @@ describe("runAgent (real)", () => {
       { id: "t1", title: "A" },
       { id: "t2", title: "B" },
     ]);
+  });
+
+  it("records an agent trace with workspace, model, tokens and status", async () => {
+    cleanupTraces(0);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    generateText.mockResolvedValue({ text: "traced", steps: [1], totalUsage: { totalTokens: 7 } });
+
+    await runAgent({ ...baseOpts, trace: { name: "chat.agent", modelName: "gemini-2.5-flash", provider: "gemini" } });
+
+    const [trace] = getAllTraces();
+    expect(trace).toMatchObject({
+      name: "chat.agent",
+      status: "completed",
+      tokens: 7,
+      output: "traced",
+      metadata: { workspaceId: "ws-1", userId: "user-1", model: "gemini-2.5-flash", provider: "gemini" },
+    });
   });
 });

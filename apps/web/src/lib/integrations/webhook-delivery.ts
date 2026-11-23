@@ -13,7 +13,7 @@ export const WEBHOOK_CLAIM_STALE_MS = 15 * 60_000;
 
 type WebhookEventInsert = typeof integrationWebhookEvents.$inferInsert;
 
-export type WebhookClaim =
+type WebhookClaim =
   | { kind: "claimed"; id: string; redelivery: boolean }
   | { kind: "duplicate" };
 
@@ -72,7 +72,7 @@ export async function claimWebhookDelivery(values: WebhookEventInsert): Promise<
  * Runs the (coalesced) integration sync for a claimed delivery and records the
  * outcome on the delivery row. Never throws.
  */
-export async function processWebhookDelivery(input: {
+async function processWebhookDelivery(input: {
   eventId: string;
   integrationId: string;
   metadata: Record<string, unknown>;

@@ -22,7 +22,7 @@ export function isEmbeddingsAvailable(): boolean {
 }
 
 /** Generate an embedding for a piece of text via OpenAI. */
-export async function generateEmbedding(text: string): Promise<number[]> {
+async function generateEmbedding(text: string): Promise<number[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
 
@@ -47,7 +47,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   return embedding;
 }
 
-export interface SemanticHit {
+interface SemanticHit {
   docId: string | null;
   content: string;
   similarity: number;

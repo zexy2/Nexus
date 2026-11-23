@@ -247,12 +247,13 @@ async function processCommandAsync(input: {
   );
 
   try {
-    const { model } = await getUserModelConfig(input.userId);
+    const { model, modelName, provider } = await getUserModelConfig(input.userId);
     const result = await runAgent({
       model,
       messages: [{ role: "user", content: input.command }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      trace: { name: "commands.process", modelName, provider },
     });
 
     const output: CommandExecutionOutput = {
