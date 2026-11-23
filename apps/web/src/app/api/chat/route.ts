@@ -6,7 +6,6 @@
  * decides which tools to call and chains them. Legacy direct-mode values map to
  * focused capabilities, not separately running agent personas.
  */
-import { generateText } from "ai";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { searchWeb } from "@/lib/ai/tavily";
@@ -17,6 +16,7 @@ import { getRAGContext } from "@/lib/ai/chat-rag";
 import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
 import { logInternalError } from "@/lib/api-response";
 
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
 
     let docJson = "";
     try {
-      const result = await generateText({
+      const result = await generateTextTraced({
         model,
         prompt: `Extract the content to save as a document from this conversation.
 
@@ -117,7 +117,7 @@ ${conversationHistory}
 
 Create a JSON response with title and content. Content should include the main information from the assistant's responses.
 Respond ONLY with JSON: {"title": "...", "content": "..."}`,
-      });
+      }, { name: "chat.save", agentType: "chat", userId, modelName, provider, input: userMessage });
       docJson = result.text;
     } catch (error) {
       if (isAiQuotaError(error)) return aiQuotaResponse();
@@ -188,11 +188,10 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       : "");
 
     try {
-      const { text } = await generateText({
-        model,
-        system: enhancedSystem,
-        messages: chatMessages,
-      });
+      const { text } = await generateTextTraced(
+        { model, system: enhancedSystem, messages: chatMessages },
+        { name: `chat.${agentMode}`, agentType: "chat", userId, workspaceId, modelName, provider }
+      );
 
       return new Response(text);
     } catch (error) {
@@ -214,6 +213,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       messages: chatMessages,
       context: { userId, workspaceId },
       maxSteps: 6,
+      trace: { name: "chat.agent", modelName, provider },
     });
   } catch (error) {
     if (isAiQuotaError(error)) {

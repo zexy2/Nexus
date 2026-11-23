@@ -158,7 +158,8 @@ export function startAgentTrace(
   traces.set(trace.traceId, trace);
 
   const logger = createLogger({ traceId: trace.traceId, agentType });
-  logger.info(`Agent trace started: ${name}`, { input: input.slice(0, 100) });
+  // Never log prompt text: it is user content. It stays in the admin-only trace.
+  logger.debug(`Agent trace started: ${name}`);
 
   return trace;
 }

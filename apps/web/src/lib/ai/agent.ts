@@ -11,12 +11,13 @@
  * All tools are bound to a verified userId + workspaceId, so the agent can only
  * read/write the caller's own workspace.
  */
-import { generateText, tool, stepCountIs } from "ai";
+import { tool, stepCountIs } from "ai";
 import { z } from "zod";
 import { searchWeb } from "@/lib/ai/tavily";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { createDocument, createTask } from "@/lib/ai/chat-actions";
 import { isLocalOnly } from "@/lib/ai/providers";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 
 export interface AgentRunContext {
   userId: string;
@@ -53,8 +54,10 @@ export async function runAgent(opts: {
   messages: Array<{ role: string; content: string }>;
   context: AgentRunContext;
   maxSteps?: number;
+  /** Trace labels for the admin traces page (defaults to "agent.run"). */
+  trace?: { name?: string; modelName?: string; provider?: string };
 }): Promise<AgentRunResult> {
-  const { model, messages, context, maxSteps = 6 } = opts;
+  const { model, messages, context, maxSteps = 6, trace } = opts;
 
   const toolsUsed: string[] = [];
   const createdDocs: { id: string; title: string }[] = [];
@@ -145,13 +148,23 @@ export async function runAgent(opts: {
     ? { searchWorkspace: tools.searchWorkspace, createDocument: tools.createDocument, createTask: tools.createTask }
     : tools;
 
-  const result = await generateText({
-    model,
-    system: SUPERVISOR_SYSTEM,
-    messages: messages as any,
-    tools: activeTools,
-    stopWhen: stepCountIs(maxSteps),
-  });
+  const result = await generateTextTraced(
+    {
+      model,
+      system: SUPERVISOR_SYSTEM,
+      messages: messages as any,
+      tools: activeTools,
+      stopWhen: stepCountIs(maxSteps),
+    },
+    {
+      name: trace?.name ?? "agent.run",
+      agentType: "agent",
+      userId: context.userId,
+      workspaceId: context.workspaceId,
+      modelName: trace?.modelName,
+      provider: trace?.provider,
+    }
+  );
 
   return {
     text: result.text,
