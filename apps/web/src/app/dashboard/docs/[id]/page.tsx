@@ -29,6 +29,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { PartialBlock } from "@blocknote/core";
 import { LivingPlanInspector } from "./_components/living-plan-inspector";
+import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 
@@ -108,6 +109,10 @@ export default function DocDetailPage() {
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
   const editorContentRef = useRef<BlockNoteContent>([]);
   const materializeTimerRef = useRef<number | null>(null);
+  const titleTimerRef = useRef<number | null>(null);
+  const pendingTitleRef = useRef<string | null>(null);
+  const titleSeqRef = useRef(0);
+  const unmountedRef = useRef(false);
   const documentId = String(params.id || "");
   const displayTitle = localizeGeneratedCopy(
     title === "Generated Document" ? t("docs.detail.generatedTitle") : title,
@@ -423,23 +428,59 @@ export default function DocDetailPage() {
     }
   };
 
-  const handleTitleChange = async (newTitle: string) => {
+  const saveTitle = useCallback(
+    async (newTitle: string) => {
+      const seq = ++titleSeqRef.current;
+      setIsSaving(true);
+      try {
+        const response = await fetch(`/api/docs/${documentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: newTitle }),
+          keepalive: true,
+        });
+        if (seq !== titleSeqRef.current) return; // stale response, a newer save is in flight
+        if (!response.ok) throw new Error(`Title save failed: ${response.status}`);
+        if (!unmountedRef.current) setLastSaved(new Date());
+      } catch (err) {
+        if (seq !== titleSeqRef.current) return;
+        console.error("Failed to save title:", err);
+        if (!unmountedRef.current) showToast.error(t("docs.detail.titleSaveFailed"));
+      } finally {
+        if (seq === titleSeqRef.current && !unmountedRef.current) setIsSaving(false);
+      }
+    },
+    [documentId, t]
+  );
+
+  const flushTitleSave = useCallback(() => {
+    if (titleTimerRef.current !== null) {
+      window.clearTimeout(titleTimerRef.current);
+      titleTimerRef.current = null;
+    }
+    const pending = pendingTitleRef.current;
+    pendingTitleRef.current = null;
+    if (pending !== null) void saveTitle(pending);
+  }, [saveTitle]);
+
+  const flushTitleSaveRef = useRef(flushTitleSave);
+  flushTitleSaveRef.current = flushTitleSave;
+
+  // Flush any pending title save on unmount so the last value is never lost.
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      flushTitleSaveRef.current();
+    };
+  }, []);
+
+  const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
     if (!doc) return;
-    
-    setIsSaving(true);
-    try {
-      await fetch(`/api/docs/${params.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      setLastSaved(new Date());
-    } catch (err) {
-      console.error("Failed to save title:", err);
-    } finally {
-      setIsSaving(false);
-    }
+    pendingTitleRef.current = newTitle;
+    if (titleTimerRef.current !== null) window.clearTimeout(titleTimerRef.current);
+    titleTimerRef.current = window.setTimeout(flushTitleSave, 600);
   };
 
   const handleDelete = async () => {
@@ -529,6 +570,7 @@ export default function DocDetailPage() {
           <Input
             value={displayTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onBlur={flushTitleSave}
             className="text-lg font-semibold border-none shadow-none focus-visible:ring-0 px-0 h-auto"
             placeholder={t("docs.detail.untitled")}
           />

@@ -3,6 +3,13 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "@nexus/database/schema";
 import { actionEmailHtml, isEmailConfigured, sendEmail } from "./email";
+import { beforeUserCreate } from "./auth-signup-guard";
+import { isPublicSignupEnabled } from "./production-guardrails";
+
+// When public signup is disabled, social providers may only sign in users that
+// already exist. `disableSignUp` is the provider-level switch; the
+// `databaseHooks.user.create.before` guard below is the authoritative backstop.
+const socialDisableSignUp = !isPublicSignupEnabled();
 
 const socialProviders = {
   ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
@@ -10,6 +17,7 @@ const socialProviders = {
         github: {
           clientId: process.env.GITHUB_CLIENT_ID,
           clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          disableSignUp: socialDisableSignUp,
         },
       }
     : {}),
@@ -18,6 +26,7 @@ const socialProviders = {
         google: {
           clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          disableSignUp: socialDisableSignUp,
         },
       }
     : {}),
@@ -78,6 +87,13 @@ export const auth = betterAuth({
     },
   },
   socialProviders,
+  databaseHooks: {
+    user: {
+      create: {
+        before: (user) => beforeUserCreate(user),
+      },
+    },
+  },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
