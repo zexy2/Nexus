@@ -1,8 +1,8 @@
 import { createSign } from "node:crypto";
 
-export type GitHubApiError = Error & { status?: number; body?: unknown };
+type GitHubApiError = Error & { status?: number; body?: unknown };
 
-export type GitHubVerificationErrorCode =
+type GitHubVerificationErrorCode =
   | "GITHUB_PR_URL_INVALID"
   | "GITHUB_PR_REPOSITORY_MISMATCH"
   | "GITHUB_PR_NOT_FOUND"
@@ -22,7 +22,7 @@ export class GitHubVerificationError extends Error {
   }
 }
 
-export type GitHubRepository = {
+type GitHubRepository = {
   id: number;
   fullName: string;
   owner: string;
@@ -32,7 +32,7 @@ export type GitHubRepository = {
   url: string;
 };
 
-export type GitHubIssue = {
+type GitHubIssue = {
   id: number;
   number: number;
   title: string;
@@ -44,7 +44,7 @@ export type GitHubIssue = {
   updated_at: string;
 };
 
-export type GitHubPullRequest = {
+type GitHubPullRequest = {
   id: number;
   number: number;
   title: string;
@@ -57,7 +57,7 @@ export type GitHubPullRequest = {
   updated_at: string;
 };
 
-export type GitHubPullRequestVerification = {
+type GitHubPullRequestVerification = {
   number: number;
   url: string;
   state: string;
@@ -66,7 +66,7 @@ export type GitHubPullRequestVerification = {
   baseBranch: string;
 };
 
-export type GitHubCheckRun = {
+type GitHubCheckRun = {
   id: number;
   name: string;
   status: string;
@@ -212,7 +212,7 @@ export function getGitHubAppConfig() {
   return { appId, clientId, clientSecret, appSlug };
 }
 
-export function createGitHubAppJwt() {
+function createGitHubAppJwt() {
   const { appId } = getGitHubAppConfig();
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
@@ -229,7 +229,7 @@ export function createGitHubAppJwt() {
 }
 
 /** Per-request timeout for GitHub API calls (connect + full body). */
-export const GITHUB_FETCH_TIMEOUT_MS = 15_000;
+const GITHUB_FETCH_TIMEOUT_MS = 15_000;
 /** Upper bound on pages followed per list (100 items per page). */
 export const GITHUB_MAX_PAGES = 10;
 /** Concurrent per-pull-request detail fetches during a repository sync. */
@@ -375,7 +375,7 @@ export async function listGitHubInstallationsForUser(userAccessToken: string) {
   );
 }
 
-export async function createInstallationAccessToken(installationId: string) {
+async function createInstallationAccessToken(installationId: string) {
   const body = await githubFetch<{ token: string; expires_at: string }>(
     `https://api.github.com/app/installations/${installationId}/access_tokens`,
     createGitHubAppJwt(),
@@ -525,48 +525,4 @@ export async function verifyGitHubPullRequestSubmission(input: {
     expectedCommitSha: input.commitSha,
     pullRequest,
   });
-}
-
-export async function performGitHubIssueWrite(input: {
-  installationId: string;
-  owner: string;
-  repo: string;
-  operationType: string;
-  payload: Record<string, unknown>;
-}) {
-  const token = await createInstallationAccessToken(input.installationId);
-  const base = `https://api.github.com/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}`;
-  const issueNumber = Number(input.payload.issueNumber);
-  if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-    throw new Error("GitHub issue operation requires payload.issueNumber");
-  }
-
-  if (input.operationType === "github_issue_comment") {
-    const body = typeof input.payload.body === "string" ? input.payload.body : input.payload.comment;
-    if (typeof body !== "string" || body.trim().length === 0) {
-      throw new Error("GitHub issue comment requires payload.body");
-    }
-    return githubFetch<Record<string, unknown>>(`${base}/issues/${issueNumber}/comments`, token, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body }),
-    });
-  }
-
-  if (input.operationType === "github_issue_update" || input.operationType === "github_issue_label") {
-    const updatePayload: Record<string, unknown> = {};
-    if (typeof input.payload.title === "string") updatePayload.title = input.payload.title;
-    if (typeof input.payload.body === "string") updatePayload.body = input.payload.body;
-    if (Array.isArray(input.payload.labels)) updatePayload.labels = input.payload.labels;
-    if (Object.keys(updatePayload).length === 0) {
-      throw new Error("GitHub issue update requires at least one mutable field");
-    }
-    return githubFetch<Record<string, unknown>>(`${base}/issues/${issueNumber}`, token, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatePayload),
-    });
-  }
-
-  throw new Error(`Unsupported GitHub operation: ${input.operationType}`);
 }

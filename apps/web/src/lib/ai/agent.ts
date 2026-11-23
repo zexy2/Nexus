@@ -19,12 +19,12 @@ import { createDocument, createTask } from "@/lib/ai/chat-actions";
 import { isLocalOnly } from "@/lib/ai/providers";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
 
-export interface AgentRunContext {
+interface AgentRunContext {
   userId: string;
   workspaceId: string;
 }
 
-export interface AgentRunResult {
+interface AgentRunResult {
   text: string;
   toolsUsed: string[];
   createdDocs: { id: string; title: string }[];

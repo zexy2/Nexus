@@ -16,9 +16,9 @@ import {
 } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 
-export type IntegrationProvider = "github" | "linear";
+type IntegrationProvider = "github" | "linear";
 
-export type ImpactGraphNodeType =
+type ImpactGraphNodeType =
   | "plan_version"
   | "requirement"
   | "task"
@@ -27,7 +27,7 @@ export type ImpactGraphNodeType =
   | "external_check"
   | "agent_job";
 
-export type ImpactGraphEdgeType =
+type ImpactGraphEdgeType =
   | "contains"
   | "delivers"
   | "mirrors"
@@ -36,7 +36,7 @@ export type ImpactGraphEdgeType =
   | "delegates"
   | "affected_by";
 
-export type ImpactGraphNode = {
+type ImpactGraphNode = {
   id: string;
   type: ImpactGraphNodeType;
   label: string;
@@ -45,14 +45,14 @@ export type ImpactGraphNode = {
   metadata?: Record<string, unknown>;
 };
 
-export type ImpactGraphEdge = {
+type ImpactGraphEdge = {
   source: string;
   target: string;
   type: ImpactGraphEdgeType;
   confidence: number;
 };
 
-export type IntegrationStatusSummary = {
+type IntegrationStatusSummary = {
   id: string;
   provider: string;
   status: string;
@@ -70,7 +70,7 @@ export type IntegrationStatusSummary = {
   };
 };
 
-export type ImpactGraphRequirement = {
+type ImpactGraphRequirement = {
   id: string;
   stableKey: string;
   title: string;
@@ -108,7 +108,7 @@ export type ImpactGraphRequirement = {
   }>;
 };
 
-export type ImpactGraphResult = {
+type ImpactGraphResult = {
   docId: string;
   planVersion: {
     id: string;

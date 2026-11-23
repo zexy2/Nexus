@@ -1712,6 +1712,5 @@ export const messages = {
 } as const;
 
 export type AppLocale = keyof typeof messages;
-export type Messages = (typeof messages)["tr"];
 export const LOCALES: AppLocale[] = ["tr", "en"];
 export const LOCALE_LABELS: Record<AppLocale, string> = { tr: "Türkçe", en: "English" };

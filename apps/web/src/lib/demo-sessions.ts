@@ -72,7 +72,7 @@ export function secureAccessCodeMatches(expected: string, provided: string) {
   );
 }
 
-export type ProvisionedDemoSession = {
+type ProvisionedDemoSession = {
   userId: string;
   email: string;
   password: string;

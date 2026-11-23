@@ -12,7 +12,7 @@ import { correctiveRAG } from "@/lib/ai/crag";
 import { isEmbeddingsAvailable, semanticSearch, buildSemanticContext } from "@/lib/ai/embeddings";
 
 // Extract text from BlockNote JSON content
-export function extractTextFromContent(content: any): string {
+function extractTextFromContent(content: any): string {
   if (!content) return "";
   if (typeof content === "string") return content;
 
@@ -29,7 +29,7 @@ export function extractTextFromContent(content: any): string {
 }
 
 // Simple text search scoring for RAG
-export function searchScore(query: string, text: string): number {
+function searchScore(query: string, text: string): number {
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   const words = queryLower.split(/\s+/).filter(w => w.length > 2);

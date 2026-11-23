@@ -10,7 +10,7 @@ import type * as Y from "yjs";
 import { IndexeddbPersistence } from "y-indexeddb";
 import { clearPendingCollabDocs } from "./unsynced";
 
-export const COLLAB_OFFLINE_DB_PREFIX = "nexus-collab:";
+const COLLAB_OFFLINE_DB_PREFIX = "nexus-collab:";
 const REGISTRY_KEY = "nexus-collab-offline-dbs";
 const DELETE_TIMEOUT_MS = 3000;
 

@@ -8,7 +8,7 @@ import {
 
 type ConnectStateRow = NonNullable<Awaited<ReturnType<typeof readIntegrationConnectState>>>;
 
-export type ConnectStateAuthorization =
+type ConnectStateAuthorization =
   | { ok: true; connectState: ConnectStateRow; userId: string }
   | {
       ok: false;

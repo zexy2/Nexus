@@ -34,7 +34,7 @@ export interface RefreshableProvider {
   off(event: "connection-close", listener: (...args: unknown[]) => void): void;
 }
 
-export interface CollabTokenRefreshOptions {
+interface CollabTokenRefreshOptions {
   fetchToken: () => Promise<string>;
   /** Refresh this long before expiry. */
   refreshMarginMs?: number;

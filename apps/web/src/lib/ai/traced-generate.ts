@@ -21,7 +21,7 @@ const MAX_TRACES = 200;
 /** Cap stored prompt/output text so traces stay cheap. */
 const MAX_TEXT = 2000;
 
-export interface AiTraceMeta {
+interface AiTraceMeta {
   /** Logical operation name, e.g. "chat.agent" or "research". */
   name: string;
   /** Category shown on the traces page, e.g. "agent" or "chat". */
@@ -60,7 +60,7 @@ function safely(fn: () => void): void {
  * Run `fn` and record it as a trace. The AI call's result or error is passed
  * through untouched; trace bookkeeping failures are logged and ignored.
  */
-export async function traceAiCall<T>(
+async function traceAiCall<T>(
   meta: AiTraceMeta,
   fn: () => Promise<T>,
   summarize: (result: T) => AiTraceSummary

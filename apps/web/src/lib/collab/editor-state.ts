@@ -30,14 +30,14 @@ export function nextPersistenceStatus(
   }
 }
 
-export type CollabEditorMode =
+type CollabEditorMode =
   | "live"
   | "offline"
   | "connecting"
   | "save-error"
   | "unavailable";
 
-export interface CollabEditorStateInput {
+interface CollabEditorStateInput {
   editable: boolean;
   isConnected: boolean;
   isSynced: boolean;
