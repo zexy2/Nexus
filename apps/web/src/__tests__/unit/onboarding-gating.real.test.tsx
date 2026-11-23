@@ -30,7 +30,12 @@ vi.mock("@/components/shared/toast-provider", () => ({
   showToast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
-import { isOnboardingEligible, ONBOARDING_LAUNCH_AT } from "@/lib/onboarding";
+import {
+  DEFAULT_ONBOARDING_LAUNCH_AT,
+  isOnboardingEligible,
+  ONBOARDING_LAUNCH_AT,
+  resolveOnboardingLaunchAt,
+} from "@/lib/onboarding";
 import { getOnboardingEligibility } from "@/lib/onboarding-server";
 import { OnboardingWrapper } from "@/components/shared/onboarding-wrapper";
 import { LocaleProvider } from "@/lib/i18n/provider";
@@ -54,6 +59,44 @@ describe("isOnboardingEligible", () => {
     expect(isOnboardingEligible({ userCreatedAt: OLD_USER_CREATED, hasWorkspaceContent: false })).toBe(false);
     expect(isOnboardingEligible({ userCreatedAt: null, hasWorkspaceContent: false })).toBe(false);
     expect(isOnboardingEligible({ userCreatedAt: "garbage", hasWorkspaceContent: false })).toBe(false);
+  });
+});
+
+describe("resolveOnboardingLaunchAt", () => {
+  it("reads an ISO date from ONBOARDING_LAUNCH_AT", () => {
+    expect(resolveOnboardingLaunchAt({ ONBOARDING_LAUNCH_AT: "2027-01-05T09:30:00Z" }).toISOString()).toBe(
+      "2027-01-05T09:30:00.000Z"
+    );
+    expect(resolveOnboardingLaunchAt({ ONBOARDING_LAUNCH_AT: " 2027-02-01 " }).toISOString()).toBe(
+      "2027-02-01T00:00:00.000Z"
+    );
+  });
+
+  it("falls back to the built-in cutoff when unset, empty or invalid", () => {
+    expect(DEFAULT_ONBOARDING_LAUNCH_AT.toISOString()).toBe("2026-11-23T00:00:00.000Z");
+    for (const value of [undefined, "", "   ", "not-a-date"]) {
+      expect(resolveOnboardingLaunchAt({ ONBOARDING_LAUNCH_AT: value })).toBe(DEFAULT_ONBOARDING_LAUNCH_AT);
+    }
+  });
+
+  it("ONBOARDING_LAUNCH_AT constant honours the env at module load", async () => {
+    vi.stubEnv("ONBOARDING_LAUNCH_AT", "2031-01-01T00:00:00Z");
+    vi.resetModules();
+    try {
+      const mod = await import("@/lib/onboarding");
+      expect(mod.ONBOARDING_LAUNCH_AT.toISOString()).toBe("2031-01-01T00:00:00.000Z");
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
+  it("is the cutoff isOnboardingEligible uses when launchAt is passed", () => {
+    const launchAt = resolveOnboardingLaunchAt({ ONBOARDING_LAUNCH_AT: "2030-01-01T00:00:00Z" });
+    expect(isOnboardingEligible({ userCreatedAt: NEW_USER_CREATED, hasWorkspaceContent: false, launchAt })).toBe(false);
+    expect(
+      isOnboardingEligible({ userCreatedAt: "2030-01-01T00:00:01Z", hasWorkspaceContent: false, launchAt })
+    ).toBe(true);
   });
 });
 
