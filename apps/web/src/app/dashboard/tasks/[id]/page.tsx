@@ -93,16 +93,16 @@ const statusIcon = {
 } satisfies Record<TaskStatus, typeof Circle>;
 
 const priorityTone = {
-  low: "border-white/10 bg-white/5 text-white/55",
-  medium: "border-blue-400/25 bg-blue-400/10 text-blue-200",
-  high: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  urgent: "border-red-400/25 bg-red-400/10 text-red-200",
+  low: "border-border bg-foreground/5 text-muted-foreground",
+  medium: "border-blue-400/25 bg-blue-400/10 text-blue-800 dark:text-blue-200",
+  high: "border-amber-400/25 bg-amber-400/10 text-amber-800 dark:text-amber-200",
+  urgent: "border-red-400/25 bg-red-400/10 text-red-800 dark:text-red-200",
 } satisfies Record<TaskPriority, string>;
 
 const alignmentTone: Record<string, string> = {
-  aligned: "border-emerald-400/25 bg-emerald-400/10 text-emerald-200",
-  needs_review: "border-amber-400/25 bg-amber-400/10 text-amber-200",
-  orphaned: "border-white/10 bg-white/5 text-white/50",
+  aligned: "border-emerald-400/25 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200",
+  needs_review: "border-amber-400/25 bg-amber-400/10 text-amber-800 dark:text-amber-200",
+  orphaned: "border-border bg-foreground/5 text-foreground-subtle",
 };
 
 function toDateInput(value: number | null) {
@@ -314,7 +314,7 @@ export default function TaskDetailPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1440px] px-4 pb-24 pt-8 md:px-8">
-      <header className="mb-8 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-start lg:justify-between">
+      <header className="mb-8 flex flex-col gap-5 border-b border-border pb-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="mb-4 flex items-center gap-3">
             <Button asChild variant="ghost" size="icon" className="rounded-full">
@@ -326,18 +326,18 @@ export default function TaskDetailPage() {
               <span className="size-1.5 rounded-full bg-current" />
               {priorityLabel(priority)}
             </Badge>
-            <Badge variant="outline" className="gap-2 border-white/10 bg-white/5 text-white/60">
+            <Badge variant="outline" className="gap-2 border-border bg-foreground/5 text-muted-foreground">
               <StatusIcon className="size-3.5" />
               {statusLabel(status)}
             </Badge>
           </div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-white/35">
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-foreground-faint">
             {t("taskDetail.label")}
           </p>
-          <h1 className="max-w-4xl truncate text-3xl font-semibold text-white md:text-4xl">
+          <h1 className="max-w-4xl truncate text-3xl font-semibold text-foreground md:text-4xl">
             {task.title}
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-white/45">
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-foreground-subtle">
             {t("taskDetail.description")}
           </p>
         </div>
@@ -364,8 +364,8 @@ export default function TaskDetailPage() {
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
         <main className="min-w-0 space-y-6">
-          <section className="border border-white/10 bg-white/[0.03] p-5 md:p-6">
-            <label className="mb-2 block text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+          <section className="border border-border bg-foreground/[0.03] p-5 md:p-6">
+            <label className="mb-2 block text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
               {t("taskDetail.title")}
             </label>
             <Input
@@ -376,61 +376,61 @@ export default function TaskDetailPage() {
             />
           </section>
 
-          <section className="border border-white/10 bg-white/[0.03] p-5 md:p-6">
-            <label className="mb-3 block text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+          <section className="border border-border bg-foreground/[0.03] p-5 md:p-6">
+            <label className="mb-3 block text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
               {t("taskDetail.taskDescription")}
             </label>
             <Textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className="min-h-[260px] resize-y border-white/10 bg-black/20 text-base leading-7"
+              className="min-h-[260px] resize-y border-border bg-background/60 text-base leading-7"
               placeholder={t("taskDetail.descriptionPlaceholder")}
             />
           </section>
         </main>
 
         <aside className="space-y-5">
-          <section className="border border-white/10 bg-white/[0.03] p-5">
+          <section className="border border-border bg-foreground/[0.03] p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">{t("taskDetail.agentHandoff")}</p>
-                <h2 className="mt-1 text-sm font-semibold text-white">
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">{t("taskDetail.agentHandoff")}</p>
+                <h2 className="mt-1 text-sm font-semibold text-foreground">
                   {agentJob ? t("taskDetail.agentRun") : t("taskDetail.agentReady")}
                 </h2>
               </div>
-              <Bot className="size-4 text-white/50" />
+              <Bot className="size-4 text-foreground-subtle" />
             </div>
 
             {!agentJob ? (
               <>
-                <p className="text-xs leading-5 text-white/45">{t("taskDetail.agentReadyDesc")}</p>
+                <p className="text-xs leading-5 text-foreground-subtle">{t("taskDetail.agentReadyDesc")}</p>
                 <Button className="mt-4 w-full gap-2" disabled={agentAction || !task.agentHandoffWritable} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
                   {agentAction ? <Loader2 className="size-4 animate-spin" /> : <Bot className="size-4" />}
                   {t("taskDetail.sendToAgent")}
                 </Button>
-                {!task.agentHandoffWritable && <p className="mt-2 text-xs text-amber-200/70">{t("taskDetail.demoAgentReadOnly")}</p>}
+                {!task.agentHandoffWritable && <p className="mt-2 text-xs text-amber-800/70 dark:text-amber-200/70">{t("taskDetail.demoAgentReadOnly")}</p>}
               </>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between border-y border-white/10 py-3 text-xs">
-                  <span className="text-white/40">{t("taskDetail.agentStatus")}</span>
+                <div className="flex items-center justify-between border-y border-border py-3 text-xs">
+                  <span className="text-foreground-faint">{t("taskDetail.agentStatus")}</span>
                   <span className={cn(
                     "font-medium uppercase",
-                    agentJob.status === "outdated" ? "text-amber-300" :
-                      agentJob.status === "submitted" ? "text-blue-300" :
-                        agentJob.status === "approved" ? "text-emerald-300" : "text-white/70"
+                    agentJob.status === "outdated" ? "text-amber-700 dark:text-amber-300" :
+                      agentJob.status === "submitted" ? "text-blue-700 dark:text-blue-300" :
+                        agentJob.status === "approved" ? "text-emerald-700 dark:text-emerald-300" : "text-foreground-secondary"
                   )}>{t(`taskDetail.agentStatuses.${agentJob.status}`)}</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs text-white/45">
+                <div className="grid grid-cols-2 gap-3 text-xs text-foreground-subtle">
                   <span>{t("taskDetail.contextVersion")}</span>
-                  <span className="text-right text-white/70">v{agentJob.contextVersion}</span>
+                  <span className="text-right text-foreground-secondary">v{agentJob.contextVersion}</span>
                   <span>{t("taskDetail.agentClient")}</span>
-                  <span className="text-right text-white/70">{agentJob.claimedByClient || t("taskDetail.notClaimed")}</span>
+                  <span className="text-right text-foreground-secondary">{agentJob.claimedByClient || t("taskDetail.notClaimed")}</span>
                 </div>
 
                 {agentJob.submissions[0] && (
-                  <div className="border border-white/10 bg-black/20 p-3">
-                    <p className="line-clamp-3 text-xs leading-5 text-white/55">{agentJob.submissions[0].summary}</p>
+                  <div className="border border-border bg-background/60 p-3">
+                    <p className="line-clamp-3 text-xs leading-5 text-muted-foreground">{agentJob.submissions[0].summary}</p>
                     <Button asChild variant="outline" size="sm" className="mt-3 w-full gap-2">
                       <a href={agentJob.submissions[0].pullRequestUrl} target="_blank" rel="noreferrer">
                         <GitPullRequest className="size-3.5" />
@@ -454,7 +454,7 @@ export default function TaskDetailPage() {
                   </Button>
                 )}
                 {["queued", "claimed", "running", "outdated"].includes(agentJob.status) && (
-                  <Button size="sm" variant="ghost" className="w-full gap-2 text-white/45" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/cancel`)}>
+                  <Button size="sm" variant="ghost" className="w-full gap-2 text-foreground-subtle" disabled={agentAction} onClick={() => runAgentAction(`/api/agent-jobs/${agentJob.id}/cancel`)}>
                     <XCircle className="size-3.5" />
                     {t("taskDetail.cancelAgentJob")}
                   </Button>
@@ -467,23 +467,23 @@ export default function TaskDetailPage() {
                 )}
 
                 {agentJob.events.length > 0 && (
-                  <div className="border-t border-white/10 pt-3">
-                    <p className="mb-2 text-xs text-white/35">{t("taskDetail.latestAgentEvent")}</p>
-                    <p className="text-xs leading-5 text-white/55">{agentJob.events[0].message || agentJob.events[0].type}</p>
+                  <div className="border-t border-border pt-3">
+                    <p className="mb-2 text-xs text-foreground-faint">{t("taskDetail.latestAgentEvent")}</p>
+                    <p className="text-xs leading-5 text-muted-foreground">{agentJob.events[0].message || agentJob.events[0].type}</p>
                   </div>
                 )}
               </div>
             )}
           </section>
 
-          <section className="border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="mb-5 text-sm font-semibold text-white">{t("taskDetail.properties")}</h2>
+          <section className="border border-border bg-foreground/[0.03] p-5">
+            <h2 className="mb-5 text-sm font-semibold text-foreground">{t("taskDetail.properties")}</h2>
 
             <div className="space-y-5">
               <div>
-                <label className="mb-2 block text-xs text-white/40">{t("taskDetail.status")}</label>
+                <label className="mb-2 block text-xs text-foreground-faint">{t("taskDetail.status")}</label>
                 <Select value={status} onValueChange={(value) => setStatus(value as TaskStatus)}>
-                  <SelectTrigger className="border-white/10 bg-black/20">
+                  <SelectTrigger className="border-border bg-background/60">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -496,9 +496,9 @@ export default function TaskDetailPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs text-white/40">{t("taskDetail.priority")}</label>
+                <label className="mb-2 block text-xs text-foreground-faint">{t("taskDetail.priority")}</label>
                 <Select value={priority} onValueChange={(value) => setPriority(value as TaskPriority)}>
-                  <SelectTrigger className="border-white/10 bg-black/20">
+                  <SelectTrigger className="border-border bg-background/60">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -511,25 +511,25 @@ export default function TaskDetailPage() {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs text-white/40">{t("taskDetail.dueDate")}</label>
+                <label className="mb-2 block text-xs text-foreground-faint">{t("taskDetail.dueDate")}</label>
                 <div className="relative">
-                  <Calendar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-white/35" />
+                  <Calendar className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-foreground-faint" />
                   <Input
                     type="date"
                     value={dueDate}
                     onChange={(event) => setDueDate(event.target.value)}
-                    className="border-white/10 bg-black/20 pl-10"
+                    className="border-border bg-background/60 pl-10"
                   />
                 </div>
               </div>
 
-              <div className="border-t border-white/10 pt-5">
-                <div className="mb-2 text-xs text-white/40">{t("taskDetail.alignment")}</div>
+              <div className="border-t border-border pt-5">
+                <div className="mb-2 text-xs text-foreground-faint">{t("taskDetail.alignment")}</div>
                 <Badge
                   variant="outline"
                   className={cn(
                     "gap-2",
-                    alignmentTone[task.alignmentStatus] || "border-white/10 bg-white/5 text-white/50"
+                    alignmentTone[task.alignmentStatus] || "border-border bg-foreground/5 text-foreground-subtle"
                   )}
                 >
                   {task.alignmentStatus === "needs_review" && <AlertTriangle className="size-3.5" />}
@@ -539,9 +539,9 @@ export default function TaskDetailPage() {
             </div>
           </section>
 
-          <section className="border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="mb-4 text-sm font-semibold text-white">{t("taskDetail.trace")}</h2>
-            <div className="space-y-3 text-sm text-white/55">
+          <section className="border border-border bg-foreground/[0.03] p-5">
+            <h2 className="mb-4 text-sm font-semibold text-foreground">{t("taskDetail.trace")}</h2>
+            <div className="space-y-3 text-sm text-muted-foreground">
               <div className="flex justify-between gap-4">
                 <span>{t("taskDetail.created")}</span>
                 <span>{formatRelativeDate(task.createdAt, locale)}</span>
@@ -558,8 +558,8 @@ export default function TaskDetailPage() {
           </section>
 
           <section className="border border-red-400/15 bg-red-400/[0.03] p-5">
-            <h2 className="text-sm font-semibold text-red-100">{t("taskDetail.archiveTitle")}</h2>
-            <p className="mt-2 text-xs leading-5 text-red-100/55">
+            <h2 className="text-sm font-semibold text-red-800 dark:text-red-100">{t("taskDetail.archiveTitle")}</h2>
+            <p className="mt-2 text-xs leading-5 text-red-800/55 dark:text-red-100/55">
               {t("taskDetail.archiveDesc")}
             </p>
             <Button

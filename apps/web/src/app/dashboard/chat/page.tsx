@@ -73,8 +73,8 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
           'backdrop-blur-xl rounded-2xl px-4 py-3',
           'border transition-all duration-200',
           isUser
-            ? 'bg-white/10 border-white/20 rounded-br-md'
-            : 'bg-white/5 border-white/10 rounded-bl-md'
+            ? 'bg-foreground/10 border-foreground/20 rounded-br-md'
+            : 'bg-foreground/5 border-border rounded-bl-md'
         )}
       >
         {/* Glow effect on hover */}
@@ -82,25 +82,25 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
           className={cn(
             'absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10',
             isUser
-              ? 'bg-gradient-to-r from-white/10 to-white/5 blur-xl'
-              : 'bg-gradient-to-r from-white/5 to-white/10 blur-xl'
+              ? 'bg-gradient-to-r from-foreground/10 to-foreground/5 blur-xl'
+              : 'bg-gradient-to-r from-foreground/5 to-foreground/10 blur-xl'
           )}
         />
 
         {/* Content */}
         <div className={cn(
           'text-sm leading-relaxed whitespace-pre-wrap break-words',
-          isUser ? 'text-white' : 'text-white/90'
+          isUser ? 'text-foreground' : 'text-foreground'
         )}>
           {message.content}
         </div>
 
         {/* Actions - visible on hover */}
         {!isUser && (
-          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleCopy}
-              className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+              className="p-1.5 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-foreground/10 transition-colors"
               title={t('chat.copy')}
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -108,7 +108,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
             {isLatest && onRetry && (
               <button
                 onClick={onRetry}
-                className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-foreground-subtle hover:text-foreground hover:bg-foreground/10 transition-colors"
                 title={t('chat.regenerate')}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -119,7 +119,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
 
         {/* Timestamp - inline */}
         <div className={cn(
-          'text-[10px] text-white/30 mt-1',
+          'text-[10px] text-foreground-faint mt-1',
           isUser ? 'text-right' : 'text-left'
         )}>
           {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -138,20 +138,20 @@ function StreamingCard({ content }: { content: string }) {
       exit={{ opacity: 0 }}
       className="flex w-full px-6 md:px-8 py-1 justify-start"
     >
-      <div className="relative max-w-[85%] md:max-w-[75%] backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3">
+      <div className="relative max-w-[85%] md:max-w-[75%] backdrop-blur-xl bg-foreground/5 border border-border rounded-2xl rounded-bl-md px-4 py-3">
         {/* Typing indicator glow */}
         <motion.div
           animate={{ opacity: [0.3, 0.6, 0.3] }}
           transition={{ duration: 1.5, repeat: Infinity }}
-          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-white/10 to-white/5 blur-xl -z-10"
+          className="absolute inset-0 rounded-2xl bg-gradient-to-r from-foreground/10 to-foreground/5 blur-xl -z-10"
         />
 
-        <div className="text-sm leading-relaxed text-white/90 whitespace-pre-wrap break-words">
+        <div className="text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words">
           {content}
           <motion.span
             animate={{ opacity: [1, 0, 1] }}
             transition={{ duration: 0.8, repeat: Infinity }}
-            className="inline-block w-2 h-4 ml-1 bg-white/50 rounded-sm"
+            className="inline-block w-2 h-4 ml-1 bg-foreground/50 rounded-sm"
           />
         </div>
       </div>
@@ -171,7 +171,7 @@ function ThinkingCard({ agentMode }: { agentMode?: AgentMode }) {
       exit={{ opacity: 0 }}
       className="flex w-full px-6 md:px-8 py-1 justify-start"
     >
-      <div className="flex items-center gap-3 backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl rounded-bl-md px-4 py-3">
+      <div className="flex items-center gap-3 backdrop-blur-xl bg-foreground/5 border border-border rounded-2xl rounded-bl-md px-4 py-3">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
             <motion.div
@@ -182,11 +182,11 @@ function ThinkingCard({ agentMode }: { agentMode?: AgentMode }) {
                 repeat: Infinity,
                 delay: i * 0.15,
               }}
-              className="w-1.5 h-1.5 rounded-full bg-white/60"
+              className="w-1.5 h-1.5 rounded-full bg-foreground/60"
             />
           ))}
         </div>
-        <span className="text-sm text-white/60">{agent.label} {t('chat.isThinking')}</span>
+        <span className="text-sm text-muted-foreground">{agent.label} {t('chat.isThinking')}</span>
       </div>
     </motion.div>
   );
@@ -251,32 +251,32 @@ function ChatInput({ onSend }: ChatInputProps) {
       <motion.div
         animate={{
           boxShadow: isFocused
-            ? '0 0 0 1px rgba(255,255,255,0.2), 0 0 40px rgba(139,92,246,0.15)'
-            : '0 0 0 1px rgba(255,255,255,0.1)',
+            ? '0 0 0 1px color-mix(in srgb, var(--foreground) 20%, transparent), 0 0 40px rgba(139,92,246,0.15)'
+            : '0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent)',
         }}
         className={cn(
           'relative rounded-2xl overflow-hidden transition-all duration-300 max-w-4xl mx-auto',
-          'backdrop-blur-2xl bg-white/5',
-          isFocused && 'bg-white/[0.07]'
+          'backdrop-blur-2xl bg-foreground/5',
+          isFocused && 'bg-foreground/[0.07]'
         )}
       >
         {/* Top bar */}
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-white/5">
-          <div className="flex items-center gap-2 px-2 py-1.5 text-sm font-medium text-white/70">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+          <div className="flex items-center gap-2 px-2 py-1.5 text-sm font-medium text-foreground-secondary">
             <Sparkles className="h-4 w-4" />
             <span>{t('chat.askNexus')}</span>
           </div>
 
           {activeAgent && (
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/10 text-white/70 text-xs">
-              <div className="w-1.5 h-1.5 rounded-full bg-white/60 animate-pulse" />
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-foreground/10 text-foreground-secondary text-xs">
+              <div className="w-1.5 h-1.5 rounded-full bg-foreground/60 animate-pulse" />
               <span>{AGENT_DEFINITIONS[activeAgent.mode].label} {t('chat.working')}</span>
             </div>
           )}
 
           <div className="flex-1" />
 
-          <div className="hidden sm:flex items-center gap-1 text-xs text-white/30">
+          <div className="hidden sm:flex items-center gap-1 text-xs text-foreground-faint">
             <Command className="h-3 w-3" />
             <span>+ Enter</span>
           </div>
@@ -284,7 +284,7 @@ function ChatInput({ onSend }: ChatInputProps) {
 
         {/* Input area */}
         <div className="flex items-end gap-3 p-3">
-          <button className="flex-shrink-0 p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+          <button className="flex-shrink-0 p-2 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors">
             <Paperclip className="h-5 w-5" />
           </button>
 
@@ -298,11 +298,11 @@ function ChatInput({ onSend }: ChatInputProps) {
             placeholder={t('chat.messagePlaceholder')}
             disabled={isLoading}
             rows={1}
-            className="flex-1 bg-transparent text-white placeholder:text-white/30 resize-none outline-none text-sm leading-relaxed disabled:opacity-50"
+            className="flex-1 bg-transparent text-foreground placeholder:text-foreground-faint resize-none outline-none text-sm leading-relaxed disabled:opacity-50"
             style={{ minHeight: '24px', maxHeight: '160px' }}
           />
 
-          <button className="flex-shrink-0 p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors">
+          <button className="flex-shrink-0 p-2 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors">
             <Mic className="h-5 w-5" />
           </button>
 
@@ -314,8 +314,8 @@ function ChatInput({ onSend }: ChatInputProps) {
             className={cn(
               'flex-shrink-0 p-2.5 rounded-xl transition-all duration-200',
               input.trim() && !isLoading
-                ? 'bg-white text-black'
-                : 'bg-white/10 text-white/30 cursor-not-allowed'
+                ? 'bg-foreground text-background'
+                : 'bg-foreground/10 text-foreground-faint cursor-not-allowed'
             )}
           >
             {isLoading ? (
@@ -330,7 +330,7 @@ function ChatInput({ onSend }: ChatInputProps) {
       </motion.div>
 
       {/* Footer hints */}
-      <div className="flex items-center justify-center gap-4 mt-3 text-xs text-white/30">
+      <div className="flex items-center justify-center gap-4 mt-3 text-xs text-foreground-faint">
         <span>{t('chat.routingHint')}</span>
       </div>
     </div>
@@ -364,11 +364,11 @@ function EmptyState() {
         transition={{ type: 'spring', delay: 0.1 }}
         className="relative mb-8"
       >
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 flex items-center justify-center backdrop-blur-xl">
-          <Sparkles className="h-9 w-9 text-white" />
+        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-foreground/10 to-foreground/5 border border-border flex items-center justify-center backdrop-blur-xl">
+          <Sparkles className="h-9 w-9 text-foreground" />
         </div>
         {/* Glow */}
-        <div className="absolute inset-0 rounded-2xl bg-white/10 blur-2xl -z-10" />
+        <div className="absolute inset-0 rounded-2xl bg-foreground/10 blur-2xl -z-10" />
       </motion.div>
 
       {/* Title */}
@@ -376,7 +376,7 @@ function EmptyState() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
-        className="text-3xl font-semibold text-white mb-3"
+        className="text-3xl font-semibold text-foreground mb-3"
       >
         {t('chat.emptyTitle')}
       </motion.h2>
@@ -385,7 +385,7 @@ function EmptyState() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3 }}
-        className="text-white/50 text-center mb-10 max-w-md"
+        className="text-foreground-subtle text-center mb-10 max-w-md"
       >
         {t('chat.emptySubtitle')}
       </motion.p>
@@ -406,12 +406,12 @@ function EmptyState() {
             whileHover={{ scale: 1.02, y: -2 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => setInput(prompt)}
-            className="group p-4 rounded-xl text-left text-sm backdrop-blur-xl bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/[0.07] transition-all"
+            className="group p-4 rounded-xl text-left text-sm backdrop-blur-xl bg-foreground/5 border border-border hover:border-foreground/20 hover:bg-foreground/[0.07] transition-all"
           >
-            <span className="text-white/70 group-hover:text-white transition-colors line-clamp-2">
+            <span className="text-foreground-secondary group-hover:text-foreground transition-colors line-clamp-2">
               {prompt}
             </span>
-            <div className="mt-2 text-xs text-white/50 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="mt-2 text-xs text-foreground-subtle opacity-0 group-hover:opacity-100 transition-opacity">
               {t('chat.clickToUse')}
             </div>
           </motion.button>
@@ -540,15 +540,15 @@ export default function ChatPage() {
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative z-20 flex items-center justify-between px-6 md:px-8 h-14 border-b border-white/5"
+          className="relative z-20 flex items-center justify-between px-6 md:px-8 h-14 border-b border-border"
         >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-white" />
+            <div className="w-8 h-8 rounded-lg bg-foreground/5 border border-border flex items-center justify-center">
+              <Sparkles className="h-4 w-4 text-foreground" />
             </div>
             <div>
-              <h1 className="text-sm font-semibold text-white">{t('chat.aiChat')}</h1>
-              <p className="text-xs text-white/40">
+              <h1 className="text-sm font-semibold text-foreground">{t('chat.aiChat')}</h1>
+              <p className="text-xs text-foreground-faint">
                 {t('chat.headerSubtitle')}
               </p>
             </div>
@@ -558,7 +558,7 @@ export default function ChatPage() {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => { createSession(); showToast.success(t('chat.newChatCreated')); }}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors text-sm"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors text-sm"
           >
             <MessageSquarePlus className="h-4 w-4" />
             <span className="hidden sm:inline">{t('chat.newChat')}</span>
@@ -618,7 +618,7 @@ export default function ChatPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               onClick={() => scrollToBottom()}
-              className="absolute bottom-32 right-6 p-2.5 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 text-white/70 hover:text-white hover:bg-white/20 transition-colors shadow-lg z-30"
+              className="absolute bottom-32 right-6 p-2.5 rounded-full backdrop-blur-xl bg-foreground/10 border border-foreground/20 text-foreground-secondary hover:text-foreground hover:bg-foreground/20 transition-colors shadow-lg z-30"
             >
               <ChevronDown className="h-5 w-5" />
             </motion.button>
@@ -636,8 +636,8 @@ export default function ChatPage() {
             >
               <div className="max-w-2xl mx-auto backdrop-blur-xl bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                 <div className="flex items-center justify-between gap-4">
-                  <p className="text-sm text-red-300">{error}</p>
-                  <button onClick={clearError} className="p-1 rounded hover:bg-white/10 text-red-400">
+                  <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                  <button onClick={clearError} className="p-1 rounded hover:bg-foreground/10 text-red-700 dark:text-red-400">
                     <X className="h-4 w-4" />
                   </button>
                 </div>

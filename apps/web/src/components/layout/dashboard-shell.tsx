@@ -110,7 +110,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
             {isActive && (
               <motion.span
                 layoutId="nav-pill"
-                className="absolute inset-0 bg-white/10 rounded-full"
+                className="absolute inset-0 bg-foreground/10 rounded-full"
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
             )}
@@ -122,7 +122,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-white/5 rounded-full"
+                className="absolute inset-0 bg-foreground/5 rounded-full"
               />
             )}
 
@@ -336,7 +336,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
           <div className="flex items-center gap-4">
             <button
               onClick={onMenuClick}
-              className="md:hidden p-2 rounded-lg glass-premium hover:bg-white/10 transition-colors"
+              className="md:hidden p-2 rounded-lg glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -366,8 +366,8 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               className={cn(
                 'items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 rejectedMutations > 0 ? 'flex' : 'hidden md:flex',
-                syncState === 'synced' && 'text-emerald-500 bg-emerald-500/10',
-                syncState === 'syncing' && 'text-amber-500 bg-amber-500/10',
+                syncState === 'synced' && 'text-emerald-700 dark:text-emerald-500 bg-emerald-500/10',
+                syncState === 'syncing' && 'text-amber-700 dark:text-amber-500 bg-amber-500/10',
                 syncState === 'offline' && 'text-red-500 bg-red-500/10',
                 syncState === 'error' && 'text-red-500 bg-red-500/10'
               )}
@@ -396,7 +396,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setCommandOpen(true)}
-              className="p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Search className="h-4 w-4" />
             </motion.button>
@@ -406,7 +406,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => openModal('createDocument')}
-              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Plus className="h-4 w-4" />
             </motion.button>
@@ -416,7 +416,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => openModal('aiAssistant')}
-              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+              className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Sparkles className="h-4 w-4" />
             </motion.button>
@@ -425,7 +425,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/dashboard/settings"
-                className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-white/10 transition-colors"
+                className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
               >
                 <Settings className="h-4 w-4" />
               </Link>
@@ -438,9 +438,9 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
-                    className="p-1 rounded-full glass-premium hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
                   >
-                    <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                    <Avatar className="h-8 w-8 ring-2 ring-foreground/10">
                       <AvatarImage src={userImage} />
                       <AvatarFallback className="bg-muted text-xs font-medium">
                         {userInitials}
@@ -476,7 +476,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
                 className="p-1 rounded-full glass-premium transition-colors"
                 disabled
               >
-                <Avatar className="h-8 w-8 ring-2 ring-white/10">
+                <Avatar className="h-8 w-8 ring-2 ring-foreground/10">
                   <AvatarFallback className="bg-muted text-xs font-medium">
                     U
                   </AvatarFallback>
@@ -627,7 +627,7 @@ function AICommandButton({ userId }: { userId: string }) {
         className={cn(
           'fixed bottom-6 right-6 z-40',
           'w-14 h-14 rounded-full',
-          'bg-white text-black',
+          'bg-foreground text-background',
           'flex items-center justify-center',
           'shadow-lg shadow-black/20',
           'hover:shadow-xl hover:shadow-black/30',
@@ -659,15 +659,15 @@ function AICommandButton({ userId }: { userId: string }) {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4"
             >
-              <div className="bg-neutral-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                  <div className="flex items-center gap-2 text-white/60 text-sm">
+              <div className="bg-popover border border-border rounded-2xl overflow-hidden shadow-2xl">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
                     <Sparkles className="h-4 w-4" />
                     <span>{t('chat.askAiAnything')}</span>
                   </div>
                   <button
                     onClick={() => setIsOpen(false)}
-                    className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                    className="p-1 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors"
                   >
                     <X className="h-4 w-4" />
                   </button>

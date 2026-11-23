@@ -378,39 +378,39 @@ export function LivingPlanInspector({
 
   if (loading) {
     return (
-      <aside className="border-t border-white/10 px-5 py-8 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
+      <aside className="border-t border-border px-5 py-8 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
       </aside>
     );
   }
 
   return (
-    <aside className="min-w-0 border-t border-white/10 px-5 py-7 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
+    <aside className="min-w-0 border-t border-border px-5 py-7 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+          <div className="text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
             {t('docs.livingPlan.label')}
           </div>
-          <h2 className="mt-2 text-lg font-semibold text-white">
+          <h2 className="mt-2 text-lg font-semibold text-foreground">
             {t('docs.livingPlan.title')}
           </h2>
         </div>
         {plan?.currentVersion && (
-          <Badge variant="outline" className="border-white/10 bg-white/5 font-mono text-white/50">
+          <Badge variant="outline" className="border-border bg-foreground/5 font-mono text-foreground-subtle">
             v{plan.currentVersion.versionNumber}
           </Badge>
         )}
       </div>
 
-      <div className="mt-6 border-y border-white/10 py-5">
+      <div className="mt-6 border-y border-border py-5">
         <div className="flex items-end justify-between">
           <div>
-            <div className="text-3xl font-semibold text-white">
+            <div className="text-3xl font-semibold text-foreground">
               {plan?.coverage.percentage || 0}%
             </div>
-            <div className="mt-1 text-xs text-white/40">{t('docs.livingPlan.coverageLabel')}</div>
+            <div className="mt-1 text-xs text-foreground-faint">{t('docs.livingPlan.coverageLabel')}</div>
           </div>
-          <div className="text-right text-xs text-white/45">
+          <div className="text-right text-xs text-foreground-subtle">
             {plan?.coverage.covered || 0} / {plan?.coverage.total || 0} {t('docs.livingPlan.requirementsLinked')}
           </div>
         </div>
@@ -419,14 +419,14 @@ export function LivingPlanInspector({
 
       {plan?.pendingChangeSet ? (
         <div className="mt-5 border border-amber-300/20 bg-amber-300/[0.06] p-5">
-          <div className="flex items-center gap-2 text-sm font-medium text-amber-200">
+          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
             <GitPullRequestArrow className="size-4" />
             {t('docs.livingPlan.reviewRequired')}
           </div>
-          <p className="mt-3 text-sm leading-6 text-white/55">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             {localizeGeneratedCopy(plan.pendingChangeSet.summary, locale)}
           </p>
-          <div className="mt-4 flex items-center justify-between text-xs text-white/40">
+          <div className="mt-4 flex items-center justify-between text-xs text-foreground-faint">
             <span>{plan.pendingChangeSet.proposalCount} {t('docs.livingPlan.workChanges')}</span>
             <Button asChild size="sm">
             <Link href={`/dashboard/changes?changeSet=${plan.pendingChangeSet.id}`}>
@@ -450,41 +450,41 @@ export function LivingPlanInspector({
             )}
             {plan?.currentVersion ? t('docs.livingPlan.reviewImpact') : t('docs.livingPlan.createBaseline')}
           </Button>
-          <p className="mt-2 text-center text-[11px] leading-4 text-white/35">
+          <p className="mt-2 text-center text-[11px] leading-4 text-foreground-faint">
             {t('docs.livingPlan.analysisHelp')}
           </p>
         </div>
       )}
 
       {analysis.status === "running" && (
-        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-white/45">
-          <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-cyan-300" />
+        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-foreground-subtle">
+          <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-cyan-700 dark:text-cyan-300" />
           {t('docs.livingPlan.running')}
         </div>
       )}
       {analysis.status === "failed" && (
-        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-red-300">
+        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-red-700 dark:text-red-300">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {analysis.message}
         </div>
       )}
 
-      <div className="mt-7 border-y border-white/10 py-5">
+      <div className="mt-7 border-y border-border py-5">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-medium text-white">
+            <h3 className="text-sm font-medium text-foreground">
               {locale === "tr" ? "Etki grafiği" : "Impact graph"}
             </h3>
-            <p className="mt-1 text-xs leading-5 text-white/35">
+            <p className="mt-1 text-xs leading-5 text-foreground-faint">
               {locale === "tr"
                 ? "Plan, iş, PR, test ve agent kanıtlarını aynı bağlamda gösterir."
                 : "Shows plan, work, PR, test, and agent evidence in one context."}
             </p>
           </div>
-          <GitBranch className="mt-0.5 size-4 text-cyan-300" />
+          <GitBranch className="mt-0.5 size-4 text-cyan-700 dark:text-cyan-300" />
         </div>
 
-        <div className="grid grid-cols-3 divide-x divide-white/10 border-y border-white/10">
+        <div className="grid grid-cols-3 divide-x divide-border border-y border-border">
           {[
             {
               label: locale === "tr" ? "Issue" : "Issues",
@@ -500,8 +500,8 @@ export function LivingPlanInspector({
             },
           ].map((item) => (
             <div key={item.label} className="px-3 py-3">
-              <div className="text-lg font-semibold text-white">{item.value}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-wide text-white/35">
+              <div className="text-lg font-semibold text-foreground">{item.value}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-wide text-foreground-faint">
                 {item.label}
               </div>
             </div>
@@ -511,7 +511,7 @@ export function LivingPlanInspector({
         {impactGraph && (
           <div className="mt-4 flex flex-wrap gap-2">
             {impactGraph.integrations.length === 0 ? (
-              <Badge variant="outline" className="border-white/10 text-white/45">
+              <Badge variant="outline" className="border-border text-foreground-subtle">
                 {locale === "tr" ? "Entegrasyon yok" : "No integrations"}
               </Badge>
             ) : (
@@ -520,12 +520,12 @@ export function LivingPlanInspector({
                   key={integration.id}
                   variant="outline"
                   className={cn(
-                    "border-white/10 bg-white/5 text-white/55",
-                    integration.status === "connected" && "border-emerald-300/20 text-emerald-200"
+                    "border-border bg-foreground/5 text-muted-foreground",
+                    integration.status === "connected" && "border-emerald-300/20 text-emerald-800 dark:text-emerald-200"
                   )}
                 >
                   {integration.provider}
-                  <span className="ml-1 text-white/35">
+                  <span className="ml-1 text-foreground-faint">
                     {integration.seeded
                       ? locale === "tr" ? "örnek veri" : "sample data"
                       : integration.status === "connected"
@@ -539,7 +539,7 @@ export function LivingPlanInspector({
         )}
 
         {impactGraph?.summary.outdatedAgentJobs ? (
-          <div className="mt-4 flex items-start gap-2 border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs leading-5 text-amber-200">
+          <div className="mt-4 flex items-start gap-2 border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
             {locale === "tr"
               ? `${impactGraph.summary.outdatedAgentJobs} agent işi eski bağlamla kalmış.`
@@ -556,16 +556,16 @@ export function LivingPlanInspector({
                 (check) => check.conclusion === "success"
               ).length;
               return (
-                <div key={requirement.id} className="border border-white/10 bg-white/[0.03] p-3">
-                  <div className="font-mono text-[11px] text-cyan-300">
+                <div key={requirement.id} className="border border-border bg-foreground/[0.03] p-3">
+                  <div className="font-mono text-[11px] text-cyan-700 dark:text-cyan-300">
                     {requirement.stableKey}
                   </div>
-                  <div className="mt-1 line-clamp-2 text-sm font-medium leading-5 text-white">
+                  <div className="mt-1 line-clamp-2 text-sm font-medium leading-5 text-foreground">
                     {localizeGeneratedCopy(requirement.title, locale)}
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-white/45">
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-foreground-subtle">
                     {firstIssue && (
-                      <span className="inline-flex items-center gap-1 border border-white/10 px-2 py-1">
+                      <span className="inline-flex items-center gap-1 border border-border px-2 py-1">
                         <ListChecks className="size-3" />
                         {firstIssue.key || firstIssue.provider}
                       </span>
@@ -575,7 +575,7 @@ export function LivingPlanInspector({
                         href={firstPr.url || undefined}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 border border-white/10 px-2 py-1 hover:text-white"
+                        className="inline-flex items-center gap-1 border border-border px-2 py-1 hover:text-foreground"
                       >
                         <GitPullRequestArrow className="size-3" />
                         #{firstPr.number}
@@ -583,8 +583,8 @@ export function LivingPlanInspector({
                       </a>
                     )}
                     {requirement.checkRuns.length > 0 && (
-                      <span className="inline-flex items-center gap-1 border border-white/10 px-2 py-1">
-                        <CheckCircle2 className="size-3 text-emerald-300" />
+                      <span className="inline-flex items-center gap-1 border border-border px-2 py-1">
+                        <CheckCircle2 className="size-3 text-emerald-700 dark:text-emerald-300" />
                         {passingChecks}/{requirement.checkRuns.length}
                       </span>
                     )}
@@ -594,10 +594,10 @@ export function LivingPlanInspector({
             })}
           </div>
         ) : (
-          <div className="mt-4 border border-white/10 bg-white/[0.02] p-4 text-xs leading-5 text-white/35">
+          <div className="mt-4 border border-border bg-foreground/[0.02] p-4 text-xs leading-5 text-foreground-faint">
             {graphDiagnostic ? (
               <div>
-                <div className="text-sm font-medium text-white/75">{graphDiagnostic.title}</div>
+                <div className="text-sm font-medium text-foreground-secondary">{graphDiagnostic.title}</div>
                 <p className="mt-2">{graphDiagnostic.body}</p>
                 <ul className="mt-3 space-y-1.5">
                   {graphDiagnostic.tips.map((tip) => (
@@ -638,31 +638,31 @@ export function LivingPlanInspector({
 
       <div className="mt-7">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-white">{t('docs.livingPlan.requirements')}</h3>
-          <span className="text-xs text-white/35">{activeRequirements.length}</span>
+          <h3 className="text-sm font-medium text-foreground">{t('docs.livingPlan.requirements')}</h3>
+          <span className="text-xs text-foreground-faint">{activeRequirements.length}</span>
         </div>
 
         {activeRequirements.length === 0 ? (
-          <div className="border-y border-white/10 py-8 text-center">
-            <p className="text-sm text-white/45">{t('docs.livingPlan.noRequirements')}</p>
-            <p className="mt-1 text-xs text-white/30">
+          <div className="border-y border-border py-8 text-center">
+            <p className="text-sm text-foreground-subtle">{t('docs.livingPlan.noRequirements')}</p>
+            <p className="mt-1 text-xs text-foreground-faint">
               {t('docs.livingPlan.baselineHint')}
             </p>
           </div>
         ) : (
-          <div className="max-h-[640px] divide-y divide-white/10 overflow-y-auto border-y border-white/10">
+          <div className="max-h-[640px] divide-y divide-border overflow-y-auto border-y border-border">
             {activeRequirements.map((requirement) => {
               const covered = requirement.tasks.some((task) => task.isArchived === 0);
               return (
                 <div key={requirement.id} className="py-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="font-mono text-xs text-cyan-300">
+                    <div className="font-mono text-xs text-cyan-700 dark:text-cyan-300">
                       {requirement.stableKey}
                     </div>
                     <div
                       className={cn(
                         "flex items-center gap-1 text-[10px] uppercase tracking-wide",
-                        covered ? "text-emerald-300" : "text-amber-300"
+                        covered ? "text-emerald-700 dark:text-emerald-300" : "text-amber-700 dark:text-amber-300"
                       )}
                     >
                       {covered ? (
@@ -673,11 +673,11 @@ export function LivingPlanInspector({
                       {covered ? t('docs.livingPlan.covered') : t('docs.livingPlan.uncovered')}
                     </div>
                   </div>
-                  <div className="mt-2 text-sm font-medium leading-5 text-white">
+                  <div className="mt-2 text-sm font-medium leading-5 text-foreground">
                     {localizeGeneratedCopy(requirement.title, locale)}
                   </div>
                   {requirement.tasks.length > 0 && (
-                    <div className="mt-2 text-xs text-white/35">
+                    <div className="mt-2 text-xs text-foreground-faint">
                       {requirement.tasks.filter((task) => task.isArchived === 0).length} {t('docs.livingPlan.linkedTask')}
                     </div>
                   )}
