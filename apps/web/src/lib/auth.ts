@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "@nexus/database/schema";
-import { actionEmailHtml, isEmailConfigured, sendEmail } from "./email";
+import { actionEmailHtml, canDeliverPasswordReset, isEmailConfigured, sendEmail } from "./email";
 import { beforeUserCreate } from "./auth-signup-guard";
 import { isPublicSignupEnabled } from "./production-guardrails";
 
@@ -55,19 +55,24 @@ export const auth = betterAuth({
     // production sign-ups would be permanently locked out (verification on, no
     // mail provider). Configure RESEND_API_KEY to enforce it.
     requireEmailVerification: process.env.NODE_ENV === "production" && isEmailConfigured(),
-    sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
-      await sendEmail({
-        to: user.email,
-        subject: "Nexus — Şifre sıfırlama",
-        text: `Şifreni sıfırlamak için: ${url}`,
-        html: actionEmailHtml({
-          heading: "Şifre sıfırlama",
-          body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
-          ctaLabel: "Şifreyi sıfırla",
-          url,
-        }),
-      });
-    },
+    // Production without an email provider: no sender, so better-auth answers
+    // reset requests with RESET_PASSWORD_DISABLED instead of creating a token
+    // whose link could only end up in the logs.
+    sendResetPassword: canDeliverPasswordReset()
+      ? async ({ user, url }: { user: { email: string }; url: string }) => {
+          await sendEmail({
+            to: user.email,
+            subject: "Nexus — Şifre sıfırlama",
+            text: `Şifreni sıfırlamak için: ${url}`,
+            html: actionEmailHtml({
+              heading: "Şifre sıfırlama",
+              body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
+              ctaLabel: "Şifreyi sıfırla",
+              url,
+            }),
+          });
+        }
+      : undefined,
   },
   emailVerification: {
     sendOnSignUp: isEmailConfigured(),
