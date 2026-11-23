@@ -99,7 +99,6 @@ Route coverage (import-level) is complete, but line coverage is still moderate. 
 
 ### Known limitations and follow-ups
 
-- Light theme has not had a visual pass.
 - No UI for rejected offline mutations.
 - `pnpm audit --prod` reports 13 moderate/low advisories (11 moderate, 2 low; none high or critical), mostly OpenTelemetry instrumentation packages plus `@ai-sdk/provider-utils`, `glob` and `minimatch`.
 - Default global AI limits (`AI_GLOBAL_DAILY_LIMIT=25`, `AI_GLOBAL_PER_MINUTE_LIMIT=2`) look too low for more than a handful of demo users; owner decision.

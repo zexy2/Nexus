@@ -41,9 +41,8 @@ describe("resolveTheme", () => {
 });
 
 describe("normalizeTheme", () => {
-  // Light mode is visually unverified, so only an explicit "light" opts in.
-  it("treats stored 'system' as dark", () => {
-    expect(normalizeTheme("system")).toBe("dark");
+  it("keeps 'system' so it can follow the OS, and falls back to dark", () => {
+    expect(normalizeTheme("system")).toBe("system");
     expect(normalizeTheme("dark")).toBe("dark");
     expect(normalizeTheme("light")).toBe("light");
     expect(normalizeTheme("neon")).toBe("dark");
@@ -60,12 +59,18 @@ describe("AppearanceSync", () => {
     expect(readStoredAppearance()).toEqual({ theme: "light", compact: true });
   });
 
-  it("keeps 'system' dark even when the OS prefers light", () => {
-    mockPrefersDark(false);
+  it("follows the OS for 'system' and reacts to OS changes", () => {
+    const listeners = mockPrefersDark(false);
     render(<AppearanceSync theme="system" compact={false} />);
+    expect(root.classList.contains("light")).toBe(true);
+    expect(root.classList.contains("dark")).toBe(false);
+    expect(root.classList.contains("compact")).toBe(false);
+    expect(readStoredAppearance()).toEqual({ theme: "system", compact: false });
+
+    mockPrefersDark(true);
+    listeners.forEach((cb) => cb());
     expect(root.classList.contains("dark")).toBe(true);
     expect(root.classList.contains("light")).toBe(false);
-    expect(root.classList.contains("compact")).toBe(false);
   });
 
   it("falls back to dark for unknown values and resets on unmount", () => {
@@ -94,9 +99,14 @@ describe("APPEARANCE_BOOT_SCRIPT", () => {
     expect(root.classList.contains("compact")).toBe(true);
   });
 
-  it("treats a cached 'system' as dark even when the OS prefers light", () => {
+  it("resolves a cached 'system' against the OS preference", () => {
     mockPrefersDark(false);
     window.localStorage.setItem(APPEARANCE_STORAGE_KEY, JSON.stringify({ theme: "system", compact: false }));
+    runBootScript("/dashboard");
+    expect(root.classList.contains("light")).toBe(true);
+    expect(root.classList.contains("dark")).toBe(false);
+
+    mockPrefersDark(true);
     runBootScript("/dashboard");
     expect(root.classList.contains("dark")).toBe(true);
     expect(root.classList.contains("light")).toBe(false);
