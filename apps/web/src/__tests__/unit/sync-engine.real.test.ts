@@ -404,7 +404,7 @@ describe("sign-out", () => {
       clearExtraLocalData,
     });
     expect(stayed).toBe("cancelled");
-    expect(confirmDiscard).toHaveBeenCalledWith({ mutations: 1, documents: 2, total: 3 });
+    expect(confirmDiscard).toHaveBeenCalledWith({ mutations: 1, documents: 2, rejected: 0, commands: 0, unsynced: 3, total: 3 });
     // One push for the final sync, one for the retry.
     await vi.waitFor(() => expect(pushes().length).toBeGreaterThanOrEqual(pushesBefore + 2));
     expect(signOut).not.toHaveBeenCalled();
