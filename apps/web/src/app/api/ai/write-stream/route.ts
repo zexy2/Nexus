@@ -27,6 +27,30 @@ export async function POST(request: NextRequest) {
       return new Response("Unauthorized", { status: 401 });
     }
 
+    const providerStatus = getAiProviderStatus();
+    if (!providerStatus.geminiAvailable) {
+      return aiUnavailableResponse("Gemini writing is not configured on this server.");
+    }
+
+    let body: { prompt?: unknown; agentType?: string; existingContent?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response("Invalid JSON body", { status: 400 });
+    }
+    const { prompt, agentType, existingContent } = body;
+
+    if (!prompt || typeof prompt !== "string") {
+      return new Response("prompt is required", { status: 400 });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return aiUnavailableResponse("Gemini writing is not configured on this server.");
+    }
+
+    // Budget is consumed only after the request is validated and the
+    // provider is available.
     const aiBudget = await enforceAiBudget({
       userId: protection.user.id,
       email: protection.user.email,
@@ -34,23 +58,6 @@ export async function POST(request: NextRequest) {
     });
     if (!aiBudget.ok) {
       return aiBudget.response;
-    }
-
-    const providerStatus = getAiProviderStatus();
-    if (!providerStatus.geminiAvailable) {
-      return aiUnavailableResponse("Gemini writing is not configured on this server.");
-    }
-
-    const body = await request.json();
-    const { prompt, agentType, existingContent } = body;
-
-    if (!prompt) {
-      return new Response("prompt is required", { status: 400 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return aiUnavailableResponse("Gemini writing is not configured on this server.");
     }
 
     await writeAuditLog({

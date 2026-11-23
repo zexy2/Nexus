@@ -119,6 +119,7 @@ Expected:
 - `pnpm smoke:prod` starts and completes one real task breakdown workflow from the generated document and verifies at least one task.
 - `pnpm smoke:prod` starts one Living Plan impact workflow, waits for a pending change set, applies selected proposals, and verifies the change set resolves as `applied` or `partially_applied`.
 - `/api/health` reports the deployed `commitSha` and warns when an external write remains non-terminal for more than five minutes.
+- Anonymous `/api/health` returns only overall and per-service `status`. Detailed output (commit, latencies, provider/integration configuration) requires `HEALTH_CHECK_TOKEN` (`x-health-token` header or `Authorization: Bearer`) or a verified admin session; the smoke and maintenance scripts send the token when it is set in `.env.production`.
 - For quota verification, temporarily set `AI_USER_DAILY_LIMIT=1`, restart web, and confirm the second AI request returns `429`.
 
 Retention note: `rate_limit_buckets` and `audit_logs` are intentionally simple for the portfolio demo. Before long-running public usage, add a scheduled cleanup for expired buckets and old audit rows.

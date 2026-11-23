@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { tasks } from "@nexus/database/schema";
@@ -29,8 +30,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     });
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
-    const code = error instanceof Error ? error.message : "AGENT_JOB_CREATE_FAILED";
-    const status = code === "REPOSITORY_NOT_CONFIGURED" || code === "ACTIVE_AGENT_JOB_EXISTS" ? 409 : 400;
-    return NextResponse.json({ error: code }, { status });
+    const message = error instanceof Error ? error.message : "";
+    if (message === "REPOSITORY_NOT_CONFIGURED" || message === "ACTIVE_AGENT_JOB_EXISTS") {
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+    if (message === "TASK_NOT_FOUND") {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    // Unexpected failure (e.g. database error): never echo its message.
+    const requestId = logInternalError("Agent job create", error, request.headers);
+    return NextResponse.json({ error: "AGENT_JOB_CREATE_FAILED", requestId }, { status: 500 });
   }
 }

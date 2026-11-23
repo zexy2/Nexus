@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { externalWriteOperations } from "@nexus/database/schema";
@@ -63,8 +64,9 @@ export async function POST(
     );
     return NextResponse.json({ ok: true, ...result, status: "running" }, { status: 202 });
   } catch (error) {
+    const requestId = logInternalError("External write retry", error, _request.headers);
     return NextResponse.json(
-      { error: "TEMPORAL_UNAVAILABLE", message: error instanceof Error ? error.message : "Workflow engine is unavailable." },
+      { error: "TEMPORAL_UNAVAILABLE", message: "Workflow engine is unavailable.", requestId },
       { status: 503 }
     );
   }
