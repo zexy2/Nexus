@@ -1,0 +1,2426 @@
+{
+  "generatedWith": {
+    "@blocknote/core": "0.51.4",
+    "yjs": "13.6.29",
+    "note": "Generated once with the pre-upgrade BlockNote; never regenerate."
+  },
+  "partialInput": [
+    {
+      "id": "h1",
+      "type": "heading",
+      "props": {
+        "level": 1,
+        "textAlignment": "center",
+        "textColor": "blue"
+      },
+      "content": "Proje Planı — Q3"
+    },
+    {
+      "id": "h2",
+      "type": "heading",
+      "props": {
+        "level": 2
+      },
+      "content": "Hedefler"
+    },
+    {
+      "id": "h3",
+      "type": "heading",
+      "props": {
+        "level": 3,
+        "isToggleable": true
+      },
+      "content": "Açılır başlık",
+      "children": [
+        {
+          "id": "h3c",
+          "type": "paragraph",
+          "content": "Başlığın içi"
+        }
+      ]
+    },
+    {
+      "id": "p-styles",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "yellow"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Kalın ",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "italik ",
+          "styles": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "altı çizili ",
+          "styles": {
+            "underline": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "üstü çizili ",
+          "styles": {
+            "strike": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "kod",
+          "styles": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " renkli",
+          "styles": {
+            "textColor": "red",
+            "backgroundColor": "gray"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/a?b=1",
+          "content": [
+            {
+              "type": "text",
+              "text": "bağlantı",
+              "styles": {
+                "bold": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "p-empty",
+      "type": "paragraph",
+      "content": []
+    },
+    {
+      "id": "b1",
+      "type": "bulletListItem",
+      "content": "Madde 1",
+      "children": [
+        {
+          "id": "b1a",
+          "type": "bulletListItem",
+          "content": "Alt madde"
+        },
+        {
+          "id": "b1b",
+          "type": "paragraph",
+          "content": "Alt paragraf"
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "type": "numberedListItem",
+      "props": {
+        "start": 3
+      },
+      "content": "Üçüncü"
+    },
+    {
+      "id": "n2",
+      "type": "numberedListItem",
+      "content": "Dördüncü"
+    },
+    {
+      "id": "c1",
+      "type": "checkListItem",
+      "props": {
+        "checked": true
+      },
+      "content": "Bitti"
+    },
+    {
+      "id": "c2",
+      "type": "checkListItem",
+      "props": {
+        "checked": false
+      },
+      "content": "Yapılacak"
+    },
+    {
+      "id": "t1",
+      "type": "toggleListItem",
+      "content": "Aç/kapa",
+      "children": [
+        {
+          "id": "t1a",
+          "type": "paragraph",
+          "content": "Gizli içerik"
+        }
+      ]
+    },
+    {
+      "id": "q1",
+      "type": "quote",
+      "content": "Bir alıntı"
+    },
+    {
+      "id": "code1",
+      "type": "codeBlock",
+      "props": {
+        "language": "javascript"
+      },
+      "content": "const a = 1;\nconsole.log(a);"
+    },
+    {
+      "id": "code2",
+      "type": "codeBlock",
+      "props": {
+        "language": ""
+      },
+      "content": "dil yok"
+    },
+    {
+      "id": "tbl",
+      "type": "table",
+      "content": {
+        "type": "tableContent",
+        "headerRows": 1,
+        "columnWidths": [
+          120,
+          null
+        ],
+        "rows": [
+          {
+            "cells": [
+              "Görev",
+              "Durum"
+            ]
+          },
+          {
+            "cells": [
+              "Tasarım",
+              {
+                "type": "tableCell",
+                "props": {
+                  "backgroundColor": "green",
+                  "textColor": "default",
+                  "textAlignment": "right"
+                },
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tamam",
+                    "styles": {
+                      "bold": true
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "props": {
+        "url": "https://example.com/i.png",
+        "caption": "Görsel",
+        "previewWidth": 320,
+        "name": "i.png"
+      }
+    },
+    {
+      "id": "file",
+      "type": "file",
+      "props": {
+        "url": "https://example.com/f.pdf",
+        "name": "f.pdf"
+      }
+    },
+    {
+      "id": "vid",
+      "type": "video",
+      "props": {
+        "url": "https://example.com/v.mp4"
+      }
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "props": {
+        "url": "https://example.com/a.mp3"
+      }
+    },
+    {
+      "id": "div",
+      "type": "divider"
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "AI tarafından üretilen paragraf"
+        }
+      ]
+    }
+  ],
+  "storedDocument": [
+    {
+      "id": "h1",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "blue",
+        "textAlignment": "center",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Proje Planı — Q3",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h2",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 2,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Hedefler",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h3",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Açılır başlık",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "h3c",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Başlığın içi",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "p-styles",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "yellow",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Kalın ",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "italik ",
+          "styles": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "altı çizili ",
+          "styles": {
+            "underline": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "üstü çizili ",
+          "styles": {
+            "strike": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "kod",
+          "styles": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " renkli",
+          "styles": {
+            "textColor": "red",
+            "backgroundColor": "gray"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/a?b=1",
+          "content": [
+            {
+              "type": "text",
+              "text": "bağlantı",
+              "styles": {
+                "bold": true
+              }
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "p-empty",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [],
+      "children": []
+    },
+    {
+      "id": "b1",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Madde 1",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "b1a",
+          "type": "bulletListItem",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt madde",
+              "styles": {}
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "b1b",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt paragraf",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "start": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Üçüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "n2",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Dördüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bitti",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c2",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Yapılacak",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "t1",
+      "type": "toggleListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Aç/kapa",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "t1a",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Gizli içerik",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "q1",
+      "type": "quote",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bir alıntı",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code1",
+      "type": "codeBlock",
+      "props": {
+        "language": "javascript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "const a = 1;\nconsole.log(a);",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code2",
+      "type": "codeBlock",
+      "props": {
+        "language": ""
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "dil yok",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "tbl",
+      "type": "table",
+      "props": {
+        "textColor": "default"
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          120,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Görev",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Durum",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tasarım",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tamam",
+                    "styles": {
+                      "bold": true
+                    }
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "green",
+                  "textColor": "default",
+                  "textAlignment": "right"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "i.png",
+        "url": "https://example.com/i.png",
+        "caption": "Görsel",
+        "showPreview": true,
+        "previewWidth": 320
+      },
+      "children": []
+    },
+    {
+      "id": "file",
+      "type": "file",
+      "props": {
+        "backgroundColor": "default",
+        "name": "f.pdf",
+        "url": "https://example.com/f.pdf",
+        "caption": ""
+      },
+      "children": []
+    },
+    {
+      "id": "vid",
+      "type": "video",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/v.mp4",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "props": {
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/a.mp3",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "div",
+      "type": "divider",
+      "props": {},
+      "children": []
+    },
+    {
+      "id": "0df6dcc3-0442-415a-a10d-6c9c51f60eee",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "AI tarafından üretilen paragraf",
+          "styles": {}
+        }
+      ],
+      "children": []
+    }
+  ],
+  "yjsUpdateBase64": "AYwCkiEABwEIZG9jdW1lbnQDCmJsb2NrR3JvdXAHAJIhAAMOYmxvY2tDb250YWluZXIHAJIhAQMHaGVhZGluZwcAkiECBgQAkiEDE1Byb2plIFBsYW7EsSDigJQgUTMoAJIhAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIQIJdGV4dENvbG9yAXcEYmx1ZSgAkiECDXRleHRBbGlnbm1lbnQBdwZjZW50ZXIoAJIhAgVsZXZlbAF9ASgAkiECDGlzVG9nZ2xlYWJsZQF5KACSIQECaWQBdwJoMYeSIQEDDmJsb2NrQ29udGFpbmVyBwCSIRoDB2hlYWRpbmcHAJIhGwYEAJIhHAhIZWRlZmxlcigAkiEbD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhGwl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIRsNdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhGwVsZXZlbAF9AigAkiEbDGlzVG9nZ2xlYWJsZQF5KACSIRoCaWQBdwJoMoeSIRoDDmJsb2NrQ29udGFpbmVyBwCSISsDB2hlYWRpbmcHAJIhLAYEAJIhLRJBw6fEsWzEsXIgYmHFn2zEsWsoAJIhLA9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSISwJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiEsDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSISwFbGV2ZWwBfQMoAJIhLAxpc1RvZ2dsZWFibGUBeIeSISwDCmJsb2NrR3JvdXAHAJIhQAMOYmxvY2tDb250YWluZXIHAJIhQQMJcGFyYWdyYXBoBwCSIUIGBACSIUMRQmHFn2zEscSfxLFuIGnDp2koAJIhQg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIUIJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiFCDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIUECaWQBdwNoM2MoAJIhKwJpZAF3Amgzh5IhKwMOYmxvY2tDb250YWluZXIHAJIhVQMJcGFyYWdyYXBoBwCSIVYGBgCSIVcEYm9sZAJ7fYSSIVgHS2FsxLFuIIaSIV4EYm9sZARudWxshpIhXwZpdGFsaWMCe32EkiFgB2l0YWxpayCGkiFnBml0YWxpYwRudWxshpIhaAl1bmRlcmxpbmUCe32EkiFpDmFsdMSxIMOnaXppbGkghpIhdQl1bmRlcmxpbmUEbnVsbIaSIXYGc3RyaWtlAnt9hJIhdw/DvHN0w7wgw6dpemlsaSCGkiGDAQZzdHJpa2UEbnVsbIaSIYQBBGNvZGUCe32EkiGFAQNrb2SGkiGIAQRjb2RlBG51bGyGkiGJAQl0ZXh0Q29sb3IVeyJzdHJpbmdWYWx1ZSI6InJlZCJ9hpIhigEPYmFja2dyb3VuZENvbG9yFnsic3RyaW5nVmFsdWUiOiJncmF5In2EkiGLAQcgcmVua2xphpIhkgEJdGV4dENvbG9yBG51bGyGkiGTAQ9iYWNrZ3JvdW5kQ29sb3IEbnVsbISSIZQBASCGkiGVAQRib2xkAnt9hpIhlgEEbGluayR7ImhyZWYiOiJodHRwczovL2V4YW1wbGUuY29tL2E/Yj0xIn2EkiGXAQpiYcSfbGFudMSxhpIhnwEEYm9sZARudWxshpIhoAEEbGluawRudWxsKACSIVYPYmFja2dyb3VuZENvbG9yAXcGeWVsbG93KACSIVYJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiFWDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIVUCaWQBdwhwLXN0eWxlc4eSIVUDDmJsb2NrQ29udGFpbmVyBwCSIaYBAwlwYXJhZ3JhcGgoAJIhpwEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiGnAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIacBDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIaYBAmlkAXcHcC1lbXB0eYeSIaYBAw5ibG9ja0NvbnRhaW5lcgcAkiGsAQMOYnVsbGV0TGlzdEl0ZW0HAJIhrQEGBACSIa4BB01hZGRlIDEoAJIhrQEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiGtAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIa0BDXRleHRBbGlnbm1lbnQBdwRsZWZ0h5IhrQEDCmJsb2NrR3JvdXAHAJIhuQEDDmJsb2NrQ29udGFpbmVyBwCSIboBAw5idWxsZXRMaXN0SXRlbQcAkiG7AQYEAJIhvAEJQWx0IG1hZGRlKACSIbsBD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhuwEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiG7AQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiG6AQJpZAF3A2IxYYeSIboBAw5ibG9ja0NvbnRhaW5lcgcAkiHKAQMJcGFyYWdyYXBoBwCSIcsBBgQAkiHMAQxBbHQgcGFyYWdyYWYoAJIhywEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHLAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIcsBDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIcoBAmlkAXcDYjFiKACSIawBAmlkAXcCYjGHkiGsAQMOYmxvY2tDb250YWluZXIHAJIh3gEDEG51bWJlcmVkTGlzdEl0ZW0HAJIh3wEGBACSIeABCsOcw6fDvG5jw7woAJIh3wEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHfAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSId8BDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSId8BBXN0YXJ0AX0DKACSId4BAmlkAXcCbjGHkiHeAQMOYmxvY2tDb250YWluZXIHAJIh7AEDEG51bWJlcmVkTGlzdEl0ZW0HAJIh7QEGBACSIe4BC0TDtnJkw7xuY8O8KACSIe0BD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh7QEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiHtAQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiHtAQVzdGFydAF/KACSIewBAmlkAXcCbjKHkiHsAQMOYmxvY2tDb250YWluZXIHAJIh/AEDDWNoZWNrTGlzdEl0ZW0HAJIh/QEGBACSIf4BBUJpdHRpKACSIf0BD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh/QEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiH9AQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiH9AQdjaGVja2VkAXgoAJIh/AECaWQBdwJjMYeSIfwBAw5ibG9ja0NvbnRhaW5lcgcAkiGJAgMNY2hlY2tMaXN0SXRlbQcAkiGKAgYEAJIhiwIKWWFwxLFsYWNhaygAkiGKAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIYoCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhigINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhigIHY2hlY2tlZAF5KACSIYkCAmlkAXcCYzKHkiGJAgMOYmxvY2tDb250YWluZXIHAJIhmgIDDnRvZ2dsZUxpc3RJdGVtBwCSIZsCBgQAkiGcAghBw6cva2FwYSgAkiGbAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIZsCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhmwINdGV4dEFsaWdubWVudAF3BGxlZnSHkiGbAgMKYmxvY2tHcm91cAcAkiGnAgMOYmxvY2tDb250YWluZXIHAJIhqAIDCXBhcmFncmFwaAcAkiGpAgYEAJIhqgINR2l6bGkgacOnZXJpaygAkiGpAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIakCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhqQINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhqAICaWQBdwN0MWEoAJIhmgICaWQBdwJ0MYeSIZoCAw5ibG9ja0NvbnRhaW5lcgcAkiG8AgMFcXVvdGUHAJIhvQIGBACSIb4CDEJpciBhbMSxbnTEsSgAkiG9Ag9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIb0CCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhvAICaWQBdwJxMYeSIbwCAw5ibG9ja0NvbnRhaW5lcgcAkiHMAgMJY29kZUJsb2NrBwCSIc0CBgQAkiHOAhxjb25zdCBhID0gMTsKY29uc29sZS5sb2coYSk7KACSIc0CCGxhbmd1YWdlAXcKamF2YXNjcmlwdCgAkiHMAgJpZAF3BWNvZGUxh5IhzAIDDmJsb2NrQ29udGFpbmVyBwCSIe0CAwljb2RlQmxvY2sHAJIh7gIGBACSIe8CB2RpbCB5b2soAJIh7gIIbGFuZ3VhZ2UBdwAoAJIh7QICaWQBdwVjb2RlMoeSIe0CAw5ibG9ja0NvbnRhaW5lcgcAkiH5AgMFdGFibGUHAJIh+gIDCHRhYmxlUm93BwCSIfsCAwt0YWJsZUhlYWRlcgcAkiH8AgMOdGFibGVQYXJhZ3JhcGgHAJIh/QIGBACSIf4CBkfDtnJldigAkiH8Agl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIfwCD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh/AINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIh/AIHY29sc3BhbgF9ASgAkiH8Agdyb3dzcGFuAX0BKACSIfwCCGNvbHdpZHRoAXUBfbgBh5Ih/AIDC3RhYmxlSGVhZGVyBwCSIYoDAw50YWJsZVBhcmFncmFwaAcAkiGLAwYEAJIhjAMFRHVydW0oAJIhigMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGKAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIYoDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIYoDB2NvbHNwYW4BfQEoAJIhigMHcm93c3BhbgF9AYeSIfsCAwh0YWJsZVJvdwcAkiGXAwMJdGFibGVDZWxsBwCSIZgDAw50YWJsZVBhcmFncmFwaAcAkiGZAwYEAJIhmgMIVGFzYXLEsW0oAJIhmAMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGYAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIZgDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIZgDB2NvbHNwYW4BfQEoAJIhmAMHcm93c3BhbgF9ASgAkiGYAwhjb2x3aWR0aAF1AX24AYeSIZgDAwl0YWJsZUNlbGwHAJIhqAMDDnRhYmxlUGFyYWdyYXBoBwCSIakDBgYAkiGqAwRib2xkAnt9hJIhqwMFVGFtYW2GkiGwAwRib2xkBG51bGwoAJIhqAMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGoAw9iYWNrZ3JvdW5kQ29sb3IBdwVncmVlbigAkiGoAw10ZXh0QWxpZ25tZW50AXcFcmlnaHQoAJIhqAMHY29sc3BhbgF9ASgAkiGoAwdyb3dzcGFuAX0BKACSIfoCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIh+QICaWQBdwN0YmyHkiH5AgMOYmxvY2tDb250YWluZXIHAJIhuQMDBWltYWdlKACSIboDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIboDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhugMEbmFtZQF3BWkucG5nKACSIboDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vaS5wbmcoAJIhugMHY2FwdGlvbgF3B0fDtnJzZWwoAJIhugMLc2hvd1ByZXZpZXcBeCgAkiG6AwxwcmV2aWV3V2lkdGgBfYAFKACSIbkDAmlkAXcDaW1nh5IhuQMDDmJsb2NrQ29udGFpbmVyBwCSIcMDAwRmaWxlKACSIcQDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhxAMEbmFtZQF3BWYucGRmKACSIcQDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vZi5wZGYoAJIhxAMHY2FwdGlvbgF3ACgAkiHDAwJpZAF3BGZpbGWHkiHDAwMOYmxvY2tDb250YWluZXIHAJIhygMDBXZpZGVvKACSIcsDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIcsDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhywMEbmFtZQF3ACgAkiHLAwN1cmwBdxlodHRwczovL2V4YW1wbGUuY29tL3YubXA0KACSIcsDB2NhcHRpb24BdwAoAJIhywMLc2hvd1ByZXZpZXcBeCgAkiHLAwxwcmV2aWV3V2lkdGgBfygAkiHKAwJpZAF3A3ZpZIeSIcoDAw5ibG9ja0NvbnRhaW5lcgcAkiHUAwMFYXVkaW8oAJIh1QMPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHVAwRuYW1lAXcAKACSIdUDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vYS5tcDMoAJIh1QMHY2FwdGlvbgF3ACgAkiHVAwtzaG93UHJldmlldwF4KACSIdQDAmlkAXcDYXVkh5Ih1AMDDmJsb2NrQ29udGFpbmVyBwCSIdwDAwdkaXZpZGVyKACSIdwDAmlkAXcDZGl2h5Ih3AMDDmJsb2NrQ29udGFpbmVyBwCSId8DAwlwYXJhZ3JhcGgHAJIh4AMGBACSIeEDIUFJIHRhcmFmxLFuZGFuIMO8cmV0aWxlbiBwYXJhZ3JhZigAkiHgAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIeADCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIh4AMNdGV4dEFsaWdubWVudAF3BGxlZnQoAJIh3wMCaWQBdyQwZGY2ZGNjMy0wNDQyLTQxNWEtYTEwZC02YzljNTFmNjBlZWUA",
+  "yjsBlocks": [
+    {
+      "id": "h1",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "blue",
+        "textAlignment": "center",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Proje Planı — Q3",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h2",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 2,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Hedefler",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h3",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Açılır başlık",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "h3c",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Başlığın içi",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "p-styles",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "yellow",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Kalın ",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "italik ",
+          "styles": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "altı çizili ",
+          "styles": {
+            "underline": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "üstü çizili ",
+          "styles": {
+            "strike": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "kod",
+          "styles": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " renkli",
+          "styles": {
+            "textColor": "red",
+            "backgroundColor": "gray"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/a?b=1",
+          "content": [
+            {
+              "type": "text",
+              "text": "bağlantı",
+              "styles": {
+                "bold": true
+              }
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "p-empty",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [],
+      "children": []
+    },
+    {
+      "id": "b1",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Madde 1",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "b1a",
+          "type": "bulletListItem",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt madde",
+              "styles": {}
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "b1b",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt paragraf",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "start": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Üçüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "n2",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Dördüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bitti",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c2",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Yapılacak",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "t1",
+      "type": "toggleListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Aç/kapa",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "t1a",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Gizli içerik",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "q1",
+      "type": "quote",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bir alıntı",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code1",
+      "type": "codeBlock",
+      "props": {
+        "language": "javascript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "const a = 1;\nconsole.log(a);",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code2",
+      "type": "codeBlock",
+      "props": {
+        "language": ""
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "dil yok",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "tbl",
+      "type": "table",
+      "props": {
+        "textColor": "default"
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          120,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Görev",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Durum",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tasarım",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tamam",
+                    "styles": {
+                      "bold": true
+                    }
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "green",
+                  "textColor": "default",
+                  "textAlignment": "right"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "i.png",
+        "url": "https://example.com/i.png",
+        "caption": "Görsel",
+        "showPreview": true,
+        "previewWidth": 320
+      },
+      "children": []
+    },
+    {
+      "id": "file",
+      "type": "file",
+      "props": {
+        "backgroundColor": "default",
+        "name": "f.pdf",
+        "url": "https://example.com/f.pdf",
+        "caption": ""
+      },
+      "children": []
+    },
+    {
+      "id": "vid",
+      "type": "video",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/v.mp4",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "props": {
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/a.mp3",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "div",
+      "type": "divider",
+      "props": {},
+      "children": []
+    },
+    {
+      "id": "0df6dcc3-0442-415a-a10d-6c9c51f60eee",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "AI tarafından üretilen paragraf",
+          "styles": {}
+        }
+      ],
+      "children": []
+    }
+  ],
+  "liveYjsUpdateBase64": "AowCkiEABwEIZG9jdW1lbnQDCmJsb2NrR3JvdXAHAJIhAAMOYmxvY2tDb250YWluZXIHAJIhAQMHaGVhZGluZwcAkiECBgQAkiEDE1Byb2plIFBsYW7EsSDigJQgUTMoAJIhAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIQIJdGV4dENvbG9yAXcEYmx1ZSgAkiECDXRleHRBbGlnbm1lbnQBdwZjZW50ZXIoAJIhAgVsZXZlbAF9ASgAkiECDGlzVG9nZ2xlYWJsZQF5KACSIQECaWQBdwJoMYeSIQEDDmJsb2NrQ29udGFpbmVyBwCSIRoDB2hlYWRpbmcHAJIhGwYEAJIhHAhIZWRlZmxlcigAkiEbD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhGwl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIRsNdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhGwVsZXZlbAF9AigAkiEbDGlzVG9nZ2xlYWJsZQF5KACSIRoCaWQBdwJoMoeSIRoDDmJsb2NrQ29udGFpbmVyBwCSISsDB2hlYWRpbmcHAJIhLAYEAJIhLRJBw6fEsWzEsXIgYmHFn2zEsWsoAJIhLA9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSISwJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiEsDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSISwFbGV2ZWwBfQMoAJIhLAxpc1RvZ2dsZWFibGUBeIeSISwDCmJsb2NrR3JvdXAHAJIhQAMOYmxvY2tDb250YWluZXIHAJIhQQMJcGFyYWdyYXBoBwCSIUIGBACSIUMRQmHFn2zEscSfxLFuIGnDp2koAJIhQg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIUIJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiFCDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIUECaWQBdwNoM2MoAJIhKwJpZAF3Amgzh5IhKwMOYmxvY2tDb250YWluZXIHAJIhVQMJcGFyYWdyYXBoBwCSIVYGBgCSIVcEYm9sZAJ7fYSSIVgHS2FsxLFuIIaSIV4EYm9sZARudWxshpIhXwZpdGFsaWMCe32EkiFgB2l0YWxpayCGkiFnBml0YWxpYwRudWxshpIhaAl1bmRlcmxpbmUCe32EkiFpDmFsdMSxIMOnaXppbGkghpIhdQl1bmRlcmxpbmUEbnVsbIaSIXYGc3RyaWtlAnt9hJIhdw/DvHN0w7wgw6dpemlsaSCGkiGDAQZzdHJpa2UEbnVsbIaSIYQBBGNvZGUCe32EkiGFAQNrb2SGkiGIAQRjb2RlBG51bGyGkiGJAQl0ZXh0Q29sb3IVeyJzdHJpbmdWYWx1ZSI6InJlZCJ9hpIhigEPYmFja2dyb3VuZENvbG9yFnsic3RyaW5nVmFsdWUiOiJncmF5In2EkiGLAQcgcmVua2xphpIhkgEJdGV4dENvbG9yBG51bGyGkiGTAQ9iYWNrZ3JvdW5kQ29sb3IEbnVsbISSIZQBASCGkiGVAQRib2xkAnt9hpIhlgEEbGluayR7ImhyZWYiOiJodHRwczovL2V4YW1wbGUuY29tL2E/Yj0xIn2EkiGXAQpiYcSfbGFudMSxhpIhnwEEYm9sZARudWxshpIhoAEEbGluawRudWxsKACSIVYPYmFja2dyb3VuZENvbG9yAXcGeWVsbG93KACSIVYJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiFWDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIVUCaWQBdwhwLXN0eWxlc4eSIVUDDmJsb2NrQ29udGFpbmVyBwCSIaYBAwlwYXJhZ3JhcGgoAJIhpwEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiGnAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIacBDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIaYBAmlkAXcHcC1lbXB0eYeSIaYBAw5ibG9ja0NvbnRhaW5lcgcAkiGsAQMOYnVsbGV0TGlzdEl0ZW0HAJIhrQEGBACSIa4BB01hZGRlIDEoAJIhrQEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiGtAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIa0BDXRleHRBbGlnbm1lbnQBdwRsZWZ0h5IhrQEDCmJsb2NrR3JvdXAHAJIhuQEDDmJsb2NrQ29udGFpbmVyBwCSIboBAw5idWxsZXRMaXN0SXRlbQcAkiG7AQYEAJIhvAEJQWx0IG1hZGRlKACSIbsBD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhuwEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiG7AQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiG6AQJpZAF3A2IxYYeSIboBAw5ibG9ja0NvbnRhaW5lcgcAkiHKAQMJcGFyYWdyYXBoBwCSIcsBBgQAkiHMAQxBbHQgcGFyYWdyYWYoAJIhywEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHLAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIcsBDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIcoBAmlkAXcDYjFiKACSIawBAmlkAXcCYjGHkiGsAQMOYmxvY2tDb250YWluZXIHAJIh3gEDEG51bWJlcmVkTGlzdEl0ZW0HAJIh3wEGBACSIeABCsOcw6fDvG5jw7woAJIh3wEPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHfAQl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSId8BDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSId8BBXN0YXJ0AX0DKACSId4BAmlkAXcCbjGHkiHeAQMOYmxvY2tDb250YWluZXIHAJIh7AEDEG51bWJlcmVkTGlzdEl0ZW0HAJIh7QEGBACSIe4BC0TDtnJkw7xuY8O8KACSIe0BD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh7QEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiHtAQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiHtAQVzdGFydAF/KACSIewBAmlkAXcCbjKHkiHsAQMOYmxvY2tDb250YWluZXIHAJIh/AEDDWNoZWNrTGlzdEl0ZW0HAJIh/QEGBACSIf4BBUJpdHRpKACSIf0BD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh/QEJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiH9AQ10ZXh0QWxpZ25tZW50AXcEbGVmdCgAkiH9AQdjaGVja2VkAXgoAJIh/AECaWQBdwJjMYeSIfwBAw5ibG9ja0NvbnRhaW5lcgcAkiGJAgMNY2hlY2tMaXN0SXRlbQcAkiGKAgYEAJIhiwIKWWFwxLFsYWNhaygAkiGKAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIYoCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhigINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhigIHY2hlY2tlZAF5KACSIYkCAmlkAXcCYzKHkiGJAgMOYmxvY2tDb250YWluZXIHAJIhmgIDDnRvZ2dsZUxpc3RJdGVtBwCSIZsCBgQAkiGcAghBw6cva2FwYSgAkiGbAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIZsCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhmwINdGV4dEFsaWdubWVudAF3BGxlZnSHkiGbAgMKYmxvY2tHcm91cAcAkiGnAgMOYmxvY2tDb250YWluZXIHAJIhqAIDCXBhcmFncmFwaAcAkiGpAgYEAJIhqgINR2l6bGkgacOnZXJpaygAkiGpAg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIakCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhqQINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIhqAICaWQBdwN0MWEoAJIhmgICaWQBdwJ0MYeSIZoCAw5ibG9ja0NvbnRhaW5lcgcAkiG8AgMFcXVvdGUHAJIhvQIGBACSIb4CDEJpciBhbMSxbnTEsSgAkiG9Ag9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIb0CCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIhvAICaWQBdwJxMYeSIbwCAw5ibG9ja0NvbnRhaW5lcgcAkiHMAgMJY29kZUJsb2NrBwCSIc0CBgQAkiHOAhxjb25zdCBhID0gMTsKY29uc29sZS5sb2coYSk7KACSIc0CCGxhbmd1YWdlAXcKamF2YXNjcmlwdCgAkiHMAgJpZAF3BWNvZGUxh5IhzAIDDmJsb2NrQ29udGFpbmVyBwCSIe0CAwljb2RlQmxvY2sHAJIh7gIGBACSIe8CB2RpbCB5b2soAJIh7gIIbGFuZ3VhZ2UBdwAoAJIh7QICaWQBdwVjb2RlMoeSIe0CAw5ibG9ja0NvbnRhaW5lcgcAkiH5AgMFdGFibGUHAJIh+gIDCHRhYmxlUm93BwCSIfsCAwt0YWJsZUhlYWRlcgcAkiH8AgMOdGFibGVQYXJhZ3JhcGgHAJIh/QIGBACSIf4CBkfDtnJldigAkiH8Agl0ZXh0Q29sb3IBdwdkZWZhdWx0KACSIfwCD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIh/AINdGV4dEFsaWdubWVudAF3BGxlZnQoAJIh/AIHY29sc3BhbgF9ASgAkiH8Agdyb3dzcGFuAX0BKACSIfwCCGNvbHdpZHRoAXUBfbgBh5Ih/AIDC3RhYmxlSGVhZGVyBwCSIYoDAw50YWJsZVBhcmFncmFwaAcAkiGLAwYEAJIhjAMFRHVydW0oAJIhigMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGKAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIYoDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIYoDB2NvbHNwYW4BfQEoAJIhigMHcm93c3BhbgF9AYeSIfsCAwh0YWJsZVJvdwcAkiGXAwMJdGFibGVDZWxsBwCSIZgDAw50YWJsZVBhcmFncmFwaAcAkiGZAwYEAJIhmgMIVGFzYXLEsW0oAJIhmAMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGYAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIZgDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIZgDB2NvbHNwYW4BfQEoAJIhmAMHcm93c3BhbgF9ASgAkiGYAwhjb2x3aWR0aAF1AX24AYeSIZgDAwl0YWJsZUNlbGwHAJIhqAMDDnRhYmxlUGFyYWdyYXBoBwCSIakDBgYAkiGqAwRib2xkAnt9hJIhqwMFVGFtYW2GkiGwAwRib2xkBG51bGwoAJIhqAMJdGV4dENvbG9yAXcHZGVmYXVsdCgAkiGoAw9iYWNrZ3JvdW5kQ29sb3IBdwVncmVlbigAkiGoAw10ZXh0QWxpZ25tZW50AXcFcmlnaHQoAJIhqAMHY29sc3BhbgF9ASgAkiGoAwdyb3dzcGFuAX0BKACSIfoCCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIh+QICaWQBdwN0YmyHkiH5AgMOYmxvY2tDb250YWluZXIHAJIhuQMDBWltYWdlKACSIboDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIboDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhugMEbmFtZQF3BWkucG5nKACSIboDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vaS5wbmcoAJIhugMHY2FwdGlvbgF3B0fDtnJzZWwoAJIhugMLc2hvd1ByZXZpZXcBeCgAkiG6AwxwcmV2aWV3V2lkdGgBfYAFKACSIbkDAmlkAXcDaW1nh5IhuQMDDmJsb2NrQ29udGFpbmVyBwCSIcMDAwRmaWxlKACSIcQDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhxAMEbmFtZQF3BWYucGRmKACSIcQDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vZi5wZGYoAJIhxAMHY2FwdGlvbgF3ACgAkiHDAwJpZAF3BGZpbGWHkiHDAwMOYmxvY2tDb250YWluZXIHAJIhygMDBXZpZGVvKACSIcsDDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACSIcsDD2JhY2tncm91bmRDb2xvcgF3B2RlZmF1bHQoAJIhywMEbmFtZQF3ACgAkiHLAwN1cmwBdxlodHRwczovL2V4YW1wbGUuY29tL3YubXA0KACSIcsDB2NhcHRpb24BdwAoAJIhywMLc2hvd1ByZXZpZXcBeCgAkiHLAwxwcmV2aWV3V2lkdGgBfygAkiHKAwJpZAF3A3ZpZIeSIcoDAw5ibG9ja0NvbnRhaW5lcgcAkiHUAwMFYXVkaW8oAJIh1QMPYmFja2dyb3VuZENvbG9yAXcHZGVmYXVsdCgAkiHVAwRuYW1lAXcAKACSIdUDA3VybAF3GWh0dHBzOi8vZXhhbXBsZS5jb20vYS5tcDMoAJIh1QMHY2FwdGlvbgF3ACgAkiHVAwtzaG93UHJldmlldwF4KACSIdQDAmlkAXcDYXVkh5Ih1AMDDmJsb2NrQ29udGFpbmVyBwCSIdwDAwdkaXZpZGVyKACSIdwDAmlkAXcDZGl2h5Ih3AMDDmJsb2NrQ29udGFpbmVyBwCSId8DAwlwYXJhZ3JhcGgHAJIh4AMGBACSIeEDIUFJIHRhcmFmxLFuZGFuIMO8cmV0aWxlbiBwYXJhZ3JhZigAkiHgAw9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACSIeADCXRleHRDb2xvcgF3B2RlZmF1bHQoAJIh4AMNdGV4dEFsaWdubWVudAF3BGxlZnQoAJIh3wMCaWQBdyQwZGY2ZGNjMy0wNDQyLTQxNWEtYTEwZC02YzljNTFmNjBlZWUKiQYAhJIhJAogKGfDvG5jZWwpx5IhiQKSIZoCAw5ibG9ja0NvbnRhaW5lcgcAiQYJAw1jaGVja0xpc3RJdGVtBwCJBgoGBACJBgsOQ2FubMSxIGVrbGVuZW4oAIkGCg9iYWNrZ3JvdW5kQ29sb3IBdwdkZWZhdWx0KACJBgoJdGV4dENvbG9yAXcHZGVmYXVsdCgAiQYKDXRleHRBbGlnbm1lbnQBdwRsZWZ0KACJBgoHY2hlY2tlZAF4KACJBgkCaWQBdwVsaXZlMQGSIQG8AhA=",
+  "liveYjsBlocks": [
+    {
+      "id": "h1",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "blue",
+        "textAlignment": "center",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Proje Planı — Q3",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h2",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 2,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Hedefler (güncel)",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h3",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Açılır başlık",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "h3c",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Başlığın içi",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "p-styles",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "yellow",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Kalın ",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "italik ",
+          "styles": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "altı çizili ",
+          "styles": {
+            "underline": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "üstü çizili ",
+          "styles": {
+            "strike": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "kod",
+          "styles": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " renkli",
+          "styles": {
+            "textColor": "red",
+            "backgroundColor": "gray"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/a?b=1",
+          "content": [
+            {
+              "type": "text",
+              "text": "bağlantı",
+              "styles": {
+                "bold": true
+              }
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "p-empty",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [],
+      "children": []
+    },
+    {
+      "id": "b1",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Madde 1",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "b1a",
+          "type": "bulletListItem",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt madde",
+              "styles": {}
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "b1b",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt paragraf",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "start": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Üçüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "n2",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Dördüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bitti",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c2",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Yapılacak",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "live1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Canlı eklenen",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "t1",
+      "type": "toggleListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Aç/kapa",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "t1a",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Gizli içerik",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "code1",
+      "type": "codeBlock",
+      "props": {
+        "language": "javascript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "const a = 1;\nconsole.log(a);",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code2",
+      "type": "codeBlock",
+      "props": {
+        "language": ""
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "dil yok",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "tbl",
+      "type": "table",
+      "props": {
+        "textColor": "default"
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          120,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Görev",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Durum",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tasarım",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tamam",
+                    "styles": {
+                      "bold": true
+                    }
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "green",
+                  "textColor": "default",
+                  "textAlignment": "right"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "i.png",
+        "url": "https://example.com/i.png",
+        "caption": "Görsel",
+        "showPreview": true,
+        "previewWidth": 320
+      },
+      "children": []
+    },
+    {
+      "id": "file",
+      "type": "file",
+      "props": {
+        "backgroundColor": "default",
+        "name": "f.pdf",
+        "url": "https://example.com/f.pdf",
+        "caption": ""
+      },
+      "children": []
+    },
+    {
+      "id": "vid",
+      "type": "video",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/v.mp4",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "props": {
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/a.mp3",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "div",
+      "type": "divider",
+      "props": {},
+      "children": []
+    },
+    {
+      "id": "0df6dcc3-0442-415a-a10d-6c9c51f60eee",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "AI tarafından üretilen paragraf",
+          "styles": {}
+        }
+      ],
+      "children": []
+    }
+  ],
+  "liveEditorDocument": [
+    {
+      "id": "h1",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "blue",
+        "textAlignment": "center",
+        "level": 1,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Proje Planı — Q3",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h2",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 2,
+        "isToggleable": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Hedefler (güncel)",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "h3",
+      "type": "heading",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "level": 3,
+        "isToggleable": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Açılır başlık",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "h3c",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Başlığın içi",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "p-styles",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "yellow",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Kalın ",
+          "styles": {
+            "bold": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "italik ",
+          "styles": {
+            "italic": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "altı çizili ",
+          "styles": {
+            "underline": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "üstü çizili ",
+          "styles": {
+            "strike": true
+          }
+        },
+        {
+          "type": "text",
+          "text": "kod",
+          "styles": {
+            "code": true
+          }
+        },
+        {
+          "type": "text",
+          "text": " renkli",
+          "styles": {
+            "textColor": "red",
+            "backgroundColor": "gray"
+          }
+        },
+        {
+          "type": "text",
+          "text": " ",
+          "styles": {}
+        },
+        {
+          "type": "link",
+          "href": "https://example.com/a?b=1",
+          "content": [
+            {
+              "type": "text",
+              "text": "bağlantı",
+              "styles": {
+                "bold": true
+              }
+            }
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "p-empty",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [],
+      "children": []
+    },
+    {
+      "id": "b1",
+      "type": "bulletListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Madde 1",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "b1a",
+          "type": "bulletListItem",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt madde",
+              "styles": {}
+            }
+          ],
+          "children": []
+        },
+        {
+          "id": "b1b",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Alt paragraf",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "n1",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "start": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Üçüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "n2",
+      "type": "numberedListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Dördüncü",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Bitti",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "c2",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Yapılacak",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "live1",
+      "type": "checkListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left",
+        "checked": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Canlı eklenen",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "t1",
+      "type": "toggleListItem",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Aç/kapa",
+          "styles": {}
+        }
+      ],
+      "children": [
+        {
+          "id": "t1a",
+          "type": "paragraph",
+          "props": {
+            "backgroundColor": "default",
+            "textColor": "default",
+            "textAlignment": "left"
+          },
+          "content": [
+            {
+              "type": "text",
+              "text": "Gizli içerik",
+              "styles": {}
+            }
+          ],
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": "code1",
+      "type": "codeBlock",
+      "props": {
+        "language": "javascript"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "const a = 1;\nconsole.log(a);",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "code2",
+      "type": "codeBlock",
+      "props": {
+        "language": ""
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "dil yok",
+          "styles": {}
+        }
+      ],
+      "children": []
+    },
+    {
+      "id": "tbl",
+      "type": "table",
+      "props": {
+        "textColor": "default"
+      },
+      "content": {
+        "type": "tableContent",
+        "columnWidths": [
+          120,
+          null
+        ],
+        "headerRows": 1,
+        "rows": [
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Görev",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Durum",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              }
+            ]
+          },
+          {
+            "cells": [
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tasarım",
+                    "styles": {}
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "default",
+                  "textColor": "default",
+                  "textAlignment": "left"
+                }
+              },
+              {
+                "type": "tableCell",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Tamam",
+                    "styles": {
+                      "bold": true
+                    }
+                  }
+                ],
+                "props": {
+                  "colspan": 1,
+                  "rowspan": 1,
+                  "backgroundColor": "green",
+                  "textColor": "default",
+                  "textAlignment": "right"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "children": []
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "i.png",
+        "url": "https://example.com/i.png",
+        "caption": "Görsel",
+        "showPreview": true,
+        "previewWidth": 320
+      },
+      "children": []
+    },
+    {
+      "id": "file",
+      "type": "file",
+      "props": {
+        "backgroundColor": "default",
+        "name": "f.pdf",
+        "url": "https://example.com/f.pdf",
+        "caption": ""
+      },
+      "children": []
+    },
+    {
+      "id": "vid",
+      "type": "video",
+      "props": {
+        "textAlignment": "left",
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/v.mp4",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "aud",
+      "type": "audio",
+      "props": {
+        "backgroundColor": "default",
+        "name": "",
+        "url": "https://example.com/a.mp3",
+        "caption": "",
+        "showPreview": true
+      },
+      "children": []
+    },
+    {
+      "id": "div",
+      "type": "divider",
+      "props": {},
+      "children": []
+    },
+    {
+      "id": "0df6dcc3-0442-415a-a10d-6c9c51f60eee",
+      "type": "paragraph",
+      "props": {
+        "backgroundColor": "default",
+        "textColor": "default",
+        "textAlignment": "left"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "AI tarafından üretilen paragraf",
+          "styles": {}
+        }
+      ],
+      "children": []
+    }
+  ]
+}
