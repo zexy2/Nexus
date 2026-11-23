@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
       rejected: sql<number>`count(*) filter (where ${changeProposals.status} = 'rejected')::int`.as("rejected"),
     })
     .from(changeProposals)
+    // Scope the aggregate to the caller's workspaces (indexed) so it never
+    // groups the whole table.
+    .where(inArray(changeProposals.workspaceId, workspaceIds))
     .groupBy(changeProposals.changeSetId)
     .as("proposal_counts");
 
