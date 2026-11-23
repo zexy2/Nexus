@@ -20,6 +20,7 @@ vi.mock("@/lib/api-middleware", () => ({
 let selectResults: unknown[] = [];
 let selectIndex = 0;
 const selectCalls = vi.fn();
+const selectArgs: unknown[] = [];
 
 function selectChain() {
   selectCalls();
@@ -31,7 +32,12 @@ function selectChain() {
 }
 
 vi.mock("@/lib/db", () => ({
-  db: { select: () => selectChain() },
+  db: {
+    select: (columns?: unknown) => {
+      selectArgs.push(columns);
+      return selectChain();
+    },
+  },
 }));
 
 import { GET } from "@/app/api/sync/pull/route";
@@ -47,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   selectResults = [];
   selectIndex = 0;
+  selectArgs.length = 0;
   protectRoute.mockResolvedValue({ success: true, user: { id: "user-1", email: "u@x.com" } });
 });
 
@@ -102,5 +109,28 @@ describe("GET /api/sync/pull (real handler)", () => {
     expect(body.docs[0].updatedAt).toBe(new Date("2026-03-03T00:00:00Z").getTime());
     // 1 workspace lookup + 5 data queries.
     expect(selectCalls).toHaveBeenCalledTimes(6);
+  });
+
+  it("pull omits embeddings", async () => {
+    selectResults = [
+      [{ id: "ws-1" }],
+      // Even if a row came back with the vector, it must not be sent.
+      [{ id: "d1", workspaceId: "ws-1", title: "Doc", embedding: new Array(1536).fill(0.1), updatedAt: new Date(0) }],
+      [],
+      [],
+      [],
+      [],
+    ];
+    const res = await GET(pullReq(0));
+    const body = await res.json();
+    expect(body.docs[0]).toMatchObject({ id: "d1", title: "Doc" });
+    expect(body.docs[0]).not.toHaveProperty("embedding");
+    expect(JSON.stringify(body)).not.toContain("0.1,0.1");
+
+    // ...and the docs query does not read the column at all.
+    const docColumns = selectArgs[1] as Record<string, unknown> | undefined;
+    expect(docColumns).toBeDefined();
+    expect(Object.keys(docColumns!)).toEqual(expect.arrayContaining(["id", "title", "content", "updatedAt"]));
+    expect(docColumns).not.toHaveProperty("embedding");
   });
 });

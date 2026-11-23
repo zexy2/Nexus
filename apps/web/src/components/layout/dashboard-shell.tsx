@@ -53,6 +53,8 @@ import {
 import { CommandPalette } from '@/components/shared/command-palette';
 import { CommandInput } from '@/components/shared/command-input';
 import { NexusMark } from '@/components/shared/nexus-mark';
+import { SyncIssuesPanel } from '@/components/shared/sync-issues-panel';
+import type { UnsyncedChanges } from '@/lib/sync/sign-out';
 
 // Navigation items
 const navItems = [
@@ -251,15 +253,16 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const userImage = user?.image || '';
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
-  const { engine } = useZero();
-  const [unsyncedCount, setUnsyncedCount] = useState<number | null>(null);
+  const { engine, rejectedMutations } = useZero();
+  const [unsynced, setUnsynced] = useState<UnsyncedChanges | null>(null);
+  const [issuesOpen, setIssuesOpen] = useState(false);
   const confirmResolver = useRef<((discard: boolean) => void) | null>(null);
   const signingOut = useRef(false);
 
   const resolveConfirm = useCallback((discard: boolean) => {
     const resolve = confirmResolver.current;
     confirmResolver.current = null;
-    setUnsyncedCount(null);
+    setUnsynced(null);
     resolve?.(discard);
   }, []);
 
@@ -276,10 +279,10 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
         signOut: () => signOut(),
         // Open editors plus docs edited earlier (even if closed offline).
         countUnsyncedDocuments: () => countUnsyncedCollabDocs(user?.id),
-        confirmDiscard: ({ total }) =>
+        confirmDiscard: (changes) =>
           new Promise<boolean>((resolve) => {
             confirmResolver.current = resolve;
-            setUnsyncedCount(total);
+            setUnsynced(changes);
           }),
         // Loaded lazily so the shell bundle does not pull in Yjs.
         clearExtraLocalData: () =>
@@ -348,12 +351,21 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               <span className="hidden md:inline font-semibold text-sm">Nexus</span>
             </Link>
 
-            {/* Sync status */}
-            <motion.div
+            {/* Sync status; opens the sync-issues panel (rejected changes). */}
+            <motion.button
+              type="button"
+              onClick={() => setIssuesOpen(true)}
+              aria-haspopup="dialog"
+              aria-label={
+                rejectedMutations > 0
+                  ? `${t(`nav.${syncState}`)}. ${t('syncStatus.issuesButton').replace('{count}', String(rejectedMutations))}`
+                  : `${t(`nav.${syncState}`)}. ${t('syncStatus.issuesTitle')}`
+              }
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               className={cn(
-                'hidden md:flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider',
+                'items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                rejectedMutations > 0 ? 'flex' : 'hidden md:flex',
                 syncState === 'synced' && 'text-emerald-500 bg-emerald-500/10',
                 syncState === 'syncing' && 'text-amber-500 bg-amber-500/10',
                 syncState === 'offline' && 'text-red-500 bg-red-500/10',
@@ -364,8 +376,17 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               {syncState === 'syncing' && <RefreshCw className="h-3 w-3 animate-spin" />}
               {syncState === 'offline' && <CloudOff className="h-3 w-3" />}
               {syncState === 'error' && <AlertTriangle className="h-3 w-3" />}
-              <span className="capitalize">{t(`nav.${syncState}`)}</span>
-            </motion.div>
+              <span className="capitalize hidden md:inline">{t(`nav.${syncState}`)}</span>
+              {rejectedMutations > 0 && (
+                <span
+                  data-testid="sync-issues-badge"
+                  className="ml-0.5 inline-flex min-w-4 h-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold normal-case tracking-normal text-white"
+                  aria-hidden="true"
+                >
+                  {rejectedMutations}
+                </span>
+              )}
+            </motion.button>
           </div>
 
           {/* Right side - Actions & User */}
@@ -467,9 +488,10 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
       </motion.div>
 
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <SyncIssuesPanel open={issuesOpen} onOpenChange={setIssuesOpen} />
 
       <AlertDialog
-        open={unsyncedCount !== null}
+        open={unsynced !== null}
         onOpenChange={(open) => {
           if (!open && confirmResolver.current) resolveConfirm(false);
         }}
@@ -477,10 +499,24 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{t('syncStatus.signOutUnsyncedTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('syncStatus.signOutUnsyncedDesc').replace('{count}', String(unsyncedCount ?? 0))}
-            </AlertDialogDescription>
+            <AlertDialogDescription>{t('syncStatus.signOutLossIntro')}</AlertDialogDescription>
           </AlertDialogHeader>
+          <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1" data-testid="sign-out-loss-list">
+            {unsynced && unsynced.mutations + unsynced.documents > 0 && (
+              <li>
+                {t('syncStatus.signOutUnsyncedLine').replace(
+                  '{count}',
+                  String(unsynced.mutations + unsynced.documents)
+                )}
+              </li>
+            )}
+            {unsynced && unsynced.rejected > 0 && (
+              <li>{t('syncStatus.signOutRejectedLine').replace('{count}', String(unsynced.rejected))}</li>
+            )}
+            {unsynced && unsynced.commands > 0 && (
+              <li>{t('syncStatus.signOutCommandsLine').replace('{count}', String(unsynced.commands))}</li>
+            )}
+          </ul>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => resolveConfirm(false)}>
               {t('syncStatus.signOutStayAndRetry')}

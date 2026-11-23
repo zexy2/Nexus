@@ -580,6 +580,22 @@ class CommandQueue {
 
 export const commandQueue = new CommandQueue();
 
+/**
+ * Commands the server has not taken over yet: still queued, interrupted
+ * mid-upload, or failed (kept for a manual retry). Sign-out deletes the whole
+ * command DB, so these are lost with it. 0 when IndexedDB is unavailable.
+ */
+export async function countQueuedOfflineCommands(): Promise<number> {
+  if (typeof indexedDB === "undefined") return 0;
+  try {
+    const all = await commandStore.getAll();
+    return all.filter((cmd) => cmd.status === "pending" || cmd.status === "syncing" || cmd.status === "failed")
+      .length;
+  } catch {
+    return 0;
+  }
+}
+
 /** Sign-out helper: stop the queue and delete the command DB. */
 export function clearOfflineCommands(): Promise<void> {
   return commandQueue.reset();

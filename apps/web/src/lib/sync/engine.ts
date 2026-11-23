@@ -11,6 +11,21 @@
  * - 401/408/425/429/5xx and network errors: transient. The queue stops at that
  *   mutation (order is preserved) and pushing waits for an exponential backoff
  *   that honours Retry-After. Pulls keep running in the meantime.
+ * - Persistent 5xx for one mutation: a mutation the server keeps answering
+ *   with 5xx would otherwise block everything queued behind it forever. A 5xx
+ *   counts as a "strike" against that mutation only when the pull in the same
+ *   sync cycle succeeded (the server is up, so the failure is specific to this
+ *   payload, not an outage). After SERVER_ERROR_MAX_STRIKES strikes, or
+ *   SERVER_ERROR_MIN_STRIKES strikes spread over SERVER_ERROR_PARK_AFTER_MS,
+ *   the mutation is parked in `rejected_mutations` with reason "server_error"
+ *   (kept, retryable from the sync-issues panel) and the queue continues.
+ *   Tradeoff: mutations queued after a parked one are pushed without it, so a
+ *   later edit of a parked insert may itself be rejected (403/404) and kept in
+ *   the rejected store too; retrying them oldest-first restores the original
+ *   order. Strict ordering is given up only for a mutation the server has
+ *   repeatedly failed while otherwise healthy, instead of blocking every later
+ *   change. Network errors, 401/408/425/429 and outages (pull also failing)
+ *   never park anything.
  * - Any other 4xx (400/403/404/405/409/422...): permanent. The mutation is moved
  *   to the persisted `rejected_mutations` store, the local row is replaced by
  *   the server copy (or removed / fully re-pulled when no copy is available),
@@ -47,13 +62,28 @@ export interface PendingMutation {
   data: Row;
   timestamp: number;
   base?: MutationBase;
+  /**
+   * Local bookkeeping (never sent): 5xx strikes against this mutation, see
+   * the header comment. Absent on mutations queued by older clients.
+   */
+  serverErrors?: { count: number; firstAt: number; lastStatus: number };
 }
+
+/**
+ * Why a mutation is in the rejected store. Records written by older clients
+ * have no reason; treat them as "rejected".
+ * - "rejected": the server refused it (4xx); retrying the same payload will
+ *   usually be refused again unless the situation changed.
+ * - "server_error": parked after persistent 5xx; it may succeed on retry.
+ */
+export type RejectionReason = "rejected" | "server_error";
 
 export interface RejectedMutation extends PendingMutation {
   status: number;
   code?: string;
   error?: string;
   rejectedAt: number;
+  reason?: RejectionReason;
 }
 
 export interface LocalStoreLike {
@@ -90,6 +120,11 @@ const MAX_PUSH_BACKOFF_MS = 5 * 60_000;
 const INITIAL_SYNC_BACKOFF_MS = 5_000;
 const MAX_SYNC_BACKOFF_MS = 60_000;
 const POLL_INTERVAL_MS = 10_000;
+/** Park a mutation after this many 5xx strikes (see the header comment)... */
+export const SERVER_ERROR_MAX_STRIKES = 8;
+/** ...or after this long since its first strike, with at least MIN strikes. */
+export const SERVER_ERROR_PARK_AFTER_MS = 30 * 60_000;
+export const SERVER_ERROR_MIN_STRIKES = 3;
 const LEGACY_DB_NAME = "nexus-local";
 const LEGACY_CURSOR_KEY = "nexus-last-sync";
 
@@ -362,6 +397,34 @@ export interface SyncEngineOptions {
 
 type Timer = ReturnType<typeof setTimeout>;
 
+interface ServerErrorStrike {
+  mutationId: string;
+  status: number;
+  body: Row;
+  statusText: string;
+}
+
+/** The push body: only the fields the server reads, never local bookkeeping. */
+function toWireMutation(mutation: PendingMutation) {
+  return {
+    id: mutation.id,
+    table: mutation.table,
+    operation: mutation.operation,
+    data: mutation.data,
+    timestamp: mutation.timestamp,
+    ...(mutation.base ? { base: mutation.base } : {}),
+  };
+}
+
+async function readJsonBody(response: Response): Promise<Row> {
+  try {
+    const parsed = await response.json();
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Row) : {};
+  } catch {
+    return {}; // non-JSON error body
+  }
+}
+
 export class SyncEngine {
   private readonly localStore: LocalStoreLike;
   private readonly serverUrl: string;
@@ -374,6 +437,10 @@ export class SyncEngine {
   private listeners = new Map<string, Set<() => void>>();
   private statusListeners = new Set<(status: SyncStatus) => void>();
   private rejectionListeners = new Set<(rejection: RejectedMutation) => void>();
+  private rejectedCountListeners = new Set<(count: number) => void>();
+  private _rejectedCount = 0;
+  /** 5xx seen in this cycle's push; becomes a strike if the pull succeeds. */
+  private pendingServerError: ServerErrorStrike | null = null;
   private _status: SyncStatus = "disconnected";
   private _pendingMutations: PendingMutation[] = [];
 
@@ -417,6 +484,11 @@ export class SyncEngine {
     return this._pendingMutations.length;
   }
 
+  /** Mutations in the rejected store (refused, or parked after 5xx). */
+  get rejectedCount(): number {
+    return this._rejectedCount;
+  }
+
   get isDestroyed(): boolean {
     return this.destroyed;
   }
@@ -447,6 +519,7 @@ export class SyncEngine {
     this._pendingMutations = (await this.localStore.getAll<PendingMutation>("pending_mutations")).sort(
       (a, b) => a.timestamp - b.timestamp
     );
+    this._rejectedCount = (await this.localStore.getAll<RejectedMutation>("rejected_mutations")).length;
     if (this.destroyed || options.background === false) return;
 
     this.syncInterval = setInterval(() => void this.sync(), POLL_INTERVAL_MS);
@@ -517,14 +590,99 @@ export class SyncEngine {
     return () => this.rejectionListeners.delete(listener);
   }
 
+  /** Called with the new count whenever the rejected store changes. */
+  onRejectedCountChange(listener: (count: number) => void): () => void {
+    this.rejectedCountListeners.add(listener);
+    return () => this.rejectedCountListeners.delete(listener);
+  }
+
+  private async refreshRejectedCount(): Promise<void> {
+    if (this.destroyed) return;
+    this._rejectedCount = (await this.localStore.getAll<RejectedMutation>("rejected_mutations")).length;
+    if (this.destroyed) return;
+    this.rejectedCountListeners.forEach((listener) => listener(this._rejectedCount));
+  }
+
   async getRejectedMutations(): Promise<RejectedMutation[]> {
     return (await this.localStore.getAll<RejectedMutation>("rejected_mutations")).sort(
       (a, b) => a.rejectedAt - b.rejectedAt
     );
   }
 
+  /** Discard a rejected mutation for good (the user chose not to keep it). */
   async dismissRejectedMutation(id: string): Promise<void> {
     await this.localStore.delete("rejected_mutations", id);
+    await this.refreshRejectedCount();
+  }
+
+  /**
+   * Put a rejected mutation back at the end of the queue and re-apply its
+   * optimistic local change. Returns false when it is no longer in the store.
+   *
+   * A mutation rejected with 409 STALE_BASE is rebased onto the current cached
+   * row first: retrying a conflict is an explicit "apply my change over the
+   * current version". Any other mutation keeps its original base, so conflict
+   * detection still protects edits made by others in the meantime.
+   */
+  async retryRejectedMutation(id: string): Promise<boolean> {
+    if (this.destroyed) throw new Error("Sync engine destroyed");
+    const rejected = await this.localStore.get<RejectedMutation>("rejected_mutations", id);
+    if (!rejected) return false;
+
+    const now = this.now();
+    const rowId = typeof rejected.data?.id === "string" ? rejected.data.id : null;
+    const cached = rowId ? await this.localStore.get<Row>(rejected.table, rowId) : null;
+
+    let base = rejected.base;
+    if (rejected.operation === "update" && rejected.code === "STALE_BASE" && cached) {
+      base = {
+        updatedAt: typeof cached.updatedAt === "number" ? cached.updatedAt : undefined,
+        fields: Object.fromEntries(
+          Object.keys(rejected.data)
+            .filter((key) => !NON_DIFF_FIELDS.has(key))
+            .map((key) => [key, cached[key] ?? null])
+        ),
+      };
+    }
+
+    const mutation: PendingMutation = {
+      id: rejected.id,
+      table: rejected.table,
+      operation: rejected.operation,
+      data: rejected.data,
+      timestamp: now,
+      ...(base ? { base } : {}),
+    };
+
+    // Re-apply the optimistic change the rejection undid.
+    if (rowId) {
+      if (mutation.operation === "delete") {
+        await this.localStore.delete(mutation.table, rowId);
+      } else if (mutation.operation === "insert" || cached) {
+        await this.localStore.put(mutation.table, {
+          ...(cached ?? {}),
+          ...mutation.data,
+          id: rowId,
+          updatedAt: now,
+          ...(mutation.operation === "insert" && !cached ? { createdAt: now } : {}),
+        });
+      }
+    }
+
+    // Queue first, then drop the record: a crash in between leaves a duplicate
+    // (harmless: the server routes a repeated insert through update) rather
+    // than losing the change.
+    this._pendingMutations = [...this._pendingMutations.filter((m) => m.id !== mutation.id), mutation];
+    await this.localStore.put("pending_mutations", mutation);
+    await this.localStore.delete("rejected_mutations", id);
+    this.notifyListeners(mutation.table);
+    await this.refreshRejectedCount();
+
+    if (this.isOnline()) {
+      this.pushRetryAt = 0;
+      await this.sync({ force: true });
+    }
+    return true;
   }
 
   async sync(options: { force?: boolean } = {}): Promise<void> {
@@ -548,8 +706,16 @@ export class SyncEngine {
 
     try {
       // A push problem never blocks the pull, and vice versa.
+      this.pendingServerError = null;
       const pushOk = await this.pushPending();
       const pullOk = await this.pullData();
+      // A 5xx push while the pull worked is a strike against that mutation.
+      const strike = this.pendingServerError;
+      this.pendingServerError = null;
+      if (pullOk && strike && (await this.recordServerError(strike))) {
+        // Parked: the queue behind it is free again, push it right away.
+        this.syncQueued = true;
+      }
 
       if (pullOk) this.syncBackoff = INITIAL_SYNC_BACKOFF_MS;
       else this.syncBackoff = Math.min(this.syncBackoff * 2, MAX_SYNC_BACKOFF_MS);
@@ -581,7 +747,7 @@ export class SyncEngine {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify(mutation),
+          body: JSON.stringify(toWireMutation(mutation)),
         });
       } catch (error) {
         console.warn("[Sync] Push failed (network), will retry:", error);
@@ -595,10 +761,22 @@ export class SyncEngine {
         continue;
       }
       if (outcome === "transient") {
+        if (response.status >= 500) {
+          this.pendingServerError = {
+            mutationId: mutation.id,
+            status: response.status,
+            body: await readJsonBody(response),
+            statusText: response.statusText,
+          };
+        }
         this.deferPush(parseRetryAfter(response.headers.get("Retry-After"), this.now()));
         return false;
       }
-      await this.rejectMutation(mutation, response);
+      await this.rejectMutation(mutation, {
+        status: response.status,
+        body: await readJsonBody(response),
+        statusText: response.statusText,
+      });
     }
 
     this.pushBackoff = INITIAL_PUSH_BACKOFF_MS;
@@ -617,26 +795,70 @@ export class SyncEngine {
     this._pendingMutations = this._pendingMutations.filter((m) => m.id !== id);
   }
 
-  private async rejectMutation(mutation: PendingMutation, response: Response): Promise<void> {
-    let body: Row = {};
-    try {
-      const parsed = await response.json();
-      if (parsed && typeof parsed === "object") body = parsed as Row;
-    } catch {
-      // non-JSON error body
+  /**
+   * Count a 5xx strike against a queued mutation (persisted, so a reload does
+   * not reset it) and park it once the limit is reached. Returns true when the
+   * mutation was parked.
+   */
+  private async recordServerError(strike: ServerErrorStrike): Promise<boolean> {
+    const mutation = this._pendingMutations.find((m) => m.id === strike.mutationId);
+    if (!mutation || this.destroyed) return false;
+    const now = this.now();
+    const previous = mutation.serverErrors;
+    const serverErrors = {
+      count: (previous?.count ?? 0) + 1,
+      firstAt: previous?.firstAt ?? now,
+      lastStatus: strike.status,
+    };
+    const shouldPark =
+      serverErrors.count >= SERVER_ERROR_MAX_STRIKES ||
+      (serverErrors.count >= SERVER_ERROR_MIN_STRIKES && now - serverErrors.firstAt >= SERVER_ERROR_PARK_AFTER_MS);
+
+    if (!shouldPark) {
+      const updated = { ...mutation, serverErrors };
+      this._pendingMutations = this._pendingMutations.map((m) => (m.id === mutation.id ? updated : m));
+      await this.localStore.put("pending_mutations", updated);
+      return false;
     }
 
+    console.warn(
+      `[Sync] Mutation ${mutation.id} failed with ${strike.status} ${serverErrors.count} times; parked so the queue can continue.`
+    );
+    await this.rejectMutation(
+      mutation,
+      {
+        status: strike.status,
+        body: { ...strike.body, code: typeof strike.body.code === "string" ? strike.body.code : "SERVER_ERROR" },
+        statusText: strike.statusText,
+      },
+      "server_error"
+    );
+    this.pushBackoff = INITIAL_PUSH_BACKOFF_MS;
+    this.pushRetryAt = 0;
+    return true;
+  }
+
+  private async rejectMutation(
+    mutation: PendingMutation,
+    response: { status: number; body: Row; statusText: string },
+    reason: RejectionReason = "rejected"
+  ): Promise<void> {
+    const body = response.body;
+    const queued: PendingMutation = { ...mutation };
+    delete queued.serverErrors;
     const rejection: RejectedMutation = {
-      ...mutation,
+      ...queued,
       status: response.status,
       code: typeof body.code === "string" ? body.code : undefined,
       error: typeof body.error === "string" ? body.error : response.statusText || undefined,
       rejectedAt: this.now(),
+      reason,
     };
     // Record first, then dequeue: a crash in between re-pushes (idempotent on
     // the server) rather than losing the record.
     await this.localStore.put("rejected_mutations", rejection);
     await this.removePending(mutation.id);
+    await this.refreshRejectedCount();
 
     // Undo the optimistic local change.
     const rowId = typeof mutation.data.id === "string" ? mutation.data.id : null;
@@ -820,6 +1042,7 @@ export class SyncEngine {
     this.listeners.clear();
     this.statusListeners.clear();
     this.rejectionListeners.clear();
+    this.rejectedCountListeners.clear();
     this.localStore.close();
   }
 

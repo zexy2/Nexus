@@ -80,7 +80,7 @@ describe("signOutAndClearLocalData with a closed offline doc", () => {
     });
 
     expect(result).toBe("cancelled");
-    expect(confirmDiscard).toHaveBeenCalledWith({ mutations: 0, documents: 1, total: 1 });
+    expect(confirmDiscard).toHaveBeenCalledWith({ mutations: 0, documents: 1, rejected: 0, commands: 0, unsynced: 1, total: 1 });
     expect(signOut).not.toHaveBeenCalled();
     expect(clearExtraLocalData).not.toHaveBeenCalled();
     expect(countUnsyncedCollabDocs("user-1")).toBe(1);
