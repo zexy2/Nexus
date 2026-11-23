@@ -11,6 +11,7 @@ import { countUnsyncedCollabDocs } from '@/lib/collab/unsynced';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
 import { useT } from '@/lib/i18n/provider';
+import { createNavSequenceMatcher, isCommandPaletteShortcut, navShortcutLabel } from '@/lib/shortcuts';
 import {
   ListTodo,
   FileText,
@@ -55,10 +56,12 @@ import { NexusMark } from '@/components/shared/nexus-mark';
 
 // Navigation items
 const navItems = [
-  { key: 'plans', href: '/dashboard/docs', icon: FileText, shortcut: '⌘1' },
-  { key: 'work', href: '/dashboard/tasks', icon: ListTodo, shortcut: '⌘2' },
-  { key: 'changes', href: '/dashboard/changes', icon: GitPullRequestArrow, shortcut: '⌘3' },
-  { key: 'runs', href: '/dashboard/agents', icon: Activity, shortcut: '⌘4' },
+  // Shortcuts are "G then <key>" sequences (see lib/shortcuts.ts); ⌘1-9 is
+  // left to the browser for tab switching.
+  { key: 'plans', href: '/dashboard/docs', icon: FileText, shortcut: navShortcutLabel('/dashboard/docs') },
+  { key: 'work', href: '/dashboard/tasks', icon: ListTodo, shortcut: navShortcutLabel('/dashboard/tasks') },
+  { key: 'changes', href: '/dashboard/changes', icon: GitPullRequestArrow, shortcut: navShortcutLabel('/dashboard/changes') },
+  { key: 'runs', href: '/dashboard/agents', icon: Activity, shortcut: navShortcutLabel('/dashboard/agents') },
 ];
 
 // Sync status types
@@ -91,7 +94,7 @@ function FloatingNav({ isScrolled }: { isScrolled: boolean }) {
           <Link
             key={item.href}
             href={item.href}
-            onMouseEnter={() => setHoveredIndex(index)}
+            title={item.shortcut ? `${t(`nav.${item.key}`)} (${item.shortcut})` : undefined}            onMouseEnter={() => setHoveredIndex(index)}
             onMouseLeave={() => setHoveredIndex(null)}
             className={cn(
               'relative flex items-center gap-2 px-4 py-2.5 rounded-full',
@@ -296,19 +299,20 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (documented in lib/shortcuts.ts).
   useEffect(() => {
+    const matchNavSequence = createNavSequenceMatcher();
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+      if (e.defaultPrevented) return;
+      if (isCommandPaletteShortcut(e)) {
         e.preventDefault();
-        setCommandOpen(true);
+        setCommandOpen((open) => !open);
+        return;
       }
-      if (e.metaKey || e.ctrlKey) {
-        const num = parseInt(e.key);
-        if (num >= 1 && num <= navItems.length) {
-          e.preventDefault();
-          router.push(navItems[num - 1].href);
-        }
+      const href = matchNavSequence(e);
+      if (href) {
+        e.preventDefault();
+        router.push(href);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -592,7 +596,7 @@ function AICommandButton({ userId }: { userId: string }) {
           'hover:shadow-xl hover:shadow-black/30',
           'transition-shadow duration-200'
         )}
-        title={`${t('chat.askAiAnything')} (⌘J)`}
+        title={t('chat.askAiAnything')}
       >
         <Wand2 className="h-6 w-6" />
       </motion.button>
