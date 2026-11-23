@@ -537,32 +537,32 @@ function SettingsContent() {
       <div className="flex-1 overflow-auto">
         <div className="w-full max-w-3xl mx-auto py-4 md:py-8 px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 md:space-y-6">
-            <TabsList className="grid grid-cols-3 sm:grid-cols-7 w-full h-auto gap-1">
-              <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+            <TabsList className="flex flex-wrap justify-start w-full h-auto gap-1.5 p-1.5">
+              <TabsTrigger value="profile" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <User className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.profile")}</span>
               </TabsTrigger>
-              <TabsTrigger value="ai" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="ai" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Bot className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.ai")}</span>
               </TabsTrigger>
-              <TabsTrigger value="agents" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="agents" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <GitBranch className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{locale === "tr" ? "Agentlar" : "Agents"}</span>
               </TabsTrigger>
-              <TabsTrigger value="integrations" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="integrations" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Plug className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{locale === "tr" ? "Bağlantılar" : "Integrations"}</span>
               </TabsTrigger>
-              <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="notifications" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Bell className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.notifications")}</span>
               </TabsTrigger>
-              <TabsTrigger value="appearance" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="appearance" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Palette className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.appearance")}</span>
               </TabsTrigger>
-              <TabsTrigger value="sync" className="gap-1 md:gap-2 text-xs md:text-sm px-2 py-1.5">
+              <TabsTrigger value="sync" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Database className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settings.tabs.sync")}</span>
               </TabsTrigger>

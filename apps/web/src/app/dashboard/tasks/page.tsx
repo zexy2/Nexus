@@ -978,7 +978,7 @@ export default function TasksPage() {
         </Button>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 sm:grid-cols-5">
+      <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 sm:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
         {[
           [t('tasks.statTotal'), stats.total],
           [t('tasks.statTodo'), stats.todo],
