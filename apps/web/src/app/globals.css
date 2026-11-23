@@ -1448,3 +1448,25 @@ html.lenis body {
   color: var(--foreground);
   letter-spacing: -0.02em;
 }
+
+/* ===========================================
+   APPEARANCE SETTINGS (lib/appearance.ts)
+   =========================================== */
+
+/* Light theme. The dashboard was designed dark-first and uses white overlays
+   (text-white, bg-white/5, border-white/10) throughout; swapping the palette's
+   white/black keeps those legible on the light surface. */
+html.light {
+  --color-white: #191919;
+  --color-black: #ffffff;
+  color-scheme: light;
+}
+
+/* Compact mode: denser UI. Tailwind spacing and type are rem-based, so scaling
+   the root font size tightens the whole dashboard proportionally. */
+html.compact {
+  font-size: 87.5%;
+}
+html.compact body {
+  font-size: 14px;
+}
