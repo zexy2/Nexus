@@ -36,10 +36,10 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@temporalio/activity": "^1.18.1",
-    "@temporalio/client": "^1.18.1",
-    "@temporalio/worker": "^1.18.1",
-    "@temporalio/workflow": "^1.18.1",
+    "@temporalio/activity": "^1.26.0",
+    "@temporalio/client": "^1.26.0",
+    "@temporalio/worker": "^1.26.0",
+    "@temporalio/workflow": "^1.26.0",
     "postgres": "^3.4.9",
     "zod": "^3.24.0"
   },
@@ -47,7 +47,7 @@
     "@nexus/typescript-config": "workspace:*",
     "@types/node": "^22.15.7",
     "tsup": "^8.5.0",
-    "tsx": "^4.21.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.8.4"
   }
 }
