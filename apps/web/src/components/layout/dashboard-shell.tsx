@@ -446,7 +446,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             ) : (
               <button
                 type="button"
-                aria-label="User menu loading"
+                aria-label={t('shell.userMenuLoading')}
                 className="p-1 rounded-full glass-premium transition-colors"
                 disabled
               >

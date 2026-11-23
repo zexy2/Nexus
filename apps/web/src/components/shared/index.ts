@@ -1,4 +1,3 @@
-export { PageHeader } from './page-header';
 export { EmptyState } from './empty-state';
 export {
   Skeleton,
@@ -17,15 +16,3 @@ export { ErrorBoundary, useErrorHandler, withErrorBoundary } from './error-bound
 export { ToastProvider, showToast } from './toast-provider';
 export { OnboardingModal, QuickTourTooltip, tourSteps } from './onboarding';
 export type { QuickTourStep } from './onboarding';
-export {
-  PageTransition,
-  LayoutTransition,
-  StaggeredList,
-  StaggeredItem,
-  FadeIn,
-  SlideUp,
-  ScaleIn,
-  SpringScale,
-  ProgressBar,
-  transitionVariants,
-} from './page-transitions';

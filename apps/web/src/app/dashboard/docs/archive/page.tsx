@@ -21,6 +21,7 @@ import {
   Loader2,
 } from "lucide-react";
 import Link from "next/link";
+import { useT } from "@/lib/i18n/provider";
 
 interface Document {
   id: string;
@@ -30,19 +31,20 @@ interface Document {
   createdBy: string | null;
 }
 
-function formatRelativeTime(timestamp: string) {
+function formatRelativeTime(timestamp: string, t: (path: string) => string) {
   const diff = Date.now() - new Date(timestamp).getTime();
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (minutes < 60) return `${minutes}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
+  if (minutes < 60) return t("archive.minutesAgo").replace("{n}", String(minutes));
+  if (hours < 24) return t("archive.hoursAgo").replace("{n}", String(hours));
+  return t("archive.daysAgo").replace("{n}", String(days));
 }
 
 export default function ArchivePage() {
   const router = useRouter();
+  const t = useT();
   const [docs, setDocs] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -80,7 +82,7 @@ export default function ArchivePage() {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!confirm("Bu dokümanı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.")) return;
+    if (!confirm(t("archive.confirmDelete"))) return;
     
     try {
       const res = await fetch(`/api/docs/${docId}`, { method: "DELETE" });
@@ -105,10 +107,10 @@ export default function ArchivePage() {
         <div className="flex-1">
           <h1 className="text-xl font-semibold flex items-center gap-2">
             <Archive className="size-5 text-muted-foreground" />
-            Arşiv
+            {t("archive.title")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {docs.length} arşivlenmiş doküman
+            {docs.length} {t("archive.countSuffix")}
           </p>
         </div>
       </header>
@@ -122,12 +124,12 @@ export default function ArchivePage() {
         ) : docs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <Archive className="size-16 text-muted-foreground mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Arşiv boş</h2>
+            <h2 className="text-xl font-semibold mb-2">{t("archive.emptyTitle")}</h2>
             <p className="text-muted-foreground mb-4">
-              Arşivlenmiş doküman bulunmuyor
+              {t("archive.emptyDesc")}
             </p>
             <Link href="/dashboard/docs">
-              <Button>Dokümanlara Dön</Button>
+              <Button>{t("archive.backToDocs")}</Button>
             </Link>
           </div>
         ) : (
@@ -155,11 +157,11 @@ export default function ArchivePage() {
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRestoreDoc(doc.id); }}>
                           <RotateCcw className="size-4 mr-2" />
-                          Geri Yükle
+                          {t("archive.restore")}
                         </DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive" onSelect={(e) => { e.preventDefault(); handleDeleteDoc(doc.id); }}>
                           <Trash2 className="size-4 mr-2" />
-                          Kalıcı Olarak Sil
+                          {t("archive.deletePermanently")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -168,7 +170,7 @@ export default function ArchivePage() {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="size-3" />
-                      {formatRelativeTime(doc.updatedAt)}
+                      {formatRelativeTime(doc.updatedAt, t)}
                     </span>
                   </div>
                 </CardContent>
