@@ -9,7 +9,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
 load_env_values "$ENV_FILE" \
   NEXT_PUBLIC_APP_URL \
   GEMINI_API_KEY \
-  DEMO_ACCESS_CODE
+  DEMO_ACCESS_CODE \
+  HEALTH_CHECK_TOKEN
 
 BASE_URL="${SMOKE_BASE_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}"
 COOKIE_JAR="$(mktemp)"
@@ -131,7 +132,12 @@ echo "==> Compose services"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
 
 echo "==> Health"
-health_body="$(curl -fsS "$BASE_URL/api/health")"
+# Detailed health (provider config, commit) requires HEALTH_CHECK_TOKEN.
+health_args=(-fsS)
+if [[ -n "${HEALTH_CHECK_TOKEN:-}" ]]; then
+  health_args+=(-H "x-health-token: $HEALTH_CHECK_TOKEN")
+fi
+health_body="$(curl "${health_args[@]}" "$BASE_URL/api/health")"
 echo "$health_body"
 
 if ! printf '%s' "$health_body" | grep -q '"database"'; then
@@ -144,7 +150,7 @@ if ! printf '%s' "$health_body" | grep -q '"worker"'; then
   exit 1
 fi
 
-if [[ "${GEMINI_API_KEY:-}" != "" ]] && ! printf '%s' "$health_body" | grep -q '"geminiAvailable":true'; then
+if [[ "${GEMINI_API_KEY:-}" != "" && -n "${HEALTH_CHECK_TOKEN:-}" ]] && ! printf '%s' "$health_body" | grep -q '"geminiAvailable":true'; then
   echo "GEMINI_API_KEY is set but health does not report Gemini as available." >&2
   exit 1
 fi
