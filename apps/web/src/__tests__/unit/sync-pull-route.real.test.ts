@@ -69,6 +69,22 @@ describe("GET /api/sync/pull (real handler)", () => {
     expect(selectCalls).toHaveBeenCalledTimes(1);
   });
 
+  it("returns serverTime (also as lastSync) taken before the data queries run", async () => {
+    let queryTime = 0;
+    selectResults = [[{ id: "ws-1" }], [], [], [], [], []];
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValueOnce(1_000);
+    selectCalls.mockImplementation(() => {
+      queryTime = 2_000;
+    });
+    nowSpy.mockReturnValue(5_000);
+    const res = await GET(pullReq(0));
+    const body = await res.json();
+    expect(queryTime).toBe(2_000);
+    expect(body.serverTime).toBe(1_000);
+    expect(body.lastSync).toBe(body.serverTime);
+  });
+
   it("serializes records and converts Date fields to epoch ms", async () => {
     selectResults = [
       [{ id: "ws-1" }], // accessibleWorkspaces

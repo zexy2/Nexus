@@ -31,6 +31,19 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Wifi, WifiOff, Users, Circle, Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n/provider";
 import { getCollaborationUrl } from "@/lib/sync/collaboration-url";
+import {
+  attachCollabTokenRefresh,
+  fetchCollabToken,
+} from "@/lib/collab/token-refresh";
+import { openCollabOfflineStore } from "@/lib/collab/offline-store";
+import { setCollabDocUnsynced } from "@/lib/collab/unsynced";
+import { seedFragmentIfEmpty } from "@/lib/collab/seed";
+import {
+  type CollabPersistenceEvent,
+  type CollabPersistenceStatus,
+  getCollabEditorState,
+  nextPersistenceStatus,
+} from "@/lib/collab/editor-state";
 
 interface CollaborativeEditorProps {
   documentId: string;
@@ -70,6 +83,7 @@ function getStableUserColor(userId: string): string {
 function CollaborativeEditorInner({
   provider,
   fragment,
+  ydoc,
   userName,
   userColor,
   initialContent,
@@ -80,6 +94,8 @@ function CollaborativeEditorInner({
   connectedUsers,
   connectionError,
   persistenceStatus,
+  localReady,
+  hasLocalContent,
 }: {
   provider: WebsocketProvider;
   fragment: Y.XmlFragment;
@@ -93,7 +109,9 @@ function CollaborativeEditorInner({
   isSynced: boolean;
   connectedUsers: ConnectedUser[];
   connectionError: boolean;
-  persistenceStatus: "saving" | "saved" | "error";
+  persistenceStatus: CollabPersistenceStatus;
+  localReady: boolean;
+  hasLocalContent: boolean;
 }) {
   const t = useT();
   const [contentLoaded, setContentLoaded] = useState(false);
@@ -118,21 +136,27 @@ function CollaborativeEditorInner({
     [editorPlaceholder]
   );
 
-  // Load initial content into Yjs if the document is empty after sync
+  // Seed the materialized content into Yjs if the document is still empty
+  // after the server sync. Seeding is deterministic (content-derived Yjs ids),
+  // so concurrent first opens by several users insert the body only once.
   useEffect(() => {
-    if (isSynced && !contentLoaded && initialContent && initialContent.length > 0) {
-      // Check if the Yjs document is empty
-      const xmlContent = fragment.toArray();
-      if (xmlContent.length === 0) {
-        console.log("[Collab] Loading initial content into empty Yjs document");
-        // Insert initial content blocks
-        editor.replaceBlocks(editor.document, initialContent);
-        setContentLoaded(true);
-      } else {
-        setContentLoaded(true);
+    if (isSynced && !contentLoaded) {
+      if (seedFragmentIfEmpty(ydoc, editor, initialContent)) {
+        console.log("[Collab] Seeded empty Yjs document from saved content");
       }
+      setContentLoaded(true);
     }
-  }, [isSynced, contentLoaded, initialContent, fragment, editor]);
+  }, [isSynced, contentLoaded, initialContent, ydoc, editor]);
+
+  const { mode, canEdit } = getCollabEditorState({
+    editable,
+    isConnected,
+    isSynced,
+    connectionError,
+    persistenceStatus,
+    localReady,
+    hasLocalContent: hasLocalContent || fragment.length > 0,
+  });
 
   const handleChange = useCallback(() => {
     if (onChange) {
@@ -154,7 +178,13 @@ function CollaborativeEditorInner({
             ) : (
               <>
                 <WifiOff className="size-3" />
-                <span>{t("docs.detail.collabUnavailable")}</span>
+                <span>
+                  {mode === "offline"
+                    ? t("docs.detail.collabOffline")
+                    : mode === "connecting"
+                      ? t("docs.detail.collabReconnecting")
+                      : t("docs.detail.collabUnavailable")}
+                </span>
               </>
             )}
           </Badge>
@@ -171,7 +201,7 @@ function CollaborativeEditorInner({
               className="gap-1"
             >
               {persistenceStatus === "error"
-                ? t("docs.detail.collabUnavailable")
+                ? t("docs.detail.collabSaveError")
                 : isSynced && persistenceStatus === "saved"
                   ? t("docs.detail.collabSynced")
                   : t("docs.detail.collabSyncing")}
@@ -309,27 +339,48 @@ function CollaborativeEditorInner({
         `}</style>
         <BlockNoteView
           editor={editor}
-          editable={
-            editable &&
-            isConnected &&
-            isSynced &&
-            !connectionError &&
-            persistenceStatus !== "error"
-          }
+          editable={canEdit}
           onChange={handleChange}
           theme="dark"
           className="py-8"
         />
       </div>
 
-      {(!isConnected || connectionError || persistenceStatus === "error") && (
-        <div className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
-          <div className="flex items-start gap-2 text-sm text-destructive">
-            <WifiOff className="mt-0.5 size-4 shrink-0" />
+      {mode !== "live" && (
+        <div
+          role="status"
+          className={
+            mode === "offline"
+              ? "mt-3 rounded-lg border border-white/10 bg-muted/40 px-4 py-3"
+              : "mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3"
+          }
+        >
+          <div
+            className={`flex items-start gap-2 text-sm ${
+              mode === "offline" ? "text-muted-foreground" : "text-destructive"
+            }`}
+          >
+            {mode === "connecting" ? (
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" />
+            ) : (
+              <WifiOff className="mt-0.5 size-4 shrink-0" />
+            )}
             <div>
-              <p className="font-medium">{t("docs.detail.collabUnavailable")}</p>
+              <p className="font-medium">
+                {mode === "offline"
+                  ? t("docs.detail.collabOffline")
+                  : mode === "save-error"
+                    ? t("docs.detail.collabSaveError")
+                    : mode === "connecting"
+                      ? t("docs.detail.collabReconnecting")
+                      : t("docs.detail.collabUnavailable")}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {t("docs.detail.collabUnavailableDesc")}
+                {mode === "offline"
+                  ? t("docs.detail.collabOfflineDesc")
+                  : mode === "save-error"
+                    ? t("docs.detail.collabSaveErrorDesc")
+                    : t("docs.detail.collabUnavailableDesc")}
               </p>
             </div>
           </div>
@@ -355,9 +406,10 @@ export function CollaborativeEditor({
   const [isSynced, setIsSynced] = useState(false);
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [connectionError, setConnectionError] = useState(false);
-  const [persistenceStatus, setPersistenceStatus] = useState<
-    "saving" | "saved" | "error"
-  >("saved");
+  const [persistenceStatus, setPersistenceStatus] =
+    useState<CollabPersistenceStatus>("saved");
+  const [localReady, setLocalReady] = useState(false);
+  const [hasLocalContent, setHasLocalContent] = useState(false);
   
   const stableUserColor = useMemo(
     () => userColor || getStableUserColor(userId), 
@@ -368,120 +420,121 @@ export function CollaborativeEditor({
   const ydoc = useMemo(() => new Y.Doc(), []);
   const fragment = useMemo(() => ydoc.getXmlFragment("document"), [ydoc]);
 
-  // Setup WebSocket connection. We first fetch a short-lived, document-scoped
-  // token (the server checks the session and the user's access to this doc) and
-  // pass it to the collaboration server, which rejects connections without a
-  // valid token. This keeps realtime access aligned with the REST authorization.
+  // Setup offline persistence and the WebSocket connection. The provider is
+  // created right away (so a locally cached copy can be edited offline) and
+  // connects once a short-lived, document-scoped token has been fetched (the
+  // server checks the session and the user's access to this doc). The token is
+  // refreshed before it expires and whenever a reconnect needs a new one, so
+  // long-lived sessions survive laptop sleep and network drops.
   useEffect(() => {
     const wsUrl = getCollaborationUrl();
-    let wsProvider: WebsocketProvider | null = null;
-    let handleDocumentUpdate:
-      | ((_update: Uint8Array, origin: unknown) => void)
-      | null = null;
     let cancelled = false;
 
-    void (async () => {
-      let token: string | null = null;
-      try {
-        const res = await fetch(`/api/collab/token?docId=${encodeURIComponent(documentId)}`);
-        if (res.ok) {
-          token = (await res.json())?.token ?? null;
-        } else {
-          console.error("[Collab] Token request rejected:", res.status);
-          setConnectionError(true);
-        }
-      } catch (err) {
-        console.error("[Collab] Token request failed:", err);
-        setConnectionError(true);
-      }
-
-      if (cancelled || !token) {
-        if (!cancelled) {
-          setConnectionError(true);
-        }
-        return;
-      }
-
-      const provider = new WebsocketProvider(wsUrl, documentId, ydoc, {
-        connect: true,
-        params: { token },
+    const offlineStore = openCollabOfflineStore(userId, documentId, ydoc);
+    if (offlineStore) {
+      void offlineStore.whenSynced.then(() => {
+        if (cancelled) return;
+        setHasLocalContent(fragment.length > 0);
+        setLocalReady(true);
       });
-      wsProvider = provider;
+    }
 
-      provider.messageHandlers[4] = (_encoder, decoder) => {
-        const status = decoding.readVarString(decoder);
-        queueMicrotask(() => {
-          if (!cancelled) {
-            setPersistenceStatus(status === "saved" ? "saved" : "error");
-          }
-        });
-      };
+    const provider = new WebsocketProvider(wsUrl, documentId, ydoc, {
+      connect: false,
+      params: {},
+    });
 
-      handleDocumentUpdate = (_update: Uint8Array, origin: unknown) => {
-        if (origin !== provider) {
-          queueMicrotask(() => {
-            if (!cancelled) setPersistenceStatus("saving");
+    const tokenRefresh = attachCollabTokenRefresh(provider, {
+      fetchToken: () => fetchCollabToken(documentId),
+      onFatalError: (error) => {
+        console.error("[Collab] Token request rejected:", error.status);
+        if (!cancelled) setConnectionError(true);
+      },
+    });
+
+    const applyPersistenceEvent = (event: CollabPersistenceEvent) => {
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setPersistenceStatus((current) => nextPersistenceStatus(current, event));
+        }
+      });
+    };
+
+    provider.messageHandlers[4] = (_encoder, decoder) => {
+      const status = decoding.readVarString(decoder);
+      applyPersistenceEvent(status === "saved" ? "ack-saved" : "ack-error");
+    };
+
+    const handleDocumentUpdate = (_update: Uint8Array, origin: unknown) => {
+      if (origin !== provider && origin !== offlineStore) {
+        applyPersistenceEvent("local-update");
+      }
+    };
+    ydoc.on("update", handleDocumentUpdate);
+
+    provider.awareness.setLocalStateField("user", {
+      id: userId,
+      name: userName,
+      color: stableUserColor,
+    });
+
+    provider.on("status", (event: { status: string }) => {
+      if (!cancelled) setIsConnected(event.status === "connected");
+    });
+
+    const onProviderEvent = provider.on.bind(provider) as (
+      event: string,
+      callback: (value: boolean) => void
+    ) => void;
+    onProviderEvent("synced", (synced: boolean) => {
+      if (cancelled) return;
+      setIsSynced(synced);
+      if (synced) applyPersistenceEvent("resynced");
+    });
+
+    const handleAwarenessChange = () => {
+      const states = provider.awareness.getStates();
+      const users: ConnectedUser[] = [];
+      states.forEach((state, clientId) => {
+        if (state.user) {
+          users.push({
+            clientId,
+            id: state.user.id,
+            name: state.user.name,
+            color: state.user.color,
+            status: state.status || "active",
           });
         }
-      };
-      ydoc.on("update", handleDocumentUpdate);
-
-      provider.awareness.setLocalStateField("user", {
-        id: userId,
-        name: userName,
-        color: stableUserColor,
       });
-
-      provider.on("status", (event: { status: string }) => {
-        setIsConnected(event.status === "connected");
-        if (event.status === "connected") setConnectionError(false);
+      queueMicrotask(() => {
+        if (!cancelled) setConnectedUsers(users);
       });
+    };
 
-      const onProviderEvent = provider.on.bind(provider) as (
-        event: string,
-        callback: (value: boolean) => void
-      ) => void;
-      onProviderEvent("synced", (synced: boolean) => {
-        setIsSynced(synced);
-      });
+    provider.awareness.on("change", handleAwarenessChange);
+    handleAwarenessChange();
 
-      const handleAwarenessChange = () => {
-        const states = provider.awareness.getStates();
-        const users: ConnectedUser[] = [];
-        states.forEach((state, clientId) => {
-          if (state.user) {
-            users.push({
-              clientId,
-              id: state.user.id,
-              name: state.user.name,
-              color: state.user.color,
-              status: state.status || "active",
-            });
-          }
-        });
-        queueMicrotask(() => {
-          if (!cancelled) setConnectedUsers(users);
-        });
-      };
-
-      provider.awareness.on("change", handleAwarenessChange);
-      handleAwarenessChange();
-
-      setProvider(provider);
-    })();
+    setProvider(provider);
+    void tokenRefresh.start();
 
     return () => {
       cancelled = true;
-      if (wsProvider) {
-        if (handleDocumentUpdate) {
-          ydoc.off("update", handleDocumentUpdate);
-        }
-        wsProvider.disconnect();
-        wsProvider.destroy();
-      }
+      tokenRefresh.dispose();
+      ydoc.off("update", handleDocumentUpdate);
+      provider.awareness.off("change", handleAwarenessChange);
+      provider.disconnect();
+      provider.destroy();
+      void offlineStore?.destroy();
       ydoc.destroy();
     };
-  }, [documentId, userId, userName, stableUserColor, ydoc]);
+  }, [documentId, userId, userName, stableUserColor, ydoc, fragment]);
+
+  // Report unconfirmed edits so sign-out can warn before deleting the
+  // offline copy.
+  useEffect(() => {
+    setCollabDocUnsynced(documentId, persistenceStatus !== "saved");
+    return () => setCollabDocUnsynced(documentId, false);
+  }, [documentId, persistenceStatus]);
 
   // Show loading until provider is ready
   if (!provider) {
@@ -519,6 +572,8 @@ export function CollaborativeEditor({
       connectedUsers={connectedUsers}
       connectionError={connectionError}
       persistenceStatus={persistenceStatus}
+      localReady={localReady}
+      hasLocalContent={hasLocalContent}
     />
   );
 }

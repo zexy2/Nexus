@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { type Task as SyncTask } from "@/lib/sync/zero";
 import { useLocalFirstContext } from "@/lib/sync/local-first";
+import { persistTaskMove } from "@/lib/sync/task-move";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -774,35 +775,16 @@ export default function TasksPage() {
         return newTasks;
       });
 
-      if (engine && typeof navigator !== "undefined" && !navigator.onLine) {
-        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
-        if (existing) {
-          await engine.mutate<SyncTask>("tasks", "update", {
-            ...existing,
-            status: targetStatus,
-            updatedAt: Date.now(),
-          });
-          showToast.info(t('tasks.toastMoveQueued'));
-          return;
-        }
-      }
-
-      const response = await fetch(`/api/tasks/${movedTask.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: targetStatus }),
+      // Exactly one write: queued push when offline, REST PATCH when online.
+      const result = await persistTaskMove({
+        engine,
+        taskId: movedTask.id,
+        status: targetStatus,
+        online: typeof navigator === "undefined" || navigator.onLine,
       });
-
-      if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
-      if (engine) {
-        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
-        if (existing) {
-          await engine.mutate<SyncTask>("tasks", "update", {
-            ...existing,
-            status: targetStatus,
-            updatedAt: Date.now(),
-          });
-        }
+      if (result === "queued") {
+        showToast.info(t('tasks.toastMoveQueued'));
+        return;
       }
       showToast.success(t('tasks.toastMoved'));
     } catch (error) {
