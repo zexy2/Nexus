@@ -11,10 +11,11 @@
  * - Background sync: pending mutations are pushed and fresh data pulled via the
  *   REST sync API (/api/sync/push and /api/sync/pull) when online
  *
- * Conflict policy: last-write-wins by `updatedAt` (server upsert wins on push,
- * newer pulled rows overwrite local). This is NOT a CRDT — concurrent edits to
- * the same field resolve to the last writer, which is acceptable for the
- * doc/task metadata synced here. Doc *body* collaboration uses Yjs separately.
+ * Conflict policy: updates send only changed fields plus the cached base
+ * values; the server merges per field and rejects (409 STALE_BASE) when
+ * another user changed the same field in between. Rejected mutations are kept
+ * in a local "rejected" store and surfaced as a toast. See ./engine.ts and
+ * app/api/sync/push/route.ts. Doc *body* collaboration uses Yjs separately.
  *
  * Note: the subscription hooks intentionally call refresh() in useEffect to load
  * initial data, then subscribe for updates — a valid external-store pattern.
@@ -29,6 +30,11 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { SyncEngine, type SyncStatus, type RejectedMutation } from "./engine";
+import { showToast } from "@/components/shared/toast-provider";
+import { useT } from "@/lib/i18n/provider";
+
+export { SyncEngine };
 
 // ==========================================
 // TYPE DEFINITIONS
@@ -122,448 +128,9 @@ export interface ChatMessage {
 // Alias for backward compatibility
 export type Message = ChatMessage;
 
-// ==========================================
-// SYNC STATUS
-// ==========================================
-
-export type SyncStatus = "connecting" | "connected" | "disconnected" | "syncing" | "error";
-
-interface PendingMutation {
-  id: string;
-  table: string;
-  operation: "insert" | "update" | "delete";
-  data: Record<string, unknown>;
-  timestamp: number;
-}
-
-// ==========================================
-// LOCAL STORAGE (IndexedDB Wrapper)
-// ==========================================
-
-class LocalStore {
-  private dbName = "nexus-local";
-  private dbVersion = 3; // Incremented to force schema rebuild
-  private db: IDBDatabase | null = null;
-
-  async init(): Promise<void> {
-    if (typeof window === "undefined") return;
-
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, this.dbVersion);
-
-      request.onerror = () => {
-        // If there's an error, try to delete and recreate the database
-        console.warn("[Zero] Database error, attempting recovery...");
-        indexedDB.deleteDatabase(this.dbName);
-        reject(request.error);
-      };
-      request.onsuccess = () => {
-        this.db = request.result;
-        resolve();
-      };
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        
-        // Delete all existing stores on upgrade
-        const existingStores = Array.from(db.objectStoreNames);
-        existingStores.forEach((store) => {
-          try {
-            db.deleteObjectStore(store);
-          } catch {
-            // Ignore if store doesn't exist
-          }
-        });
-
-        // Create object stores for each table
-        const stores = ["docs", "tasks", "workspaces", "users", "agent_executions", "chat_messages", "pending_mutations"];
-        stores.forEach((store) => {
-          if (!db.objectStoreNames.contains(store)) {
-            const objectStore = db.createObjectStore(store, { keyPath: "id" });
-            if (store !== "pending_mutations") {
-              objectStore.createIndex("workspaceId", "workspaceId", { unique: false });
-              objectStore.createIndex("updatedAt", "updatedAt", { unique: false });
-            }
-          }
-        });
-      };
-    });
-  }
-
-  private hasStore(table: string): boolean {
-    return this.db !== null && this.db.objectStoreNames.contains(table);
-  }
-
-  async getAll<T>(table: string): Promise<T[]> {
-    if (!this.db || !this.hasStore(table)) return [];
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readonly");
-        const store = transaction.objectStore(table);
-        const request = store.getAll();
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result as T[]);
-      } catch {
-        resolve([]);
-      }
-    });
-  }
-
-  async getByWorkspace<T>(table: string, workspaceId: string): Promise<T[]> {
-    if (!this.db || !this.hasStore(table)) return [];
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readonly");
-        const store = transaction.objectStore(table);
-        const index = store.index("workspaceId");
-        const request = index.getAll(workspaceId);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result as T[]);
-      } catch {
-        resolve([]);
-      }
-    });
-  }
-
-  async get<T>(table: string, id: string): Promise<T | null> {
-    if (!this.db || !this.hasStore(table)) return null;
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readonly");
-        const store = transaction.objectStore(table);
-        const request = store.get(id);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result as T | null);
-      } catch {
-        resolve(null);
-      }
-    });
-  }
-
-  async put<T extends { id: string }>(table: string, data: T): Promise<void> {
-    if (!this.db || !this.hasStore(table)) return;
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readwrite");
-        const store = transaction.objectStore(table);
-        const request = store.put(data);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
-      } catch {
-        resolve();
-      }
-    });
-  }
-
-  async delete(table: string, id: string): Promise<void> {
-    if (!this.db || !this.hasStore(table)) return;
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readwrite");
-        const store = transaction.objectStore(table);
-        const request = store.delete(id);
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
-      } catch {
-        resolve();
-      }
-    });
-  }
-
-  async clear(table: string): Promise<void> {
-    if (!this.db || !this.hasStore(table)) return;
-
-    return new Promise((resolve, reject) => {
-      try {
-        const transaction = this.db!.transaction(table, "readwrite");
-        const store = transaction.objectStore(table);
-        const request = store.clear();
-
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve();
-      } catch {
-        resolve();
-      }
-    });
-  }
-}
-
-// ==========================================
-// SYNC ENGINE
-// ==========================================
-
-class SyncEngine {
-  private localStore: LocalStore;
-  private serverUrl: string;
-  private ws: WebSocket | null = null;
-  private listeners: Map<string, Set<() => void>> = new Map();
-  private _status: SyncStatus = "disconnected";
-  private _pendingMutations: PendingMutation[] = [];
-  private statusListeners: Set<(status: SyncStatus) => void> = new Set();
-  private syncInterval: ReturnType<typeof setInterval> | null = null;
-  private eventSource: EventSource | null = null;
-  private lastSyncAttempt: number = 0;
-  private syncBackoff: number = 5000; // Start with 5 seconds
-  private maxBackoff: number = 60000; // Max 1 minute
-  private isSyncing: boolean = false;
-  private syncQueued: boolean = false;
-
-  constructor(serverUrl: string) {
-    this.localStore = new LocalStore();
-    this.serverUrl = serverUrl;
-  }
-
-  get status(): SyncStatus {
-    return this._status;
-  }
-
-  get pendingCount(): number {
-    return this._pendingMutations.length;
-  }
-
-  async init(): Promise<void> {
-    await this.localStore.init();
-    this._pendingMutations = await this.localStore.getAll<PendingMutation>("pending_mutations");
-    
-    // Start sync interval with backoff protection
-    this.syncInterval = setInterval(() => this.sync(), 10000); // Increased to 10 seconds
-
-    // Initial sync with delay to avoid rate limiting
-    if (navigator.onLine) {
-      setTimeout(() => this.sync(), 1000);
-    }
-
-    // Listen for online/offline
-    window.addEventListener("online", () => {
-      // Delay sync after coming online to avoid burst
-      setTimeout(() => this.sync(), 2000);
-      this.connectRealtime();
-    });
-    window.addEventListener("offline", () => this.setStatus("disconnected"));
-
-    // Near-real-time updates: when the server signals a change in one of our
-    // workspaces, pull immediately instead of waiting for the 10s poll. The
-    // interval above stays as a fallback, so this is a pure enhancement.
-    this.connectRealtime();
-  }
-
-  // Subscribe to server-sent change signals (Postgres NOTIFY -> SSE).
-  private connectRealtime(): void {
-    if (typeof EventSource === "undefined" || this.eventSource) return;
-    try {
-      const es = new EventSource(`${this.serverUrl}/api/sync/stream`);
-      es.addEventListener("change", () => {
-        // A doc/task changed in one of our workspaces — sync now.
-        void this.sync({ force: true });
-      });
-      es.onerror = () => {
-        // Connection dropped (offline, restart, or unsupported). Close and let
-        // the browser/our online handler reconnect; polling keeps working.
-        es.close();
-        if (this.eventSource === es) this.eventSource = null;
-      };
-      this.eventSource = es;
-    } catch {
-      // SSE unavailable — polling continues as the fallback.
-    }
-  }
-
-  private setStatus(status: SyncStatus): void {
-    this._status = status;
-    this.statusListeners.forEach((listener) => listener(status));
-  }
-
-  onStatusChange(listener: (status: SyncStatus) => void): () => void {
-    this.statusListeners.add(listener);
-    return () => this.statusListeners.delete(listener);
-  }
-
-  async sync(options: { force?: boolean } = {}): Promise<void> {
-    // Prevent concurrent syncs
-    if (this.isSyncing) {
-      if (options.force) this.syncQueued = true;
-      return;
-    }
-    
-    // Check backoff timing
-    const now = Date.now();
-    if (!options.force && now - this.lastSyncAttempt < this.syncBackoff) {
-      return;
-    }
-    
-    if (!navigator.onLine) {
-      this.setStatus("disconnected");
-      return;
-    }
-
-    this.isSyncing = true;
-    this.lastSyncAttempt = now;
-    this.setStatus("syncing");
-
-    try {
-      // Push pending mutations
-      for (const mutation of this._pendingMutations) {
-        await this.pushMutation(mutation);
-        await this.localStore.delete("pending_mutations", mutation.id);
-        this._pendingMutations = this._pendingMutations.filter((m) => m.id !== mutation.id);
-      }
-
-      // Pull latest data from server
-      await this.pullData();
-
-      this.setStatus("connected");
-      // Reset backoff on success
-      this.syncBackoff = 5000;
-    } catch (error) {
-      console.error("[Sync] Error:", error);
-      this.setStatus("error");
-      // Increase backoff on error (exponential)
-      this.syncBackoff = Math.min(this.syncBackoff * 2, this.maxBackoff);
-    } finally {
-      this.isSyncing = false;
-      if (this.syncQueued) {
-        this.syncQueued = false;
-        void this.sync({ force: true });
-      }
-    }
-  }
-
-  private async pushMutation(mutation: PendingMutation): Promise<void> {
-    const response = await fetch(`${this.serverUrl}/api/sync/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mutation),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Push failed: ${response.statusText}`);
-    }
-  }
-
-  private async pullData(): Promise<void> {
-    // Get last sync timestamp from localStorage
-    const lastSync = localStorage.getItem("nexus-last-sync") || "0";
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/sync/pull?since=${lastSync}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      // Handle rate limiting specifically
-      if (response.status === 429) {
-        console.warn("[Sync] Rate limited, increasing backoff");
-        this.syncBackoff = Math.min(this.syncBackoff * 2, this.maxBackoff);
-        return;
-      }
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Update local store with pulled data
-        for (const table of Object.keys(data)) {
-          if (Array.isArray(data[table])) {
-            for (const record of data[table]) {
-              await this.localStore.put(table, record);
-            }
-            this.notifyListeners(table);
-          }
-        }
-
-        // Update last sync timestamp
-        localStorage.setItem("nexus-last-sync", Date.now().toString());
-      }
-    } catch (error) {
-      // Pull failed, but we can still work offline
-      console.warn("[Sync] Pull failed, continuing offline:", error);
-    }
-  }
-
-  // Optimistic mutation - updates local immediately, syncs later
-  async mutate<T extends { id: string }>(
-    table: string,
-    operation: "insert" | "update" | "delete",
-    data: T
-  ): Promise<void> {
-    const now = Date.now();
-
-    // Update local store immediately (optimistic)
-    if (operation === "delete") {
-      await this.localStore.delete(table, data.id);
-    } else {
-      await this.localStore.put(table, {
-        ...data,
-        updatedAt: now,
-        ...(operation === "insert" ? { createdAt: now } : {}),
-      });
-    }
-
-    // Notify listeners
-    this.notifyListeners(table);
-
-    // Queue mutation for sync
-    const mutation: PendingMutation = {
-      id: crypto.randomUUID(),
-      table,
-      operation,
-      data: data as Record<string, unknown>,
-      timestamp: now,
-    };
-
-    this._pendingMutations.push(mutation);
-    await this.localStore.put("pending_mutations", mutation);
-
-    // Try to sync immediately if online
-    if (navigator.onLine) {
-      await this.sync({ force: true });
-    }
-  }
-
-  async query<T>(table: string, workspaceId?: string): Promise<T[]> {
-    if (workspaceId) {
-      return this.localStore.getByWorkspace<T>(table, workspaceId);
-    }
-    return this.localStore.getAll<T>(table);
-  }
-
-  async get<T>(table: string, id: string): Promise<T | null> {
-    return this.localStore.get<T>(table, id);
-  }
-
-  subscribe(table: string, callback: () => void): () => void {
-    if (!this.listeners.has(table)) {
-      this.listeners.set(table, new Set());
-    }
-    this.listeners.get(table)!.add(callback);
-
-    return () => {
-      this.listeners.get(table)?.delete(callback);
-    };
-  }
-
-  private notifyListeners(table: string): void {
-    this.listeners.get(table)?.forEach((callback) => callback());
-  }
-
-  destroy(): void {
-    if (this.syncInterval) {
-      clearInterval(this.syncInterval);
-    }
-    this.eventSource?.close();
-    this.eventSource = null;
-    this.ws?.close();
-  }
-}
+// The engine itself (queue, push classification, pull cursor, per-user
+// storage) lives in ./engine so it can be tested without React.
+export type { SyncStatus, PendingMutation, RejectedMutation } from "./engine";
 
 // ==========================================
 // REACT CONTEXT
@@ -591,10 +158,18 @@ const ZeroContext = createContext<ZeroContextType>({
 
 interface ZeroProviderProps {
   children: ReactNode;
+  /** Absolute sync origin; omit for same-origin relative URLs (the default). */
   serverUrl?: string;
+  /** Signed-in user. The local DB and pull cursor are namespaced by it. */
+  userId?: string | null;
 }
 
-export function ZeroProvider({ children, serverUrl }: ZeroProviderProps) {
+export function ZeroProvider({ children, serverUrl, userId }: ZeroProviderProps) {
+  const t = useT();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const [engine, setEngine] = useState<SyncEngine | null>(null);
   const [status, setStatus] = useState<SyncStatus>("connecting");
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
@@ -602,36 +177,47 @@ export function ZeroProvider({ children, serverUrl }: ZeroProviderProps) {
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   useEffect(() => {
-    const url = serverUrl || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const syncEngine = new SyncEngine(url);
+    const syncEngine = new SyncEngine({ serverUrl: serverUrl ?? "", userId: userId ?? null });
 
-    syncEngine.init().then(() => {
-      setEngine(syncEngine);
-      setStatus(syncEngine.status);
-      setPendingMutations(syncEngine.pendingCount);
-    });
-
-    const unsubscribe = syncEngine.onStatusChange((newStatus) => {
+    const unsubscribeStatus = syncEngine.onStatusChange((newStatus) => {
       setStatus(newStatus);
       setPendingMutations(syncEngine.pendingCount);
-      if (newStatus === "connected") {
-        setLastSyncedAt(new Date());
-      }
+      if (newStatus === "connected") setLastSyncedAt(new Date());
     });
+    const unsubscribeRejected = syncEngine.onMutationRejected((rejection: RejectedMutation) => {
+      setPendingMutations(syncEngine.pendingCount);
+      showToast.error(tRef.current("syncStatus.changeRejected"), {
+        description: rejection.error || tRef.current("syncStatus.changeRejectedDescription"),
+      });
+    });
+
+    syncEngine
+      .init()
+      .then(() => {
+        if (syncEngine.isDestroyed) return;
+        setEngine(syncEngine);
+        setStatus(syncEngine.status);
+        setPendingMutations(syncEngine.pendingCount);
+      })
+      .catch((error) => {
+        console.error("[Sync] Local store unavailable:", error);
+        setStatus("error");
+      });
 
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
     return () => {
-      unsubscribe();
+      unsubscribeStatus();
+      unsubscribeRejected();
       syncEngine.destroy();
+      setEngine((current) => (current === syncEngine ? null : current));
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [serverUrl]);
+  }, [serverUrl, userId]);
 
   return (
     <ZeroContext.Provider

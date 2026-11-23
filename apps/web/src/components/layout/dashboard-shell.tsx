@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { signOut, useSession } from '@/lib/auth-client';
-import { useZeroStatus } from '@/lib/sync/zero';
+import { useZero, useZeroStatus } from '@/lib/sync/zero';
+import { signOutAndClearLocalData } from '@/lib/sync/sign-out';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/lib/store';
 import { useT } from '@/lib/i18n/provider';
@@ -236,10 +237,17 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
   const userImage = user?.image || '';
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U';
 
+  const { engine } = useZero();
   const handleSignOut = useCallback(async () => {
-    await signOut();
-    router.push('/login');
-  }, [router]);
+    try {
+      // Flush, sign out, then delete this user's offline DB, pull cursor,
+      // command queue and chat store so the next user starts clean.
+      await signOutAndClearLocalData({ engine, signOut: () => signOut() });
+    } finally {
+      // Full navigation: drops every in-memory store and the sync engine.
+      window.location.assign('/login');
+    }
+  }, [engine]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setClientReady(true), 0);

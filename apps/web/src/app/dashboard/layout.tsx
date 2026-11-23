@@ -23,7 +23,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <ZeroProvider>
+    <ZeroProvider userId={session.user.id}>
       <AIWriteProvider>
         <ToastProvider />
         <OnboardingWrapper />
