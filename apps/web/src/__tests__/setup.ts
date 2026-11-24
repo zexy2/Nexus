@@ -13,6 +13,13 @@ process.env.OPENAI_API_KEY = "sk-test-openai-key";
 process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
 process.env.GROQ_API_KEY = "gsk_test-groq-key";
 
+// The platform fetch, captured before it is mocked below. Provider contract
+// tests (ai-provider-contract.test.ts) use it to talk to a local fake server.
+const realFetch = globalThis.fetch;
+export function getRealFetch(): typeof fetch {
+  return realFetch;
+}
+
 // Mock fetch globally with tracking
 const fetchCalls: Array<{ url: string; options?: RequestInit }> = [];
 
