@@ -36,22 +36,52 @@ async function ensurePublicDemo(page: Page) {
   await page.context().addCookies(demoCookies);
 }
 
-async function dragWithPointer(page: Page, source: Locator, target: Locator) {
-  let sourceBox: Awaited<ReturnType<Locator["boundingBox"]>> = null;
-  let targetBox: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+type Box = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
 
+// dnd-kit auto-scrolls the window while the pointer is within 20% of a
+// viewport edge. The Kanban board starts below the fold of a 720px viewport,
+// so a drop point derived from an unscrolled column box used to sit in (or
+// beyond) the bottom auto-scroll zone: the page scrolled mid-drag and the
+// release landed outside the target column. Keep both points in the middle
+// band and measure only after the layout has settled.
+const AUTO_SCROLL_EDGE = 0.2;
+
+async function dragWithPointer(page: Page, source: Locator, target: Locator) {
+  await target.evaluate((element) => {
+    const top = element.getBoundingClientRect().top;
+    window.scrollBy({ top: top - window.innerHeight * 0.25, behavior: "instant" });
+  });
+
+  let sourceBox: Box | null = null;
+  let targetBox: Box | null = null;
+  let previous = "";
+
+  // Wait until both boxes exist and stop moving (entrance animation, data load).
   await expect.poll(async () => {
     sourceBox = await source.boundingBox();
     targetBox = await target.boundingBox();
-    return Boolean(sourceBox && targetBox);
-  }).toBe(true);
+    const current = JSON.stringify([sourceBox, targetBox]);
+    const stable = Boolean(sourceBox && targetBox) && current === previous;
+    previous = current;
+    return stable;
+  }, { intervals: [100] }).toBe(true);
 
   if (!sourceBox || !targetBox) throw new Error("Drag source or target is not measurable");
+  const sb: Box = sourceBox;
+  const tb: Box = targetBox;
 
-  const sourceX = sourceBox.x + sourceBox.width / 2;
-  const sourceY = sourceBox.y + Math.min(sourceBox.height / 2, 48);
-  const targetX = targetBox.x + targetBox.width / 2;
-  const targetY = targetBox.y + Math.min(targetBox.height / 2, 160);
+  const viewportHeight = page.viewportSize()?.height ?? 720;
+  const minY = viewportHeight * AUTO_SCROLL_EDGE + 8;
+  const maxY = viewportHeight * (1 - AUTO_SCROLL_EDGE) - 8;
+
+  const sourceX = sb.x + sb.width / 2;
+  const sourceY = sb.y + Math.min(sb.height / 2, 48);
+  const targetX = tb.x + tb.width / 2;
+  const targetY = Math.min(Math.max(tb.y + 80, minY), tb.y + tb.height - 24, maxY);
+
+  expect(sourceY, "drag source must sit outside the auto-scroll zone").toBeGreaterThanOrEqual(minY);
+  expect(sourceY).toBeLessThanOrEqual(maxY);
+  expect(targetY, "drop point must sit inside the target column").toBeGreaterThan(tb.y);
 
   await page.mouse.move(sourceX, sourceY);
   await page.mouse.down();
