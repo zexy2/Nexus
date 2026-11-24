@@ -1349,6 +1349,47 @@ export const workflowActivityReceipts = pgTable(
 );
 
 // ==========================================
+// AI TRACES (per-call LLM metadata; no prompt/response content)
+// ==========================================
+
+/**
+ * One row per server-side LLM call (written best-effort by
+ * apps/web/src/lib/ai/traced-generate.ts). Metadata only: prompts and
+ * responses are never stored. Pruned after 30 days by
+ * scripts/maintenance-db-cleanup.sh.
+ */
+export const aiTraces = pgTable(
+  "ai_traces",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+    /** Logical operation, e.g. "chat.agent". */
+    name: varchar("name", { length: 120 }).notNull(),
+    /** Category, e.g. "agent" or "chat". */
+    agentType: varchar("agent_type", { length: 60 }).notNull(),
+    provider: varchar("provider", { length: 40 }),
+    model: varchar("model", { length: 120 }),
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    totalTokens: integer("total_tokens"),
+    latencyMs: integer("latency_ms").notNull(),
+    /** "ok" | "error" */
+    status: varchar("status", { length: 16 }).notNull(),
+    /** Truncated error message (status = "error"). */
+    errorMessage: varchar("error_message", { length: 500 }),
+    /** Names of tools the model called, e.g. ["searchWorkspace"]. */
+    toolsUsed: jsonb("tools_used").$type<string[]>(),
+    steps: integer("steps"),
+  },
+  (table) => [
+    index("ai_traces_created_idx").on(table.createdAt),
+    index("ai_traces_user_created_idx").on(table.userId, table.createdAt),
+  ]
+);
+
+// ==========================================
 // USER SETTINGS (Kullanıcı Ayarları)
 // ==========================================
 

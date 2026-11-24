@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, Suspense, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ interface SettingsData {
       workflowsPerDay: number;
       chatMessagesPerDay: number;
     };
+    isAdmin?: boolean;
   };
   notifications: {
     emailNotifications: boolean;
@@ -162,6 +164,7 @@ function SettingsContent() {
   const [autoSaveAiOutputs, setAutoSaveAiOutputs] = useState(true);
   const [serverGeminiAvailable, setServerGeminiAvailable] = useState(true);
   const [usageLimits, setUsageLimits] = useState({ workflowsPerDay: 25, chatMessagesPerDay: 100 });
+  const [isAdmin, setIsAdmin] = useState(false);
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [agentNotifications, setAgentNotifications] = useState(true);
   const [taskReminders, setTaskReminders] = useState(true);
@@ -236,6 +239,7 @@ function SettingsContent() {
       setAutoSaveAiOutputs(data.ai.autoSaveAiOutputs);
       setServerGeminiAvailable(data.ai.serverGeminiAvailable);
       setUsageLimits(data.ai.usageLimits ?? { workflowsPerDay: 25, chatMessagesPerDay: 100 });
+      setIsAdmin(data.ai.isAdmin === true);
       setEmailNotifications(data.notifications.emailNotifications);
       setAgentNotifications(data.notifications.agentNotifications);
       setTaskReminders(data.notifications.taskReminders);
@@ -728,6 +732,14 @@ function SettingsContent() {
                         <p className="mt-3 text-xs text-amber-600">
                           {t("settings.ai.unavailableNotice")}
                         </p>
+                      )}
+                      {isAdmin && (
+                        <Link
+                          href="/dashboard/admin/ai-usage"
+                          className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          {t("adminUsage.openLink")}
+                        </Link>
                       )}
                     </div>
 

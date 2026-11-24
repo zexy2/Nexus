@@ -42,10 +42,8 @@ export async function GET() {
     const email = user?.email || session.user.email;
     // Admin requires a verified address; the session user can be stale, so
     // trust the DB row and fall back to "not admin" when it is missing.
-    const usageLimits = getAiUsageLimits(
-      isAdminEmail(email, user ? user.emailVerified : false),
-      isDemoEmail(email)
-    );
+    const isAdmin = isAdminEmail(email, user ? user.emailVerified : false);
+    const usageLimits = getAiUsageLimits(isAdmin, isDemoEmail(email));
     const usageRemaining = await getAiUsageRemaining(session.user.id, email);
     const workspace = await ensureDefaultWorkspace(session.user.id);
     const repository = await db.query.workspaceRepositories.findFirst({
@@ -79,6 +77,8 @@ export async function GET() {
           maxStepsPerWorkflow: usageLimits.maxStepsPerWorkflow,
         },
         usageRemaining,
+        // Lets the UI link admins to /dashboard/admin/ai-usage.
+        isAdmin,
       },
       agentHandoff: {
         workspaceId: workspace.id,
