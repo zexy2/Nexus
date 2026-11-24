@@ -38,6 +38,16 @@ overrides:
   "gaxios@7.1.3": "7.1.4"
   "yaml@>=2.0.0 <3.0.0": "^2.8.3"
   "ws@>=8.0.0 <9.0.0": "^8.21.0"
+  # Dev-tooling advisories (eslint 9 transitive deps), pinned within their
+  # existing major so eslint's declared ranges still hold.
+  "minimatch@>=3.0.0 <4.0.0": "^3.1.5"
+  "brace-expansion@>=1.0.0 <2.0.0": "^1.1.22"
+  "flatted@>=3.0.0 <4.0.0": "^3.4.4"
+  "@humanfs/node@>=0.16.0 <0.17.0": "^0.16.8"
+  # drizzle-kit 0.31 still declares @esbuild-kit/esm-loader (never loaded by
+  # its bundle); lift its nested esbuild 0.18 to the patched line drizzle-kit
+  # itself uses (GHSA-67mh-4wv8-2f99).
+  "@esbuild-kit/core-utils>esbuild": "^0.25.12"
 
 onlyBuiltDependencies:
   - "@swc/core"
