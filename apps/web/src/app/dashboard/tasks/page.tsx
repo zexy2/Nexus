@@ -4,12 +4,6 @@ import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { type Task as SyncTask } from "@/lib/sync/zero";
 import { useLocalFirstContext } from "@/lib/sync/local-first";
 import { persistTaskMove } from "@/lib/sync/task-move";
-import {
-  KANBAN_COLUMN_ATTRIBUTE,
-  findKanbanColumnAtPoint,
-  isPointerActivated,
-  type PointerPosition,
-} from "@/lib/kanban-drop";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -527,7 +521,6 @@ function KanbanColumn({
       <div
         ref={setNodeRef}
         data-testid={`kanban-column-${column.id}`}
-        {...{ [KANBAN_COLUMN_ATTRIBUTE]: column.id }}
         onWheel={(event) => {
           const el = event.currentTarget;
           const maxScrollTop = el.scrollHeight - el.clientHeight;
@@ -595,9 +588,6 @@ export default function TasksPage() {
   // Track the in-progress drag so background sync doesn't clobber it.
   const activeIdRef = useRef<string | null>(null);
   const dragTargetStatusRef = useRef<TaskStatus | null>(null);
-  // Last pointer position, recorded in the capture phase so it is current even
-  // when the release lands before React has rendered the final pointer move.
-  const lastPointerRef = useRef<PointerPosition | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -691,18 +681,6 @@ export default function TasksPage() {
     });
   }, [engine, workspaceId, fetchTasks]);
 
-  useEffect(() => {
-    const record = (event: PointerEvent) => {
-      lastPointerRef.current = { x: event.clientX, y: event.clientY };
-    };
-    window.addEventListener("pointermove", record, { capture: true, passive: true });
-    window.addEventListener("pointerup", record, { capture: true, passive: true });
-    return () => {
-      window.removeEventListener("pointermove", record, { capture: true });
-      window.removeEventListener("pointerup", record, { capture: true });
-    };
-  }, []);
-
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -767,17 +745,7 @@ export default function TasksPage() {
     const { active, over } = event;
 
     const movedTask = tasks.find((task) => task.id === active.id);
-    // Prefer the column actually under the pointer at release: dnd-kit's `over`
-    // comes from the last rendered frame and can lag behind a fast release.
-    const pointerStatus = isPointerActivated(event.activatorEvent)
-      ? findKanbanColumnAtPoint(
-          document,
-          lastPointerRef.current,
-          columns.map((column) => column.id)
-        )
-      : null;
     const targetStatus =
-      pointerStatus ||
       getDragTargetStatus(over?.id, tasks) ||
       dragTargetStatusRef.current ||
       movedTask?.status ||
@@ -796,12 +764,10 @@ export default function TasksPage() {
         const [removed] = newTasks.splice(activeIndex, 1);
         const moved = { ...removed, status: targetStatus };
 
-        const overTaskInTarget =
-          overIndex !== -1 && over?.id !== active.id && prev[overIndex].status === targetStatus;
-        if (overTaskInTarget) {
+        if (overIndex !== -1 && over?.id !== active.id) {
           const adjustedIndex = overIndex > activeIndex ? overIndex - 1 : overIndex;
           newTasks.splice(adjustedIndex, 0, moved);
-        } else if (overIsColumn || dragTargetStatusRef.current || pointerStatus) {
+        } else if (overIsColumn || dragTargetStatusRef.current) {
           newTasks.push(moved);
         } else {
           newTasks.splice(activeIndex, 0, moved);
@@ -831,14 +797,6 @@ export default function TasksPage() {
       dragTargetStatusRef.current = null;
     }
   }, [fetchTasks, tasks, engine, t]);
-
-  const handleDragCancel = useCallback(() => {
-    setActiveId(null);
-    activeIdRef.current = null;
-    dragTargetStatusRef.current = null;
-    // Drop any optimistic column change made during the cancelled drag.
-    void fetchTasks();
-  }, [fetchTasks]);
 
   // CRUD handlers
   const resetNewTask = useCallback(() => {
@@ -1086,7 +1044,6 @@ export default function TasksPage() {
             onDragStart={handleDragStart}
             onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
           >
             <div className="grid min-h-0 grid-cols-1 items-start gap-4 md:h-[calc(100vh-21rem)] md:min-h-[34rem] md:max-h-[44rem] md:grid-cols-2 md:items-stretch md:gap-5 xl:grid-cols-4">
               {columns.map((column) => (
