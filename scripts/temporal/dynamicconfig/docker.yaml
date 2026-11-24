@@ -1,0 +1,10 @@
+# Temporal dynamic config (mounted read-only into the `temporal` service and
+# polled every 60s). Intentionally empty: temporalio/auto-setup shipped an
+# empty config/dynamicconfig/docker.yaml, so server defaults apply exactly as
+# before the move to temporalio/server. The server refuses to start when the
+# configured file is missing, so keep this file even while it is empty.
+#
+# Example:
+# limit.maxIDLength:
+#   - value: 255
+#     constraints: {}
