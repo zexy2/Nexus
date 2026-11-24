@@ -9,15 +9,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
 load_env_values "$ENV_FILE" \
   NEXT_PUBLIC_APP_URL \
   GEMINI_API_KEY \
-  DEMO_ACCESS_CODE
+  DEMO_ACCESS_CODE \
+  HEALTH_CHECK_TOKEN
 
 BASE_URL="${SMOKE_BASE_URL:-${NEXT_PUBLIC_APP_URL:-http://localhost:3000}}"
 COOKIE_JAR="$(mktemp)"
 ISOLATION_COOKIE_JAR="$(mktemp)"
 WORKFLOW_STATUS_FILE="$(mktemp)"
 CHANGE_SET_STATUS_FILE="$(mktemp)"
+APPLY_RESPONSE_FILE="$(mktemp)"
 cleanup() {
-  rm -f "$COOKIE_JAR" "$ISOLATION_COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE"
+  rm -f "$COOKIE_JAR" "$ISOLATION_COOKIE_JAR" "$WORKFLOW_STATUS_FILE" "$CHANGE_SET_STATUS_FILE" "$APPLY_RESPONSE_FILE"
 }
 trap cleanup EXIT
 
@@ -101,11 +103,41 @@ poll_pending_change_set() {
   exit 1
 }
 
+poll_change_set_terminal() {
+  local change_set_id="$1"
+  local output_file="$2"
+  local deadline=$((SECONDS + ${SMOKE_WORKFLOW_TIMEOUT_SECONDS:-180}))
+
+  while (( SECONDS < deadline )); do
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$output_file"
+    local status
+    status="$(json_get status < "$output_file")"
+    echo "Change set status: $status"
+
+    case "$status" in
+      applied|partially_applied|external_failed|already_resolved)
+        return 0
+        ;;
+    esac
+
+    sleep 5
+  done
+
+  echo "Change set did not resolve before timeout." >&2
+  cat "$output_file" >&2 || true
+  exit 1
+}
+
 echo "==> Compose services"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
 
 echo "==> Health"
-health_body="$(curl -fsS "$BASE_URL/api/health")"
+# Detailed health (provider config, commit) requires HEALTH_CHECK_TOKEN.
+health_args=(-fsS)
+if [[ -n "${HEALTH_CHECK_TOKEN:-}" ]]; then
+  health_args+=(-H "x-health-token: $HEALTH_CHECK_TOKEN")
+fi
+health_body="$(curl "${health_args[@]}" "$BASE_URL/api/health")"
 echo "$health_body"
 
 if ! printf '%s' "$health_body" | grep -q '"database"'; then
@@ -118,7 +150,7 @@ if ! printf '%s' "$health_body" | grep -q '"worker"'; then
   exit 1
 fi
 
-if [[ "${GEMINI_API_KEY:-}" != "" ]] && ! printf '%s' "$health_body" | grep -q '"geminiAvailable":true'; then
+if [[ "${GEMINI_API_KEY:-}" != "" && -n "${HEALTH_CHECK_TOKEN:-}" ]] && ! printf '%s' "$health_body" | grep -q '"geminiAvailable":true'; then
   echo "GEMINI_API_KEY is set but health does not report Gemini as available." >&2
   exit 1
 fi
@@ -246,9 +278,11 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
     -H "Content-Type: application/json" \
     -b "$COOKIE_JAR" \
     "$BASE_URL/api/change-sets/$change_set_id/apply" \
-    --data "{\"selectedProposalIds\":$proposal_ids_json}" > /dev/null
+    --data "{\"selectedProposalIds\":$proposal_ids_json}" > "$APPLY_RESPONSE_FILE"
 
-  poll_workflow "$plan_workflow_id" "Plan impact" "$WORKFLOW_STATUS_FILE"
+  echo "Apply response: $(cat \"$APPLY_RESPONSE_FILE\")"
+
+  poll_change_set_terminal "$change_set_id" "$CHANGE_SET_STATUS_FILE"
   curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
   change_set_status="$(json_get status < "$CHANGE_SET_STATUS_FILE")"
   if [[ "$change_set_status" != "applied" && "$change_set_status" != "partially_applied" ]]; then

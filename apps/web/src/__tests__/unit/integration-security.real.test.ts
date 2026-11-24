@@ -133,8 +133,9 @@ describe("GitHub webhook security", () => {
       })
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
+    // The sync runs after the response (see lib/integrations/webhook-delivery).
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "accepted" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "github",
@@ -147,23 +148,21 @@ describe("GitHub webhook security", () => {
       })
     );
     expect(JSON.stringify(dbMock.values.mock.calls[0]?.[0])).not.toContain(body);
-    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
+    await vi.waitFor(() => expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1"));
   });
 });
 
-describe("Linear webhook security", () => {
-  it("rejects stale signed deliveries", async () => {
+describe("Linear webhook timestamp check unsigned (finding)", () => {
+  const sign = (body: string) => createHmac("sha256", "linear-secret").update(body).digest("hex");
+
+  it("rejects a stale signed body even when an unsigned header claims a fresh timestamp", async () => {
     process.env.LINEAR_WEBHOOK_SECRET = "linear-secret";
-    const body = JSON.stringify({ type: "Issue", action: "update" });
-    const timestamp = String(Math.floor((Date.now() - 120_000) / 1000));
-    const signature = createHmac("sha256", "linear-secret")
-      .update(`${timestamp}.${body}`)
-      .digest("hex");
+    const body = JSON.stringify({ type: "Issue", action: "update", webhookTimestamp: Date.now() - 120_000 });
 
     const response = await postLinearWebhook(
       request("http://localhost:3000/api/webhooks/linear", body, {
-        "linear-signature": signature,
-        "webhook-timestamp": timestamp,
+        "linear-signature": sign(body),
+        "webhook-timestamp": String(Math.floor(Date.now() / 1000)),
         "linear-delivery": "linear-delivery-1",
       })
     );
@@ -172,29 +171,47 @@ describe("Linear webhook security", () => {
     expect(dbMock.insert).not.toHaveBeenCalled();
   });
 
-  it("records verified deliveries with timestamped signatures", async () => {
+  it("rejects a signed body without webhookTimestamp", async () => {
+    process.env.LINEAR_WEBHOOK_SECRET = "linear-secret";
+    const body = JSON.stringify({ type: "Issue", action: "update" });
+    const response = await postLinearWebhook(
+      request("http://localhost:3000/api/webhooks/linear", body, { "linear-signature": sign(body) })
+    );
+    expect(response.status).toBe(401);
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it("rejects a tampered body", async () => {
+    process.env.LINEAR_WEBHOOK_SECRET = "linear-secret";
+    const body = JSON.stringify({ type: "Issue", webhookTimestamp: Date.now() });
+    const response = await postLinearWebhook(
+      request("http://localhost:3000/api/webhooks/linear", body.replace("Issue", "Project"), {
+        "linear-signature": sign(body),
+      })
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("records verified deliveries signed per Linear docs (HMAC of raw body)", async () => {
     process.env.LINEAR_WEBHOOK_SECRET = "linear-secret";
     const body = JSON.stringify({
       type: "Issue",
       action: "update",
       organizationId: "org-1",
+      webhookTimestamp: Date.now(),
       data: { id: "issue-1", identifier: "NEX-1", team: { id: "team-1" } },
     });
-    const timestamp = String(Math.floor(Date.now() / 1000));
-    const signature = createHmac("sha256", "linear-secret")
-      .update(`${timestamp}.${body}`)
-      .digest("hex");
 
     const response = await postLinearWebhook(
       request("http://localhost:3000/api/webhooks/linear", body, {
-        "linear-signature": signature,
-        "webhook-timestamp": timestamp,
+        "linear-signature": sign(body),
         "linear-delivery": "linear-delivery-2",
       })
     );
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "completed" });
+    // The sync runs after the response (see lib/integrations/webhook-delivery).
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, status: "accepted" });
     expect(dbMock.values).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "linear",
@@ -211,6 +228,6 @@ describe("Linear webhook security", () => {
         }),
       })
     );
-    expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1");
+    await vi.waitFor(() => expect(dbMock.syncIntegration).toHaveBeenCalledWith("integration-1"));
   });
 });

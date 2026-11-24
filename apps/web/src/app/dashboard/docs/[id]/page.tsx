@@ -29,8 +29,11 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { PartialBlock } from "@blocknote/core";
 import { LivingPlanInspector } from "./_components/living-plan-inspector";
+import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { useZero } from "@/lib/sync/zero";
+import { setDocFavorite } from "@/lib/sync/doc-favorite";
 
 // BlockNote content type alias
 type BlockNoteContent = PartialBlock[];
@@ -69,6 +72,7 @@ interface Document {
   content: BlockNoteContent;
   createdBy: string | null;
   isAiGenerated: boolean;
+  isFavorite?: boolean;
   updatedAt: string;
 }
 
@@ -97,6 +101,7 @@ export default function DocDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { data: session } = useSession();
+  const { engine } = useZero();
   const [doc, setDoc] = useState<Document | null>(null);
   const [title, setTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -108,6 +113,10 @@ export default function DocDetailPage() {
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
   const editorContentRef = useRef<BlockNoteContent>([]);
   const materializeTimerRef = useRef<number | null>(null);
+  const titleTimerRef = useRef<number | null>(null);
+  const pendingTitleRef = useRef<string | null>(null);
+  const titleSeqRef = useRef(0);
+  const unmountedRef = useRef(false);
   const documentId = String(params.id || "");
   const displayTitle = localizeGeneratedCopy(
     title === "Generated Document" ? t("docs.detail.generatedTitle") : title,
@@ -423,23 +432,63 @@ export default function DocDetailPage() {
     }
   };
 
-  const handleTitleChange = async (newTitle: string) => {
+  const saveTitle = useCallback(
+    async (newTitle: string) => {
+      const seq = ++titleSeqRef.current;
+      setIsSaving(true);
+      try {
+        const response = await fetch(`/api/docs/${documentId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: newTitle }),
+          keepalive: true,
+        });
+        if (seq !== titleSeqRef.current) return; // stale response, a newer save is in flight
+        if (!response.ok) throw new Error(`Title save failed: ${response.status}`);
+        if (!unmountedRef.current) setLastSaved(new Date());
+      } catch (err) {
+        if (seq !== titleSeqRef.current) return;
+        console.error("Failed to save title:", err);
+        if (!unmountedRef.current) showToast.error(t("docs.detail.titleSaveFailed"));
+      } finally {
+        if (seq === titleSeqRef.current && !unmountedRef.current) setIsSaving(false);
+      }
+    },
+    [documentId, t]
+  );
+
+  const flushTitleSave = useCallback(() => {
+    if (titleTimerRef.current !== null) {
+      window.clearTimeout(titleTimerRef.current);
+      titleTimerRef.current = null;
+    }
+    const pending = pendingTitleRef.current;
+    pendingTitleRef.current = null;
+    if (pending !== null) void saveTitle(pending);
+  }, [saveTitle]);
+
+  const flushTitleSaveRef = useRef(flushTitleSave);
+  // Keep the latest flush for the unmount cleanup below (refs are updated in
+  // effects, not during render). Declared first so it runs before that effect.
+  useEffect(() => {
+    flushTitleSaveRef.current = flushTitleSave;
+  }, [flushTitleSave]);
+
+  // Flush any pending title save on unmount so the last value is never lost.
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      flushTitleSaveRef.current();
+    };
+  }, []);
+
+  const handleTitleChange = (newTitle: string) => {
     setTitle(newTitle);
     if (!doc) return;
-    
-    setIsSaving(true);
-    try {
-      await fetch(`/api/docs/${params.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTitle }),
-      });
-      setLastSaved(new Date());
-    } catch (err) {
-      console.error("Failed to save title:", err);
-    } finally {
-      setIsSaving(false);
-    }
+    pendingTitleRef.current = newTitle;
+    if (titleTimerRef.current !== null) window.clearTimeout(titleTimerRef.current);
+    titleTimerRef.current = window.setTimeout(flushTitleSave, 600);
   };
 
   const handleDelete = async () => {
@@ -462,8 +511,19 @@ export default function DocDetailPage() {
     }
   };
 
-  const handleFavorite = () => {
-    alert(t("docs.detail.favoriteAdded"));
+  const handleFavorite = async () => {
+    if (!doc) return;
+    const next = !doc.isFavorite;
+    setDoc((current) => (current ? { ...current, isFavorite: next } : current));
+    try {
+      if (!engine) throw new Error("Sync engine not ready");
+      await setDocFavorite(engine, doc.id, next);
+      showToast.success(next ? t("docs.detail.favoriteAdded") : t("ux.favoriteRemoved"));
+    } catch (err) {
+      console.error("Failed to update favorite:", err);
+      setDoc((current) => (current ? { ...current, isFavorite: !next } : current));
+      showToast.error(t("ux.favoriteFailed"));
+    }
   };
 
   const handleDuplicate = async () => {
@@ -514,10 +574,19 @@ export default function DocDetailPage() {
     );
   }
 
+  // Only read when an editor mounts (both are keyed by doc.id) or seeds an
+  // empty Yjs doc once after sync. doc.content is kept current with the last
+  // materialized save, so the ref holding unsaved keystrokes is not read
+  // during render.
+  const editorInitialContent = doc.content && doc.content.length > 0 ? doc.content : undefined;
+
   return (
-    <div className="flex flex-col h-screen">
+    // The dashboard <main> already reserves pt-20/md:pt-24 for the floating nav,
+    // so fill exactly the rest of the viewport: the editor scrolls internally
+    // and the AI bar stays pinned on screen.
+    <div className="flex h-[calc(100dvh-5rem)] flex-col overflow-hidden md:h-[calc(100dvh-6rem)]">
       {/* Header */}
-      <header className="flex items-center gap-4 border-b px-6 py-3">
+      <header className="flex shrink-0 items-center gap-4 border-b px-6 py-3">
         <Link href="/dashboard/docs">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="size-4" />
@@ -529,6 +598,7 @@ export default function DocDetailPage() {
           <Input
             value={displayTitle}
             onChange={(e) => handleTitleChange(e.target.value)}
+            onBlur={flushTitleSave}
             className="text-lg font-semibold border-none shadow-none focus-visible:ring-0 px-0 h-auto"
             placeholder={t("docs.detail.untitled")}
           />
@@ -551,7 +621,7 @@ export default function DocDetailPage() {
           </div>
 
           {doc.isAiGenerated && (
-            <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
+            <div className="hidden items-center gap-1 rounded-full border border-border bg-foreground/10 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
               <Sparkles className="size-3" />
               {t("docs.detail.aiGenerated")}
             </div>
@@ -570,8 +640,8 @@ export default function DocDetailPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={handleFavorite}>
-                <Star className="size-4 mr-2" />
-                {t("docs.detail.addFavorite")}
+                <Star className={doc.isFavorite ? "size-4 mr-2 fill-amber-400 text-amber-700 dark:text-amber-400" : "size-4 mr-2"} />
+                {doc.isFavorite ? t("docs.favRemove") : t("docs.detail.addFavorite")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleDuplicate}>
                 <Copy className="size-4 mr-2" />
@@ -588,7 +658,7 @@ export default function DocDetailPage() {
       </header>
 
       {/* Plan editor and traceability inspector */}
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid min-h-full w-full lg:grid-cols-[minmax(0,1fr)_minmax(440px,28vw)] 2xl:grid-cols-[minmax(0,1fr)_minmax(520px,30vw)]">
           <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10 xl:px-14">
             {session?.user ? (
@@ -597,14 +667,14 @@ export default function DocDetailPage() {
                 documentId={doc.id}
                 userId={session.user.id}
                 userName={session.user.name || session.user.email?.split('@')[0] || t("docs.detail.anonymous")}
-                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                initialContent={editorInitialContent}
                 onChange={handleContentChange}
                 editable={true}
               />
             ) : (
               <EditorWrapper
                 key={`editor-${doc.id}`}
-                initialContent={editorContentRef.current.length > 0 ? editorContentRef.current : (doc.content && doc.content.length > 0 ? doc.content : undefined)}
+                initialContent={editorInitialContent}
                 editable={false}
               />
             )}
@@ -614,7 +684,7 @@ export default function DocDetailPage() {
       </div>
 
       {/* AI Assistant Bar */}
-      <div className="border-t px-6 py-3 bg-muted/30">
+      <div className="shrink-0 border-t px-6 py-3 bg-muted/30">
         <div className="max-w-[1420px] mx-auto flex items-center gap-3">
           <Sparkles className="size-4 text-primary" />
           <span className="text-sm text-muted-foreground">
@@ -630,7 +700,7 @@ export default function DocDetailPage() {
               {aiLoading === "summarize" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.summarizing")}</>
               ) : aiSuccess === "summarize" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.summarizeDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.summarizeDone")}</>
               ) : (
                 t("docs.detail.summarize")
               )}
@@ -644,7 +714,7 @@ export default function DocDetailPage() {
               {aiLoading === "expand" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.expanding")}</>
               ) : aiSuccess === "expand" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.expandDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.expandDone")}</>
               ) : (
                 t("docs.detail.expand")
               )}
@@ -658,7 +728,7 @@ export default function DocDetailPage() {
               {aiLoading === "improve" ? (
                 <><Loader2 className="size-3 animate-spin mr-1" /> {t("docs.detail.improving")}</>
               ) : aiSuccess === "improve" ? (
-                <><CheckCircle2 className="size-3 mr-1 text-green-500" /> {t("docs.detail.improveDone")}</>
+                <><CheckCircle2 className="size-3 mr-1 text-green-700 dark:text-green-500" /> {t("docs.detail.improveDone")}</>
               ) : (
                 t("docs.detail.improve")
               )}

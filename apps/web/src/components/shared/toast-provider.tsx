@@ -12,9 +12,9 @@ export function ToastProvider() {
       toastOptions={{
         duration: 4000,
         style: {
-          background: '#151515',
-          color: '#fafafa',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'var(--card)',
+          color: 'var(--card-foreground)',
+          border: '1px solid var(--border)',
           borderRadius: '12px',
           padding: '16px',
           boxShadow: '0 10px 40px -10px rgba(0, 0, 0, 0.2)',
@@ -22,8 +22,8 @@ export function ToastProvider() {
         },
         success: {
           iconTheme: {
-            primary: '#fafafa',
-            secondary: 'white',
+            primary: 'var(--foreground)',
+            secondary: 'var(--background)',
           },
         },
         error: {
@@ -120,9 +120,9 @@ export const showToast = {
   ) => {
     return toast.promise(promise, messages, {
       style: {
-        background: '#151515',
-        color: '#fafafa',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'var(--card)',
+        color: 'var(--card-foreground)',
+        border: '1px solid var(--border)',
         borderRadius: '12px',
         padding: '16px',
       },
@@ -144,9 +144,9 @@ interface ToastContentProps {
 
 function ToastContent({ t, type, message, description, action }: ToastContentProps) {
   const icons = {
-    success: <CheckCircle className="h-5 w-5 text-emerald-500" />,
+    success: <CheckCircle className="h-5 w-5 text-emerald-700 dark:text-emerald-500" />,
     error: <XCircle className="h-5 w-5 text-destructive" />,
-    warning: <AlertCircle className="h-5 w-5 text-amber-500" />,
+    warning: <AlertCircle className="h-5 w-5 text-amber-700 dark:text-amber-500" />,
     info: <Info className="h-5 w-5 text-blue-500" />,
     loading: <Loader2 className="h-5 w-5 text-primary animate-spin" />,
   };

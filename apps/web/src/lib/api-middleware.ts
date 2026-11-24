@@ -13,22 +13,6 @@ import { headers } from "next/headers";
 import { checkPersistentRateLimit } from "./production-guardrails";
 import { getTrustedProxyClientIP } from "./request-ip";
 
-// ===========================================
-// TYPES
-// ===========================================
-
-export interface AuthenticatedRequest extends NextRequest {
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-  };
-  session?: {
-    id: string;
-    expiresAt: Date;
-  };
-}
-
 interface RateLimitConfig {
   windowMs: number;      // Time window in milliseconds
   maxRequests: number;   // Max requests per window
@@ -45,7 +29,7 @@ interface RateLimitConfig {
 /**
  * Get client IP from request
  */
-export function getClientIP(request: NextRequest): string {
+function getClientIP(request: NextRequest): string {
   return getTrustedProxyClientIP(request.headers);
 }
 
@@ -87,7 +71,7 @@ export async function verifySession(): Promise<{
 /**
  * Require authentication - returns error response if not authenticated
  */
-export async function requireAuth(): Promise<
+async function requireAuth(): Promise<
   | { authenticated: true; user: { id: string; email: string; name: string }; session: { id: string; expiresAt: Date } }
   | { authenticated: false; response: NextResponse }
 > {
@@ -176,7 +160,7 @@ export const RATE_LIMITS = {
  * Apply rate limiting to a request
  * Returns error response if limit exceeded
  */
-export async function applyRateLimit(
+async function applyRateLimit(
   request: NextRequest,
   config: RateLimitConfig
 ): Promise<{ allowed: true } | { allowed: false; response: NextResponse }> {

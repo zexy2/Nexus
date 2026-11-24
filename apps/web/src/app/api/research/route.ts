@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
+import { internalError } from "@/lib/api-response";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { enforceAiBudget } from "@/lib/production-guardrails";
 import { searchWeb } from "@/lib/ai/tavily";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { getUserModelConfig } from "@/lib/ai/model-config";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 
 /**
@@ -52,13 +53,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const aiBudget = await enforceAiBudget({
-      userId: protection.user.id,
-      email: protection.user.email,
-      kind: "research",
-    });
-    if (!aiBudget.ok) return aiBudget.response;
-
     const access = await requireWorkspaceAccess(
       protection.user.id,
       typeof workspaceId === "string" ? workspaceId : undefined
@@ -66,6 +60,14 @@ export async function POST(request: NextRequest) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
+
+    // Budget is consumed only after the request is valid and authorized.
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "research",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const [workspaceContext, webResult, modelConfig] = await Promise.all([
       useDocSearch ? getRAGContext(query, access.workspaceId) : Promise.resolve(""),
@@ -89,10 +91,18 @@ export async function POST(request: NextRequest) {
       webContext && `WEB SOURCES:\n${webContext}`,
     ].filter(Boolean).join("\n\n---\n\n");
 
-    const result = await generateText({
+    const result = await generateTextTraced({
       model: modelConfig.model,
-      system: "You are a research assistant. Separate verified facts from inference, state uncertainty, and cite only the supplied web URLs. Never invent a source.",
+      instructions: "You are a research assistant. Separate verified facts from inference, state uncertainty, and cite only the supplied web URLs. Never invent a source.",
       prompt: `Research question: ${query}\n\n${context || "No external or workspace sources were requested. Provide an analysis and explicitly state that no sources were used."}`,
+    }, {
+      name: "research",
+      agentType: "research",
+      userId: protection.user.id,
+      workspaceId: access.workspaceId,
+      modelName: modelConfig.modelName,
+      provider: modelConfig.provider,
+      input: query,
     });
 
     return NextResponse.json({
@@ -109,11 +119,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }
 
@@ -170,10 +176,6 @@ export async function GET(request: NextRequest) {
       results: results.results,
     });
   } catch (error) {
-    console.error("[Research API] Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Research API", error, { headers: request.headers });
   }
 }

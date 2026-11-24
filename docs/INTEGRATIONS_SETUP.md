@@ -16,8 +16,8 @@ LINEAR_REDIRECT_URI=http://localhost:3000/api/integrations/linear/callback
 Production example:
 
 ```bash
-APP_URL=https://nexus.129-154-244-110.sslip.io
-LINEAR_REDIRECT_URI=https://nexus.129-154-244-110.sslip.io/api/integrations/linear/callback
+APP_URL=https://nexus.zekiakgul.dev
+LINEAR_REDIRECT_URI=https://nexus.zekiakgul.dev/api/integrations/linear/callback
 ```
 
 Provider URLs:

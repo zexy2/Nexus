@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 ENV_FILE="${ENV_FILE:-apps/web/.env.local}"
+CLI_WEB_PORT="${WEB_PORT:-}"
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is required but was not found."
@@ -45,6 +46,21 @@ export TEMPORAL_NAMESPACE="${TEMPORAL_NAMESPACE:-default}"
 export NEXT_PUBLIC_APP_URL="${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
 export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export AUTH_TRUSTED_ORIGINS="${AUTH_TRUSTED_ORIGINS:-http://localhost:3000}"
+
+# A second local app may already own the default port. Keep the caller's
+# explicit port, then make all browser-facing URLs agree with the selected
+# Nexus port so auth cookies and callbacks do not target a different origin.
+if [ -n "$CLI_WEB_PORT" ]; then
+  export WEB_PORT="$CLI_WEB_PORT"
+else
+  WEB_PORT="$(printf '%s' "$NEXT_PUBLIC_APP_URL" | sed -nE 's#^https?://[^:]+:([0-9]+).*$#\1#p')"
+  export WEB_PORT="${WEB_PORT:-3000}"
+fi
+export NEXT_PUBLIC_APP_URL="http://localhost:${WEB_PORT}"
+export BETTER_AUTH_URL="http://localhost:${WEB_PORT}"
+export AUTH_TRUSTED_ORIGINS="http://localhost:${WEB_PORT}"
+export PORT="$WEB_PORT"
+export DEV_LOCAL_KILL_PORTS="${DEV_LOCAL_KILL_PORTS:-true}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-local-dev-secret-change-me}"
 # Shared secret for the realtime collaboration server (web issues tokens, the
 # collab server verifies them). Both must match; the collab server refuses to
@@ -159,6 +175,49 @@ container_env() {
 
 container_host_port() {
   docker port "$1" 5432/tcp 2>/dev/null | awk -F: 'NR == 1 { print $NF }'
+}
+
+port_belongs_to_repo() {
+  local port="$1"
+  local pid
+  local command
+
+  while read -r pid; do
+    [ -n "$pid" ] || continue
+    command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ "$command" != *"$ROOT_DIR"* ]]; then
+      return 1
+    fi
+  done < <(port_pids "$port")
+
+  return 0
+}
+
+select_web_port() {
+  if ! port_in_use "$WEB_PORT"; then
+    return 0
+  fi
+
+  if [ "$DEV_LOCAL_KILL_PORTS" = "true" ] && port_belongs_to_repo "$WEB_PORT"; then
+    stop_port_listeners "$WEB_PORT" "web"
+    return 0
+  fi
+
+  local candidate
+  for candidate in $(seq "$((WEB_PORT + 1))" "$((WEB_PORT + 10))"); do
+    if ! port_in_use "$candidate"; then
+      echo "Port ${WEB_PORT} is already in use by another process; using ${candidate} for Nexus."
+      WEB_PORT="$candidate"
+      export WEB_PORT PORT
+      export NEXT_PUBLIC_APP_URL="http://localhost:${WEB_PORT}"
+      export BETTER_AUTH_URL="http://localhost:${WEB_PORT}"
+      export AUTH_TRUSTED_ORIGINS="http://localhost:${WEB_PORT}"
+      return 0
+    fi
+  done
+
+  echo "No free web port found near ${WEB_PORT}."
+  exit 1
 }
 
 database_password_works() {
@@ -291,17 +350,26 @@ if [ ! -d node_modules ]; then
   pnpm install
 fi
 
+if ! timeout 10s docker info >/dev/null 2>&1; then
+  echo "Docker Desktop is installed but the Docker daemon is unavailable."
+  echo "Open Docker Desktop, wait until it reports running, then retry pnpm dev:local."
+  exit 1
+fi
+
 if [ "${DEV_LOCAL_KILL_PORTS:-true}" = "true" ]; then
   stop_stale_repo_processes
-  stop_port_listeners 3000 "web"
+  select_web_port
   stop_port_listeners 1234 "collaboration"
 else
-  wait_for_port_free 3000 "web" || exit 1
+  if port_in_use "$WEB_PORT"; then
+    echo "Port ${WEB_PORT} is already in use. Set WEB_PORT to another free port."
+    exit 1
+  fi
   wait_for_port_free 1234 "collaboration" || exit 1
 fi
 
 echo "Starting Docker services on Postgres port ${POSTGRES_PORT}..."
-docker compose up -d postgres temporal temporal-ui jaeger
+timeout 120s docker compose up -d postgres temporal temporal-ui jaeger
 
 actual_postgres_user="$(container_env nexus-postgres POSTGRES_USER || true)"
 actual_postgres_db="$(container_env nexus-postgres POSTGRES_DB || true)"
@@ -319,7 +387,7 @@ resolve_database_password
 verify_database_connection
 
 echo "Ensuring Temporal uses the verified database password..."
-docker compose up -d --force-recreate temporal temporal-ui
+timeout 120s docker compose up -d --force-recreate temporal temporal-ui
 
 echo "Preparing database..."
 if local_schema_exists_without_migration_history; then

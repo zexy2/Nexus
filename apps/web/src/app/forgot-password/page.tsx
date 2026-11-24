@@ -13,8 +13,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, Sparkles, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { useLocale } from "@/lib/i18n/provider";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 export default function ForgotPasswordPage() {
   const { t } = useLocale();
@@ -39,7 +40,12 @@ export default function ForgotPasswordPage() {
       });
 
       if (!response.ok) {
-        const body = await response.json().catch(() => null) as { message?: string } | null;
+        const body = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+        // Production without an email provider: better-auth refuses reset
+        // requests instead of creating a link nobody can receive.
+        if (body?.code === "RESET_PASSWORD_DISABLED") {
+          throw new Error(t("auth.resetDisabled"));
+        }
         throw new Error(body?.message || t("auth.resetFailed"));
       }
 
@@ -57,7 +63,7 @@ export default function ForgotPasswordPage() {
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center">
-            <Sparkles className="size-6 text-primary-foreground" />
+            <NexusMark size={24} className="text-primary-foreground" />
           </div>
           <span className="text-2xl font-bold">Nexus</span>
         </div>

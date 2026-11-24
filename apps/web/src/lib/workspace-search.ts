@@ -12,7 +12,7 @@ export interface WorkspaceSearchResult {
   updatedAt: string;
 }
 
-export function searchScore(query: string, text: string): number {
+function searchScore(query: string, text: string): number {
   const queryLower = query.toLowerCase();
   const textLower = text.toLowerCase();
   const words = queryLower.split(/\s+/).filter((word) => word.length > 1);
@@ -51,7 +51,7 @@ export function createHighlight(content: string, query: string, maxLength = 150)
   return highlight;
 }
 
-export function extractTextFromContent(content: unknown): string {
+function extractTextFromContent(content: unknown): string {
   if (!content) return "";
   if (typeof content === "string") return content;
 

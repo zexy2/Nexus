@@ -10,6 +10,11 @@ import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { agentExecutions } from "@nexus/database/schema";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { runAgent } from "@/lib/ai/agent";
+import {
+  COMMAND_WORKFLOW_ID_PREFIX,
+  expireStaleCommandExecution,
+  startCommandHeartbeat,
+} from "@/lib/command-lease";
 
 export const runtime = "nodejs";
 
@@ -47,13 +52,6 @@ export async function POST(request: NextRequest) {
   if (!protection.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const aiBudget = await enforceAiBudget({
-    userId: protection.user.id,
-    email: protection.user.email,
-    kind: "chat",
-  });
-  if (!aiBudget.ok) return aiBudget.response;
 
   try {
     const body = await request.json();
@@ -93,15 +91,28 @@ export async function POST(request: NextRequest) {
       .orderBy(desc(agentExecutions.createdAt))
       .limit(1);
 
-    if (existing[0]?.status === "running" || existing[0]?.status === "pending") {
+    // A "running" row whose lease expired (worker recycled mid-run) is marked
+    // failed here, so this retry starts a fresh execution instead of being
+    // told forever that processing "already started".
+    const latest = existing[0] ? await expireStaleCommandExecution(existing[0]) : null;
+    if (latest?.status === "running" || latest?.status === "pending") {
       return NextResponse.json({
         success: true,
         commandId,
-        executionId: existing[0].id,
-        status: toWireStatus(existing[0].status),
+        executionId: latest.id,
+        status: toWireStatus(latest.status),
         message: "Command processing already started",
       });
     }
+
+    // Budget is consumed only for a valid, authorized request that actually
+    // starts a new execution (not for a retry of one already in flight).
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "chat",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
 
     const [execution] = await db
       .insert(agentExecutions)
@@ -116,8 +127,9 @@ export async function POST(request: NextRequest) {
           priority,
           metadata,
         },
-        temporalWorkflowId: `cmd-${commandId}`.slice(0, 255),
+        temporalWorkflowId: `${COMMAND_WORKFLOW_ID_PREFIX}${commandId}`.slice(0, 255),
         startedAt: new Date(),
+        heartbeatAt: new Date(),
       })
       .returning();
 
@@ -185,19 +197,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [execution] = await db
+    const [latest] = await db
       .select()
       .from(agentExecutions)
       .where(commandStatusWhere(commandId, protection.user.id))
       .orderBy(desc(agentExecutions.createdAt))
       .limit(1);
 
-    if (!execution) {
+    if (!latest) {
       return NextResponse.json(
         { error: "Command not found" },
         { status: 404 }
       );
     }
+
+    const execution = await expireStaleCommandExecution(latest);
 
     return NextResponse.json({
       status: toWireStatus(execution.status),
@@ -223,14 +237,23 @@ async function processCommandAsync(input: {
   userId: string;
 }) {
   const startTime = Date.now();
+  const stopHeartbeat = startCommandHeartbeat(input.executionId);
+  // Terminal writes only apply while the row is still "running": if the lease
+  // already expired and the row was marked failed (and possibly retried), a
+  // late finish must not overwrite that.
+  const stillRunning = and(
+    eq(agentExecutions.id, input.executionId),
+    eq(agentExecutions.status, "running")
+  );
 
   try {
-    const { model } = await getUserModelConfig(input.userId);
+    const { model, modelName, provider } = await getUserModelConfig(input.userId);
     const result = await runAgent({
       model,
       messages: [{ role: "user", content: input.command }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      trace: { name: "commands.process", modelName, provider },
     });
 
     const output: CommandExecutionOutput = {
@@ -248,7 +271,7 @@ async function processCommandAsync(input: {
         output: output as Record<string, unknown>,
         completedAt: new Date(),
       })
-      .where(eq(agentExecutions.id, input.executionId));
+      .where(stillRunning);
 
     await writeAuditLog({
       userId: input.userId,
@@ -267,7 +290,7 @@ async function processCommandAsync(input: {
         errorMessage: message,
         completedAt: new Date(),
       })
-      .where(eq(agentExecutions.id, input.executionId));
+      .where(stillRunning);
 
     await writeAuditLog({
       userId: input.userId,
@@ -280,5 +303,7 @@ async function processCommandAsync(input: {
         error: message,
       },
     });
+  } finally {
+    stopHeartbeat();
   }
 }

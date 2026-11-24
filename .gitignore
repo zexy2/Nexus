@@ -36,6 +36,7 @@ out/
 !.vscode/extensions.json
 !.vscode/*.example
 .idea/
+.claude/
 *.swp
 *.swo
 *~

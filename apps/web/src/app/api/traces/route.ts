@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(session.user.email)) {
+  if (!isAdminEmail(session.user.email, session.user.emailVerified)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

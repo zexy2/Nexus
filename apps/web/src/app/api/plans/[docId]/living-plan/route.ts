@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
+import { expirePendingChangeSetIfOrphaned } from "@/lib/change-set-recovery";
 
 export const runtime = "nodejs";
 
@@ -35,10 +36,17 @@ export async function GET(
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
-  const pendingChangeSet = await db.query.changeSets.findFirst({
+  const pendingCandidate = await db.query.changeSets.findFirst({
     where: and(eq(changeSets.docId, docId), eq(changeSets.status, "pending")),
     orderBy: [desc(changeSets.createdAt)],
   });
+  // Cheap, DB-only expiry for reviews past their 72 h window (no Temporal call
+  // on this hot read path; analyze-change also checks workflow liveness).
+  const pendingChangeSet =
+    pendingCandidate &&
+    (await expirePendingChangeSetIfOrphaned(pendingCandidate, { checkWorkflow: false }))
+      ? undefined
+      : pendingCandidate;
 
   const acceptedVersion = await db.query.planVersions.findFirst({
     where: and(eq(planVersions.docId, docId), eq(planVersions.status, "accepted")),

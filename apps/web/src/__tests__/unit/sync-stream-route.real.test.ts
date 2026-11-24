@@ -18,7 +18,12 @@ vi.mock("@/lib/workspace-auth", () => ({
   getAccessibleWorkspaceIds: (...a: unknown[]) => getAccessibleWorkspaceIds(...a),
 }));
 
-const listen = vi.fn(async () => ({ unlisten: vi.fn(async () => {}) }));
+let notify: ((payload: string) => void) | null = null;
+const unlisten = vi.fn(async () => {});
+const listen = vi.fn(async (_channel: string, onNotify: (payload: string) => void) => {
+  notify = onNotify;
+  return { unlisten };
+});
 const end = vi.fn(async () => {});
 const postgresFactory = vi.fn(() => ({ listen, end }));
 vi.mock("postgres", () => ({ default: (...a: unknown[]) => postgresFactory(...a) }));
@@ -61,5 +66,50 @@ describe("GET /api/sync/stream (real handler)", () => {
     expect(listen).toHaveBeenCalledWith("nexus_changes", expect.any(Function));
 
     await reader.cancel(); // triggers stream cancel -> cleanup
+  });
+});
+
+async function readText(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const { value } = await reader.read();
+  return new TextDecoder().decode(value);
+}
+
+async function openStream() {
+  const res = await GET();
+  const reader = res.body!.getReader();
+  expect(await readText(reader)).toContain("event: ready");
+  // let start() finish subscribing
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  return reader;
+}
+
+describe("sync stream: one Postgres connection per client (finding)", () => {
+  it("shares a single LISTEN connection across clients and fans out per workspace scope", async () => {
+    getAccessibleWorkspaceIds.mockResolvedValueOnce(["ws-1"]).mockResolvedValueOnce(["ws-2"]);
+    const a = await openStream();
+    const b = await openStream();
+
+    expect(postgresFactory).toHaveBeenCalledTimes(1);
+    expect(listen).toHaveBeenCalledTimes(1);
+
+    notify!(JSON.stringify({ workspaceId: "ws-2" }));
+    expect(await readText(b)).toContain('"workspaceId":"ws-2"');
+
+    notify!(JSON.stringify({ workspaceId: "ws-1" }));
+    expect(await readText(a)).toContain('"workspaceId":"ws-1"');
+
+    // Closing one client keeps the shared connection open for the other.
+    await a.cancel();
+    expect(end).not.toHaveBeenCalled();
+
+    // Last client leaving closes it.
+    await b.cancel();
+    expect(unlisten).toHaveBeenCalledTimes(1);
+    expect(end).toHaveBeenCalledTimes(1);
+
+    // A new client after teardown opens a fresh connection.
+    const c = await openStream();
+    expect(postgresFactory).toHaveBeenCalledTimes(2);
+    await c.cancel();
   });
 });

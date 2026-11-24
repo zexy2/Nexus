@@ -7,7 +7,7 @@
  * server-managed in v1 (BYOK is disabled). The `any` model type is required
  * because AI SDK model types vary between providers.
  */
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGoogle } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { db } from "@/lib/db";
@@ -15,16 +15,16 @@ import { userSettings } from "@nexus/database/schema";
 import { eq } from "drizzle-orm";
 import { getOllamaConfig, isLocalOnly } from "@/lib/ai/providers";
 
-export type ModelProvider = "gemini" | "openai" | "anthropic" | "groq" | "ollama";
+type ModelProvider = "gemini" | "openai" | "anthropic" | "groq" | "ollama";
 
-export interface ModelConfig {
+interface ModelConfig {
   model: any;
   modelName: string;
   provider: ModelProvider;
 }
 
 // Configure AI providers - Server defaults (fallback)
-const gemini = createGoogleGenerativeAI({
+const gemini = createGoogle({
   apiKey: process.env.GEMINI_API_KEY,
 });
 

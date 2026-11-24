@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      # Node >= 25 no longer ships corepack, which the Dockerfile uses
+      # (`corepack enable`). Node 26 also adds a built-in global
+      # `localStorage` that breaks the jsdom unit tests. Moving past Node 24
+      # needs a planned migration (install pnpm without corepack, bump CI
+      # node-version, fix the test env) rather than a base-image bump. See #56.
+      - dependency-name: node
+        versions: [">=25"]
