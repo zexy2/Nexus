@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Prunes append-only bookkeeping tables that otherwise grow forever.
+#
+# workflow_activity_receipts holds idempotency receipts for activity retries.
+# A receipt is only needed while its workflow can still retry the activity
+# (plan-impact reviews wait at most 72h), so rows older than
+# RECEIPT_RETENTION_DAYS (default 30) are safe to delete.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${ENV_FILE:-.env.production}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+LOG_DIR="${LOG_DIR:-logs/maintenance}"
+RECEIPT_RETENTION_DAYS="${RECEIPT_RETENTION_DAYS:-30}"
+CLEANUP_LOG_RETENTION_DAYS="${CLEANUP_LOG_RETENTION_DAYS:-30}"
+
+source "$SCRIPT_DIR/lib/load-env.sh"
+load_env_values "$ENV_FILE" POSTGRES_USER POSTGRES_DB
+
+if ! [[ "$RECEIPT_RETENTION_DAYS" =~ ^[0-9]+$ ]] || (( RECEIPT_RETENTION_DAYS < 7 )); then
+  echo "RECEIPT_RETENTION_DAYS must be an integer >= 7 (got '$RECEIPT_RETENTION_DAYS')." >&2
+  exit 1
+fi
+
+mkdir -p "$LOG_DIR"
+log_file="$LOG_DIR/db-cleanup-$(date +%F).log"
+timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+# -At prints only the DELETE command tag ("DELETE <n>").
+result="$(
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
+    psql -U "${POSTGRES_USER:-nexus}" -d "${POSTGRES_DB:-nexus}" -v ON_ERROR_STOP=1 -At <<SQL
+DELETE FROM workflow_activity_receipts
+WHERE created_at < now() - interval '$RECEIPT_RETENTION_DAYS days';
+SQL
+)"
+
+printf '%s workflow_activity_receipts retention=%sd result=%s\n' \
+  "$timestamp" "$RECEIPT_RETENTION_DAYS" "${result:-unknown}" >> "$log_file"
+echo "workflow_activity_receipts: ${result:-unknown} (older than $RECEIPT_RETENTION_DAYS days)"
+
+if [[ "$CLEANUP_LOG_RETENTION_DAYS" =~ ^[0-9]+$ ]] && (( CLEANUP_LOG_RETENTION_DAYS > 0 )); then
+  find "$LOG_DIR" -type f -name 'db-cleanup-*.log' -mtime "+$CLEANUP_LOG_RETENTION_DAYS" -delete
+fi

@@ -4,12 +4,13 @@
  * The current UI uses /api/chat. This route keeps the former SSE/JSON wire
  * format without maintaining a second provider stack or hard-coded model list.
  */
-import { generateText } from "ai";
+import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
 import { runAgent } from "@/lib/ai/agent";
+import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { aiQuotaResponse, isAiQuotaError } from "@/lib/ai/quota";
@@ -90,13 +91,6 @@ async function prepareRequest(request: NextRequest): Promise<
     };
   }
 
-  const budget = await enforceAiBudget({
-    userId: authorized.value.userId,
-    email: authorized.value.email,
-    kind: "chat",
-  });
-  if (!budget.ok) return { ok: false, response: budget.response };
-
   const access = await requireWorkspaceAccess(
     authorized.value.userId,
     body.context?.workspaceId
@@ -107,6 +101,14 @@ async function prepareRequest(request: NextRequest): Promise<
       response: NextResponse.json({ error: access.error }, { status: access.status }),
     };
   }
+
+  // Budget is consumed only after validation and workspace authorization.
+  const budget = await enforceAiBudget({
+    userId: authorized.value.userId,
+    email: authorized.value.email,
+    kind: "chat",
+  });
+  if (!budget.ok) return { ok: false, response: budget.response };
 
   try {
     const modelConfig = await getUserModelConfig(authorized.value.userId);
@@ -121,16 +123,15 @@ async function prepareRequest(request: NextRequest): Promise<
       },
     };
   } catch (error) {
+    const requestId = logInternalError("Agents model config", error, request.headers);
     return {
       ok: false,
       response: NextResponse.json(
         {
           error: "AI_PROVIDER_UNAVAILABLE",
-          message:
-            error instanceof Error
-              ? error.message
-              : "No server-managed AI provider is configured",
+          message: "No server-managed AI provider is configured",
           retryable: false,
+          requestId,
         },
         { status: 503 }
       ),
@@ -174,17 +175,28 @@ async function executeRequest(input: PreparedRequest) {
       messages: [{ role: "user", content: input.message }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      trace: { name: "agents.auto", modelName, provider },
     });
     message = result.text;
     toolsUsed = result.toolsUsed;
   } else {
     const capability = CHAT_CAPABILITIES[input.mode];
     const context = await buildCapabilityContext(input);
-    const result = await generateText({
-      model,
-      system: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
-      prompt: input.message,
-    });
+    const result = await generateTextTraced(
+      {
+        model,
+        instructions: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
+        prompt: input.message,
+      },
+      {
+        name: `agents.${input.mode}`,
+        agentType: "chat",
+        userId: input.userId,
+        workspaceId: input.workspaceId,
+        modelName,
+        provider,
+      }
+    );
     message = result.text;
   }
 

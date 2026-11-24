@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { internalError } from "@/lib/api-response";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
@@ -146,14 +147,10 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("[Vector Search] Error:", error);
     if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
       return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Vector Search", error, { headers: request.headers });
   }
 }
 
@@ -297,13 +294,9 @@ export async function PUT(request: NextRequest) {
       chunksCreated: chunks.length,
     });
   } catch (error) {
-    console.error("[Vector Index] Error:", error);
     if (error instanceof Error && error.message.includes("OPENAI_API_KEY")) {
       return aiUnavailableResponse("OpenAI embeddings are not configured on this server.");
     }
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
-    );
+    return internalError("Vector Index", error, { headers: request.headers });
   }
 }

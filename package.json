@@ -9,6 +9,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
     "type-check": "turbo type-check",
     "db:push": "pnpm --filter @nexus/database db:push",
     "db:migrate": "node scripts/baseline-drizzle-migrations.mjs && pnpm db:migrate:raw",
@@ -16,6 +17,7 @@
     "backup:postgres": "bash scripts/backup-postgres.sh",
     "maintenance:health": "bash scripts/maintenance-health-check.sh",
     "maintenance:docker-cleanup": "bash scripts/maintenance-docker-cleanup.sh",
+    "maintenance:db-cleanup": "bash scripts/maintenance-db-cleanup.sh",
     "maintenance:install-vps": "bash scripts/install-vps-maintenance.sh",
     "smoke:prod": "bash scripts/smoke-prod.sh",
     "smoke:integrations": "bash scripts/smoke-integrations.sh",
@@ -32,7 +34,7 @@
   },
   "packageManager": "pnpm@10.26.2",
   "engines": {
-    "node": ">=20"
+    "node": ">=24 <25"
   },
   "dependencies": {
     "postgres": "^3.4.9"

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles } from "lucide-react";
+import { Menu, X } from "lucide-react";
+import { NexusMark } from "@/components/shared/nexus-mark";
 
 const navLinks = [
   { href: "#proof", label: "Proof" },
@@ -19,7 +20,6 @@ export function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
-  const [logoGlow, setLogoGlow] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   // ── Scroll morph ──────────────────────────────────────────────
@@ -30,16 +30,6 @@ export function Navigation() {
 
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // ── Logo glow pulse on mount ──────────────────────────────────
-  useEffect(() => {
-    const timer = setTimeout(() => setLogoGlow(true), 400);
-    const off = setTimeout(() => setLogoGlow(false), 1800);
-    return () => {
-      clearTimeout(timer);
-      clearTimeout(off);
-    };
   }, []);
 
   // ── Scroll spy with IntersectionObserver ──────────────────────
@@ -102,17 +92,9 @@ export function Navigation() {
             <div
               className={`rounded-xl flex items-center justify-center transition-all duration-500 ${isScrolled ? "size-7 bg-white" : "size-9 bg-white"
                 }`}
-              style={{
-                boxShadow: logoGlow
-                  ? isScrolled
-                    ? "0 0 16px 4px rgba(255,255,255,0.35)"
-                    : "0 0 20px 6px rgba(255,255,255,0.35)"
-                  : "none",
-                transition:
-                  "box-shadow 0.8s cubic-bezier(0.4,0,0.2,1), width 0.5s, height 0.5s, background-color 0.5s",
-              }}
             >
-              <Sparkles
+              <NexusMark
+                size={isScrolled ? 16 : 21}
                 className={`transition-all duration-500 ${isScrolled ? "size-4 text-black" : "size-5 text-black"
                   }`}
               />

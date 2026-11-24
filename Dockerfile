@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 WORKDIR /app
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -40,4 +40,10 @@ ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app /app
 USER node
 EXPOSE 3000
+# Web health: only the status code matters (anonymous /api/health returns a
+# minimal body; 503 only when the app reports itself unhealthy). The slim base
+# has no curl, so use node's fetch. The worker and collaboration services reuse
+# this image with another CMD, so compose overrides/disables this check there.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=5 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
 CMD ["pnpm", "--filter", "@nexus/web", "start"]

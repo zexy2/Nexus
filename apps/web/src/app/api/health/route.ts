@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { externalWriteOperations, workerHeartbeats } from "@nexus/database/schema";
-import { and, desc, inArray, lt, sql } from "drizzle-orm";
-import { getAiProviderStatus } from "@/lib/production-guardrails";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { timingSafeEqual } from "node:crypto";
+import { getAiProviderStatus, isVerifiedAdminUser } from "@/lib/production-guardrails";
+import { verifySession } from "@/lib/api-middleware";
 import { getIntegrationProviderConfig } from "@/lib/integrations/impact-graph";
 
 type IntegrationProviderName = "github" | "linear";
@@ -26,8 +28,62 @@ function parseRequiredIntegrationProviders(): IntegrationProviderName[] {
   return process.env.REQUIRE_INTEGRATIONS_HEALTH === "true" ? ["github"] : [];
 }
 
+function tokenMatches(expected: string, provided: string) {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(provided);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/**
+ * Detailed health (latencies, configuration, missing env names, queue sizes,
+ * environment, commit) is only for operators: requests carrying
+ * HEALTH_CHECK_TOKEN (`Authorization: Bearer <token>` or `x-health-token`)
+ * or a verified admin session. Everyone else gets per-service status only.
+ */
+async function canSeeDetails(request: Request): Promise<boolean> {
+  const token = process.env.HEALTH_CHECK_TOKEN?.trim();
+  if (token) {
+    const authorization = request.headers.get("authorization") || "";
+    const provided =
+      request.headers.get("x-health-token") ||
+      (authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "");
+    if (provided && tokenMatches(token, provided)) return true;
+  }
+  // Only consult the session store when the caller sent cookies at all, so
+  // unauthenticated probes stay cheap.
+  if (!request.headers.get("cookie")) return false;
+  const session = await verifySession();
+  return session ? isVerifiedAdminUser(session.user.id, session.user.email) : false;
+}
+
+type DetailedHealth = {
+  status: string;
+  timestamp: string;
+  services: Record<string, { status: string } & Record<string, unknown>>;
+} & Record<string, unknown>;
+
+/** Public view: overall + per-service status, no configuration or metrics. */
+function toPublicHealth(health: DetailedHealth) {
+  return {
+    status: health.status,
+    timestamp: health.timestamp,
+    services: Object.fromEntries(
+      Object.entries(health.services).map(([name, service]) => [name, { status: service.status }])
+    ),
+  };
+}
+
 // GET - Health check endpoint
-export async function GET() {
+export async function GET(request: Request) {
+  const health = await collectHealth();
+  const detailed = health.status !== "unhealthy" && (await canSeeDetails(request).catch(() => false));
+  return Response.json(detailed ? health : toPublicHealth(health), {
+    status: health.status === "unhealthy" ? 503 : 200,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
+
+async function collectHealth(): Promise<DetailedHealth> {
   try {
     const startTime = Date.now();
     
@@ -88,13 +144,27 @@ export async function GET() {
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(externalWriteOperations)
-            .where(inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"])),
+            .where(
+              or(
+                inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                and(
+                  eq(externalWriteOperations.status, "succeeded"),
+                  inArray(externalWriteOperations.syncStatus, ["pending", "running", "failed_retryable"])
+                )
+              )
+            ),
           db
             .select({ count: sql<number>`count(*)::int` })
             .from(externalWriteOperations)
             .where(
               and(
-                inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                or(
+                  inArray(externalWriteOperations.status, ["pending", "running", "failed_retryable"]),
+                  and(
+                    eq(externalWriteOperations.status, "succeeded"),
+                    inArray(externalWriteOperations.syncStatus, ["pending", "running", "failed_retryable"])
+                  )
+                ),
                 lt(externalWriteOperations.updatedAt, staleBefore)
               )
             ),
@@ -174,7 +244,7 @@ export async function GET() {
         ? "healthy"
         : "degraded";
 
-    return Response.json({
+    return {
       status: overallStatus,
       timestamp: new Date().toISOString(),
       version: process.env.npm_package_version || "1.0.0",
@@ -244,16 +314,14 @@ export async function GET() {
       },
       uptime: process.uptime(),
       environment: process.env.NODE_ENV || "development",
-    });
+    };
   } catch (error) {
     console.error("Health check failed:", error);
-    return Response.json(
-      {
-        status: "unhealthy",
-        timestamp: new Date().toISOString(),
-        error: "Health check failed",
-      },
-      { status: 503 }
-    );
+    return {
+      status: "unhealthy",
+      timestamp: new Date().toISOString(),
+      services: {},
+      error: "Health check failed",
+    };
   }
 }

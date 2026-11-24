@@ -89,13 +89,21 @@ describe("POST /api/agents — auth + budget gate (H1)", () => {
     expect(enforceAiBudget).not.toHaveBeenCalled();
   });
 
-  it("rejects an over-budget user before doing any work", async () => {
+  it("rejects an over-budget user before doing any AI work", async () => {
     getSession.mockResolvedValue({ user: { id: "user-1", email: "u@x.com" } });
     const limited = new Response(JSON.stringify({ error: "RATE_LIMIT_EXCEEDED" }), { status: 429 });
     enforceAiBudget.mockResolvedValue({ ok: false, response: limited });
     const res = await POST(agentReq({ message: "hi" }));
     expect(res.status).toBe(429);
-    expect(requireWorkspaceAccess).not.toHaveBeenCalled();
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("AI budget charged before authorization (finding): a forbidden workspace does not consume budget", async () => {
+    getSession.mockResolvedValue({ user: { id: "user-1", email: "u@x.com" } });
+    requireWorkspaceAccess.mockResolvedValue({ ok: false, status: 403, error: "Workspace access denied" });
+    const res = await POST(agentReq({ message: "hi", context: { workspaceId: "victim-workspace" } }));
+    expect(res.status).toBe(403);
+    expect(enforceAiBudget).not.toHaveBeenCalled();
   });
 
   it("does not consume AI budget for an invalid request body", async () => {

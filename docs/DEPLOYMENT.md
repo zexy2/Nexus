@@ -27,22 +27,52 @@ NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
 REQUIRE_INTEGRATIONS_HEALTH=true
 REQUIRE_INTEGRATION_PROVIDERS=github
+CSP_ENFORCE=true
 AI_ENABLED=true
 GEMINI_API_KEY=
 OPENAI_API_KEY=
 TAVILY_API_KEY=
-AI_GLOBAL_DAILY_LIMIT=25
-AI_GLOBAL_PER_MINUTE_LIMIT=2
-AI_USER_DAILY_LIMIT=5
-AI_USER_PER_MINUTE_LIMIT=1
-AI_WORKFLOW_DAILY_LIMIT=2
-AI_CHAT_DAILY_LIMIT=3
+AI_GLOBAL_DAILY_LIMIT=5000
+AI_GLOBAL_PER_MINUTE_LIMIT=120
+AI_USER_DAILY_LIMIT=200
+AI_USER_PER_MINUTE_LIMIT=20
+AI_WORKFLOW_DAILY_LIMIT=50
+AI_CHAT_DAILY_LIMIT=200
 AI_DEMO_DAILY_LIMIT=3
 AI_DEMO_PER_MINUTE_LIMIT=1
 AI_DEMO_WORKFLOW_DAILY_LIMIT=2
 AI_DEMO_CHAT_DAILY_LIMIT=1
-AI_MAX_STEPS_PER_WORKFLOW=5
+AI_ADMIN_DAILY_LIMIT=400
+AI_ADMIN_PER_MINUTE_LIMIT=40
+AI_ADMIN_WORKFLOW_DAILY_LIMIT=100
+AI_ADMIN_CHAT_DAILY_LIMIT=400
+AI_MAX_STEPS_PER_WORKFLOW=4
+TRUSTED_PROXY_COUNT=1
+HEALTH_CHECK_TOKEN=generate-with-openssl-rand-hex-32
+WORKER_SHUTDOWN_GRACE_TIME=45 seconds
+ONBOARDING_LAUNCH_AT=
 ```
+
+Operational settings (all optional; defaults shown in `.env.production.example`):
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `TRUSTED_PROXY_COUNT` | web | Number of reverse proxies that append to `X-Forwarded-For` (Caddy/Nginx only = `1`, Cloudflare + Caddy = `2`). The client IP for rate limits and audit logs is taken that many hops from the right. Too low trusts a spoofable header; too high collapses everyone onto the proxy IP. Default `1`. |
+| `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
+| `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
+| `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+| `CSP_ENFORCE` | web | `true` enforces the Content-Security-Policy, `false` sends report-only. Empty/unset = enforce in production, report-only otherwise. |
+| `REQUIRE_INTEGRATION_PROVIDERS` | web | Comma list (`github`, `linear`) of providers whose missing credentials fail `/api/health`. Empty/unset = none required (unless legacy `REQUIRE_INTEGRATIONS_HEALTH=true`, which implies `github`). |
+| `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_PER_MINUTE_LIMIT` | web | Cost-runaway safety cap across ALL users. Defaults 5000/day, 120/min. |
+| `AI_USER_DAILY_LIMIT` / `AI_USER_PER_MINUTE_LIMIT` | web | Per regular verified user (applies to research/embedding calls). Defaults 200/day, 20/min. |
+| `AI_WORKFLOW_DAILY_LIMIT` / `AI_CHAT_DAILY_LIMIT` | web | Per-user per-feature daily caps. Defaults 50 and 200 (legacy `AI_WORKFLOWS_PER_DAY` / `AI_CHAT_MESSAGES_PER_DAY` still honoured as fallbacks). |
+| `AI_ADMIN_DAILY_LIMIT` / `AI_ADMIN_PER_MINUTE_LIMIT` / `AI_ADMIN_WORKFLOW_DAILY_LIMIT` / `AI_ADMIN_CHAT_DAILY_LIMIT` | web | Verified admins. Defaults 400/day, 40/min, 100 workflows/day, 400 chat/day. |
+| `AI_DEMO_DAILY_LIMIT` / `AI_DEMO_PER_MINUTE_LIMIT` / `AI_DEMO_WORKFLOW_DAILY_LIMIT` / `AI_DEMO_CHAT_DAILY_LIMIT` | web | Per temporary demo visitor. Defaults 3/day, 1/min, 2 workflows/day, 1 chat/day. |
+| `AI_MAX_STEPS_PER_WORKFLOW` | web, worker | Max steps per AI workflow. Default 4. |
+
+AI limit variables must be positive integers; empty or unset uses the default, an invalid value logs a warning and uses the default.
+
+`docker-compose.prod.yml` passes environment variables to each service explicitly, so a value in `.env.production` only reaches a container when the service's `environment:` block lists it.
 
 `GEMINI_API_KEY` is required for AI chat and workflows. `OPENAI_API_KEY` is only required for embeddings/RAG search. `TAVILY_API_KEY` is optional; web research returns a clear not-configured response when it is absent.
 
@@ -62,6 +92,32 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
+
+Container logs rotate at 20MB x 5 files per service (json-file driver); the setting only applies when a container is recreated (`up -d` after a compose change).
+
+### Updating a running deployment (deploy order)
+
+Roll out in this order so new code never runs against an old schema and the
+worker understands every workflow the new web can start:
+
+1. **Migrate** with the new image, before any new code serves traffic.
+   Migrations must stay backward compatible with the code still running.
+2. **Worker**: SIGTERM drains in-flight activities for
+   `WORKER_SHUTDOWN_GRACE_TIME`, then it restarts on the new workflow code.
+3. **Web and collaboration together**: they share `COLLAB_AUTH_SECRET` and the
+   collaboration token format, so do not run mismatched versions.
+
+```bash
+export APP_COMMIT_SHA="$(git rev-parse HEAD)"
+COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
+$COMPOSE build web worker collaboration
+$COMPOSE run --rm --no-deps web pnpm db:migrate   # 1. migrate
+$COMPOSE up -d --no-deps worker                   # 2. worker
+$COMPOSE up -d --no-deps web collaboration        # 3. web + collab
+SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
+```
+
+The block above under **Start** is for the first install only.
 
 Use migrations in production. `db:push` is local-development only and should not be part of a VPS deploy.
 `pnpm db:migrate` also performs a guarded one-time baseline when it detects an
@@ -119,6 +175,7 @@ Expected:
 - `pnpm smoke:prod` starts and completes one real task breakdown workflow from the generated document and verifies at least one task.
 - `pnpm smoke:prod` starts one Living Plan impact workflow, waits for a pending change set, applies selected proposals, and verifies the change set resolves as `applied` or `partially_applied`.
 - `/api/health` reports the deployed `commitSha` and warns when an external write remains non-terminal for more than five minutes.
+- Anonymous `/api/health` returns only overall and per-service `status`. Detailed output (commit, latencies, provider/integration configuration) requires `HEALTH_CHECK_TOKEN` (`x-health-token` header or `Authorization: Bearer`) or a verified admin session; the smoke and maintenance scripts send the token when it is set in `.env.production`.
 - For quota verification, temporarily set `AI_USER_DAILY_LIMIT=1`, restart web, and confirm the second AI request returns `429`.
 
 Retention note: `rate_limit_buckets` and `audit_logs` are intentionally simple for the portfolio demo. Before long-running public usage, add a scheduled cleanup for expired buckets and old audit rows.
@@ -137,7 +194,7 @@ For the public demo VPS, install the maintenance timers once:
 BASE_URL=https://your-domain.com pnpm maintenance:install-vps
 ```
 
-This installs three systemd timers:
+This installs four systemd timers:
 
 - `nexus-health-check.timer` runs every five minutes and calls `/api/health`.
   It does not call AI endpoints and does not create fake CPU/network load.
@@ -146,6 +203,15 @@ This installs three systemd timers:
 - `nexus-docker-cleanup.timer` runs a conservative weekly cleanup for old
   build cache, dangling images, and stopped containers. It does not prune
   volumes.
+- `nexus-db-cleanup.timer` runs daily (`scripts/maintenance-db-cleanup.sh`,
+  also `pnpm maintenance:db-cleanup`) and deletes `workflow_activity_receipts`
+  rows older than `RECEIPT_RETENTION_DAYS` (default 30, minimum 7). Receipts
+  only matter while a workflow can still retry the activity, and the longest
+  workflow wait is the 72h plan-impact review. Results are logged to
+  `logs/maintenance/db-cleanup-*.log`.
+
+Already-installed VPSes pick up a new timer by re-running
+`pnpm maintenance:install-vps`; it is idempotent.
 
 Verify restore periodically on a staging database and confirm `CREATE EXTENSION vector` exists.
 

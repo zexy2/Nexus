@@ -40,6 +40,26 @@ async function pollPendingChangeSet(page: Page, docId: string) {
   throw new Error("Plan impact workflow did not create a pending change set");
 }
 
+async function pollChangeSetTerminal(page: Page, changeSetId: string) {
+  const deadline = Date.now() + 180_000;
+  const terminalStatuses = new Set([
+    "applied",
+    "partially_applied",
+    "external_failed",
+    "already_resolved",
+  ]);
+
+  while (Date.now() < deadline) {
+    const response = await page.request.get(`/api/change-sets/${changeSetId}`);
+    expect(response.ok()).toBeTruthy();
+    const changeSet = await response.json() as { status: string };
+    if (terminalStatuses.has(changeSet.status)) return changeSet;
+    await page.waitForTimeout(5000);
+  }
+
+  throw new Error(`Change set ${changeSetId} did not resolve before timeout`);
+}
+
 test.describe("public demo production smoke", () => {
   test.skip(
     process.env.DEMO_E2E !== "true",
@@ -141,7 +161,7 @@ test.describe("public demo production smoke", () => {
       data: {},
     });
     expect(impactResponse.status()).toBe(202);
-    const impact = await impactResponse.json() as { workflowId: string };
+    await impactResponse.json();
     const changeSetId = await pollPendingChangeSet(page, documentId);
 
     const changeSetResponse = await page.request.get(`/api/change-sets/${changeSetId}`);
@@ -159,8 +179,8 @@ test.describe("public demo production smoke", () => {
       data: { selectedProposalIds },
     });
     expect(applyResponse.ok()).toBeTruthy();
-    const impactStatus = await pollWorkflow(page, impact.workflowId);
-    expect(impactStatus.status).toBe("completed");
+    const resolvedChangeSet = await pollChangeSetTerminal(page, changeSetId);
+    expect(["applied", "partially_applied"]).toContain(resolvedChangeSet.status);
 
     await page.goto("/dashboard/agents");
     await expect(page.getByText("Coding Agent Runs")).toBeVisible();

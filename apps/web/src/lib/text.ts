@@ -23,17 +23,3 @@ export function cleanDocTitle(raw: string | null | undefined, fallback = "Adsız
   title = title.replace(/\s+/g, " ").trim();
   return title || fallback;
 }
-
-/**
- * Derive a clean, single-line title from a block of (possibly markdown)
- * content — the first non-empty line, heading markers removed, truncated.
- */
-export function deriveTitleFromContent(content: string, maxLength = 80): string {
-  const firstLine = content
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  if (!firstLine) return "";
-  const cleaned = cleanDocTitle(firstLine, "");
-  return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 1).trimEnd()}…` : cleaned;
-}

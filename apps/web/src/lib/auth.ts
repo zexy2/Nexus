@@ -2,7 +2,14 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "@nexus/database/schema";
-import { actionEmailHtml, isEmailConfigured, sendEmail } from "./email";
+import { actionEmailHtml, canDeliverPasswordReset, isEmailConfigured, sendEmail } from "./email";
+import { beforeUserCreate } from "./auth-signup-guard";
+import { isPublicSignupEnabled } from "./production-guardrails";
+
+// When public signup is disabled, social providers may only sign in users that
+// already exist. `disableSignUp` is the provider-level switch; the
+// `databaseHooks.user.create.before` guard below is the authoritative backstop.
+const socialDisableSignUp = !isPublicSignupEnabled();
 
 const socialProviders = {
   ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
@@ -10,6 +17,7 @@ const socialProviders = {
         github: {
           clientId: process.env.GITHUB_CLIENT_ID,
           clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          disableSignUp: socialDisableSignUp,
         },
       }
     : {}),
@@ -18,6 +26,7 @@ const socialProviders = {
         google: {
           clientId: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          disableSignUp: socialDisableSignUp,
         },
       }
     : {}),
@@ -46,19 +55,24 @@ export const auth = betterAuth({
     // production sign-ups would be permanently locked out (verification on, no
     // mail provider). Configure RESEND_API_KEY to enforce it.
     requireEmailVerification: process.env.NODE_ENV === "production" && isEmailConfigured(),
-    sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
-      await sendEmail({
-        to: user.email,
-        subject: "Nexus — Şifre sıfırlama",
-        text: `Şifreni sıfırlamak için: ${url}`,
-        html: actionEmailHtml({
-          heading: "Şifre sıfırlama",
-          body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
-          ctaLabel: "Şifreyi sıfırla",
-          url,
-        }),
-      });
-    },
+    // Production without an email provider: no sender, so better-auth answers
+    // reset requests with RESET_PASSWORD_DISABLED instead of creating a token
+    // whose link could only end up in the logs.
+    sendResetPassword: canDeliverPasswordReset()
+      ? async ({ user, url }: { user: { email: string }; url: string }) => {
+          await sendEmail({
+            to: user.email,
+            subject: "Nexus — Şifre sıfırlama",
+            text: `Şifreni sıfırlamak için: ${url}`,
+            html: actionEmailHtml({
+              heading: "Şifre sıfırlama",
+              body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
+              ctaLabel: "Şifreyi sıfırla",
+              url,
+            }),
+          });
+        }
+      : undefined,
   },
   emailVerification: {
     sendOnSignUp: isEmailConfigured(),
@@ -78,6 +92,13 @@ export const auth = betterAuth({
     },
   },
   socialProviders,
+  databaseHooks: {
+    user: {
+      create: {
+        before: (user) => beforeUserCreate(user),
+      },
+    },
+  },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
@@ -90,6 +111,3 @@ export const auth = betterAuth({
   },
   trustedOrigins,
 });
-
-export type Session = typeof auth.$Infer.Session.session;
-export type User = typeof auth.$Infer.Session.user;

@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { type Task as SyncTask } from "@/lib/sync/zero";
 import { useLocalFirstContext } from "@/lib/sync/local-first";
+import { persistTaskMove } from "@/lib/sync/task-move";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   DndContext,
@@ -151,11 +152,11 @@ function fromSyncTask(t: SyncTask): Task {
 }
 
 // Column config
-const columns: { id: TaskStatus; title: string; color: string; icon: typeof Circle }[] = [
-  { id: "todo", title: "Yapılacak", color: "neutral", icon: Circle },
-  { id: "in_progress", title: "Devam Ediyor", color: "amber", icon: Clock },
-  { id: "in_review", title: "İncelemede", color: "blue", icon: GitPullRequestArrow },
-  { id: "done", title: "Tamamlandı", color: "emerald", icon: CheckCircle2 },
+const columns: { id: TaskStatus; color: string; icon: typeof Circle }[] = [
+  { id: "todo", color: "neutral", icon: Circle },
+  { id: "in_progress", color: "amber", icon: Clock },
+  { id: "in_review", color: "blue", icon: GitPullRequestArrow },
+  { id: "done", color: "emerald", icon: CheckCircle2 },
 ];
 
 const kanbanCollisionDetection: CollisionDetection = (args) => {
@@ -180,11 +181,11 @@ function getDragTargetStatus(overId: string | number | null | undefined, taskLis
 }
 
 // Priority config
-const priorityConfig: Record<TaskPriority, { label: string; color: string; icon: typeof Flag }> = {
-  low: { label: "Düşük", color: "bg-neutral-100 text-neutral-600", icon: Flag },
-  medium: { label: "Orta", color: "bg-blue-100 text-blue-600", icon: Flag },
-  high: { label: "Yüksek", color: "bg-amber-100 text-amber-600", icon: ArrowUpCircle },
-  urgent: { label: "Acil", color: "bg-red-100 text-red-600", icon: AlertCircle },
+const priorityConfig: Record<TaskPriority, { color: string; icon: typeof Flag }> = {
+  low: { color: "bg-neutral-100 text-neutral-600", icon: Flag },
+  medium: { color: "bg-blue-100 text-blue-600", icon: Flag },
+  high: { color: "bg-amber-100 text-amber-600", icon: ArrowUpCircle },
+  urgent: { color: "bg-red-100 text-red-600", icon: AlertCircle },
 };
 
 // Sortable Task Card
@@ -236,9 +237,9 @@ function SortableTaskCard({
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
-        "group rounded-xl border border-white/10 bg-white/[0.025] p-4 transition-all cursor-grab active:cursor-grabbing",
-        isDragging && "shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black",
-        !isDragging && "hover:border-white/20 hover:bg-white/[0.03]"
+        "group rounded-xl border border-border bg-foreground/[0.025] p-4 transition-all cursor-grab active:cursor-grabbing",
+        isDragging && "shadow-2xl ring-2 ring-foreground/30 ring-offset-2 ring-offset-background",
+        !isDragging && "hover:border-foreground/20 hover:bg-foreground/[0.03]"
       )}
     >
       {/* Header with drag handle */}
@@ -246,7 +247,7 @@ function SortableTaskCard({
         <button
           type="button"
           tabIndex={-1}
-          className="mt-1 p-1 -ml-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all cursor-grab active:cursor-grabbing"
+          className="mt-1 p-1 -ml-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-all cursor-grab active:cursor-grabbing"
         >
           <GripVertical className="w-4 h-4 text-muted-foreground" />
         </button>
@@ -275,7 +276,7 @@ function SortableTaskCard({
               {task.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2 py-0.5 bg-white/5 border border-white/10 text-muted-foreground text-[10px] rounded-full"
+                  className="px-2 py-0.5 bg-foreground/5 border border-border text-muted-foreground text-[10px] rounded-full"
                 >
                   {tag}
                 </span>
@@ -287,7 +288,7 @@ function SortableTaskCard({
             {task.requirements.slice(0, 3).map((requirement) => (
               <span
                 key={requirement.requirementId}
-                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 font-mono text-[10px] text-cyan-200"
+                className="inline-flex items-center gap-1 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 font-mono text-[10px] text-cyan-800 dark:text-cyan-200"
                 title={requirement.title}
               >
                 <Link2 className="size-2.5" />
@@ -298,11 +299,11 @@ function SortableTaskCard({
               className={cn(
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
                 task.alignmentStatus === "aligned" &&
-                  "border-emerald-400/20 bg-emerald-400/10 text-emerald-200",
+                  "border-emerald-400/20 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200",
                 task.alignmentStatus === "needs_review" &&
-                  "border-amber-400/20 bg-amber-400/10 text-amber-200",
+                  "border-amber-400/20 bg-amber-400/10 text-amber-800 dark:text-amber-200",
                 task.alignmentStatus === "orphaned" &&
-                  "border-white/10 bg-white/5 text-white/40"
+                  "border-border bg-foreground/5 text-foreground-faint"
               )}
             >
               {task.alignmentStatus === "needs_review" ? (
@@ -321,7 +322,7 @@ function SortableTaskCard({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/5">
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-border">
             <div className="flex items-center gap-2">
               {/* Priority */}
               <TooltipProvider>
@@ -330,10 +331,10 @@ function SortableTaskCard({
                     <span
                       className={cn(
                         "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium",
-                        task.priority === "low" && "bg-neutral-500/20 text-neutral-400",
-                        task.priority === "medium" && "bg-blue-500/20 text-blue-400",
-                        task.priority === "high" && "bg-amber-500/20 text-amber-400",
-                        task.priority === "urgent" && "bg-red-500/20 text-red-400"
+                        task.priority === "low" && "bg-neutral-500/20 text-muted-foreground",
+                        task.priority === "medium" && "bg-blue-500/20 text-blue-700 dark:text-blue-400",
+                        task.priority === "high" && "bg-amber-500/20 text-amber-700 dark:text-amber-400",
+                        task.priority === "urgent" && "bg-red-500/20 text-red-700 dark:text-red-400"
                       )}
                     >
                       <priority.icon className="w-3 h-3" />
@@ -349,7 +350,7 @@ function SortableTaskCard({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-foreground/10 text-foreground-secondary text-[10px] rounded-full font-medium">
                         <Sparkles className="w-3 h-3" />
                         Agent
                       </span>
@@ -371,17 +372,17 @@ function SortableTaskCard({
         {/* Actions */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all">
+            <button className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-all">
               <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 glass-premium border-white/10">
+          <DropdownMenuContent align="end" className="w-40 glass-premium border-border">
             <DropdownMenuItem
               onClick={() => onEdit(task)}
               className="flex items-center gap-2"
             >
               <Edit3 className="w-4 h-4" />
-              Düzenle
+              {t('common.edit')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -389,7 +390,7 @@ function SortableTaskCard({
               className="flex items-center gap-2 text-red-600 focus:text-red-600"
             >
               <Trash2 className="w-4 h-4" />
-              Sil
+              {t('common.delete')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -405,7 +406,7 @@ function TaskCardOverlay({ task }: { task: Task }) {
   const t = useT();
 
   return (
-    <div className="w-[280px] rounded-xl border border-white/20 bg-background p-4 shadow-2xl ring-2 ring-white/30 ring-offset-2 ring-offset-black">
+    <div className="w-[280px] rounded-xl border border-foreground/20 bg-background p-4 shadow-2xl ring-2 ring-foreground/30 ring-offset-2 ring-offset-background">
       <div className="flex items-start gap-2">
         <div className="p-1 -ml-1">
           <GripVertical className="w-4 h-4 text-muted-foreground" />
@@ -419,21 +420,21 @@ function TaskCardOverlay({ task }: { task: Task }) {
               {task.description}
             </p>
           )}
-          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-white/10">
+          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-border">
             <span
               className={cn(
                 "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium",
-                task.priority === "low" && "bg-neutral-500/20 text-neutral-400",
-                task.priority === "medium" && "bg-blue-500/20 text-blue-400",
-                task.priority === "high" && "bg-amber-500/20 text-amber-400",
-                task.priority === "urgent" && "bg-red-500/20 text-red-400"
+                task.priority === "low" && "bg-neutral-500/20 text-muted-foreground",
+                task.priority === "medium" && "bg-blue-500/20 text-blue-700 dark:text-blue-400",
+                task.priority === "high" && "bg-amber-500/20 text-amber-700 dark:text-amber-400",
+                task.priority === "urgent" && "bg-red-500/20 text-red-700 dark:text-red-400"
               )}
             >
               <priority.icon className="w-3 h-3" />
               {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
             </span>
             {isAI && (
-              <span className="flex items-center gap-1 px-2 py-0.5 bg-white/10 text-white/70 text-[10px] rounded-full font-medium">
+              <span className="flex items-center gap-1 px-2 py-0.5 bg-foreground/10 text-foreground-secondary text-[10px] rounded-full font-medium">
                 <Sparkles className="w-3 h-3" />
                 Agent
               </span>
@@ -467,28 +468,28 @@ function KanbanColumn({
 
   const colorClasses = {
     neutral: {
-      bg: "bg-white/[0.02]",
-      border: "border-white/10",
-      icon: "text-neutral-400",
-      badge: "bg-white/10 text-neutral-300",
+      bg: "bg-foreground/[0.02]",
+      border: "border-border",
+      icon: "text-muted-foreground",
+      badge: "bg-foreground/10 text-foreground-secondary",
     },
     amber: {
-      bg: "bg-white/[0.02]",
-      border: "border-white/10",
-      icon: "text-amber-400",
-      badge: "bg-amber-500/20 text-amber-300",
+      bg: "bg-foreground/[0.02]",
+      border: "border-border",
+      icon: "text-amber-700 dark:text-amber-400",
+      badge: "bg-amber-500/20 text-amber-700 dark:text-amber-300",
     },
     blue: {
-      bg: "bg-white/[0.02]",
-      border: "border-white/10",
-      icon: "text-blue-400",
-      badge: "bg-blue-500/20 text-blue-300",
+      bg: "bg-foreground/[0.02]",
+      border: "border-border",
+      icon: "text-blue-700 dark:text-blue-400",
+      badge: "bg-blue-500/20 text-blue-700 dark:text-blue-300",
     },
     emerald: {
-      bg: "bg-white/[0.02]",
-      border: "border-white/10",
-      icon: "text-emerald-400",
-      badge: "bg-emerald-500/20 text-emerald-300",
+      bg: "bg-foreground/[0.02]",
+      border: "border-border",
+      icon: "text-emerald-700 dark:text-emerald-400",
+      badge: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
     },
   };
 
@@ -564,7 +565,7 @@ function KanbanColumn({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className={cn(
-                  "flex flex-col items-center justify-center py-12 text-neutral-400",
+                  "flex flex-col items-center justify-center py-12 text-muted-foreground",
                   isOver && "text-primary"
                 )}
               >
@@ -651,6 +652,7 @@ export default function TasksPage() {
   }, [engine, workspaceId, t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous. Updates run after awaiting the local store/network; the only pre-await one (setIsLoading(true) with no sync engine) in practice happens on mount, where isLoading is already true.
     void fetchTasks();
 
     // Re-read the local store when the background sync updates it, unless a drag
@@ -774,35 +776,16 @@ export default function TasksPage() {
         return newTasks;
       });
 
-      if (engine && typeof navigator !== "undefined" && !navigator.onLine) {
-        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
-        if (existing) {
-          await engine.mutate<SyncTask>("tasks", "update", {
-            ...existing,
-            status: targetStatus,
-            updatedAt: Date.now(),
-          });
-          showToast.info(t('tasks.toastMoveQueued'));
-          return;
-        }
-      }
-
-      const response = await fetch(`/api/tasks/${movedTask.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: targetStatus }),
+      // Exactly one write: queued push when offline, REST PATCH when online.
+      const result = await persistTaskMove({
+        engine,
+        taskId: movedTask.id,
+        status: targetStatus,
+        online: typeof navigator === "undefined" || navigator.onLine,
       });
-
-      if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
-      if (engine) {
-        const existing = await engine.get<SyncTask>("tasks", movedTask.id);
-        if (existing) {
-          await engine.mutate<SyncTask>("tasks", "update", {
-            ...existing,
-            status: targetStatus,
-            updatedAt: Date.now(),
-          });
-        }
+      if (result === "queued") {
+        showToast.info(t('tasks.toastMoveQueued'));
+        return;
       }
       showToast.success(t('tasks.toastMoved'));
     } catch (error) {
@@ -964,7 +947,7 @@ export default function TasksPage() {
     return (
       <div className="min-h-screen p-6">
         <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse h-12 bg-white/5 rounded-lg w-48 mb-8" />
+          <div className="animate-pulse h-12 bg-foreground/5 rounded-lg w-48 mb-8" />
           <div className="flex gap-6">
             <SkeletonKanbanColumn />
             <SkeletonKanbanColumn />
@@ -977,14 +960,14 @@ export default function TasksPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-7 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-[0.18em] text-white/35">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-[0.18em] text-foreground-faint">
             <ListTodo className="size-4" />
             {t('tasks.label')}
           </div>
-          <h1 className="text-3xl font-semibold text-white md:text-4xl">{t('tasks.title')}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">{t('tasks.title')}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-subtle">
             {t('tasks.description')}
           </p>
         </div>
@@ -995,7 +978,7 @@ export default function TasksPage() {
         </Button>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-px border-y border-white/10 bg-white/10 sm:grid-cols-5">
+      <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 sm:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
         {[
           [t('tasks.statTotal'), stats.total],
           [t('tasks.statTodo'), stats.todo],
@@ -1004,13 +987,13 @@ export default function TasksPage() {
           [t('tasks.statAi'), stats.aiTasks],
         ].map(([label, value]) => (
           <div key={String(label)} className="bg-background px-4 py-5">
-            <div className="text-2xl font-semibold tabular-nums text-white">{value}</div>
-            <div className="mt-1 text-xs text-white/40">{label}</div>
+            <div className="text-2xl font-semibold tabular-nums text-foreground">{value}</div>
+            <div className="mt-1 text-xs text-foreground-faint">{label}</div>
           </div>
         ))}
       </section>
 
-      <section className="mb-6 border-b border-white/10 pb-6">
+      <section className="mb-6 border-b border-border pb-6">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1018,12 +1001,12 @@ export default function TasksPage() {
           className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center md:gap-4"
         >
           <div className="relative flex-1 sm:max-w-sm">
-            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+            <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-foreground-faint" />
             <Input
               placeholder={t('tasks.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border-white/10 bg-white/[0.03] pl-10 text-white placeholder:text-white/40"
+              className="w-full rounded-lg border-border bg-foreground/[0.03] pl-10 text-foreground placeholder:text-foreground-faint"
             />
           </div>
 
@@ -1031,13 +1014,13 @@ export default function TasksPage() {
             value={filterPriority}
             onValueChange={(value) => setFilterPriority(value as TaskPriority | "all")}
           >
-            <SelectTrigger className="w-full rounded-lg border-white/10 bg-white/[0.03] sm:w-44">
+            <SelectTrigger className="w-full rounded-lg border-border bg-foreground/[0.03] sm:w-44">
               <div className="flex items-center gap-2">
-                <Filter className="size-4 text-white/40" />
+                <Filter className="size-4 text-foreground-faint" />
                 <SelectValue placeholder={t('tasks.priorityLabel')} />
               </div>
             </SelectTrigger>
-            <SelectContent className="border-white/10 bg-black/90 backdrop-blur-xl">
+            <SelectContent className="border-border bg-popover/95 backdrop-blur-xl">
               <SelectItem value="all">{t('tasks.filterAll')}</SelectItem>
               <SelectItem value="urgent">{t('tasks.prioUrgent')}</SelectItem>
               <SelectItem value="high">{t('tasks.prioHigh')}</SelectItem>
@@ -1131,7 +1114,7 @@ export default function TasksPage() {
                 <SelectContent>
                   <SelectItem value="low">
                     <span className="flex items-center gap-2">
-                      <Flag className="w-4 h-4 text-neutral-400" />
+                      <Flag className="w-4 h-4 text-muted-foreground" />
                       {t('tasks.prioLow')}
                     </span>
                   </SelectItem>
@@ -1143,7 +1126,7 @@ export default function TasksPage() {
                   </SelectItem>
                   <SelectItem value="high">
                     <span className="flex items-center gap-2">
-                      <ArrowUpCircle className="w-4 h-4 text-amber-500" />
+                      <ArrowUpCircle className="w-4 h-4 text-amber-700 dark:text-amber-500" />
                       {t('tasks.prioHigh')}
                     </span>
                   </SelectItem>

@@ -12,16 +12,43 @@ import {
   tasks,
   workspaceRepositories,
 } from "@nexus/database/schema";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 
-export const ACTIVE_AGENT_JOB_STATUSES = [
+// Keep in sync with the partial unique index "agent_jobs_task_active_idx"
+// (packages/database/src/schema/index.ts): at most one job per task may be in
+// one of these statuses at a time.
+const ACTIVE_AGENT_JOB_STATUSES = [
   "queued",
   "claimed",
   "running",
   "submitted",
 ] as const;
 
-export type AgentContextSnapshot = {
+export const AGENT_JOB_ACTIVE_UNIQUE_INDEX = "agent_jobs_task_active_idx";
+
+/** Statuses in which the claiming agent may still report progress or results. */
+export const AGENT_WORKING_STATUSES = ["claimed", "running"] as const;
+
+/**
+ * True when `error` (or its drizzle-wrapped cause) is a Postgres unique
+ * violation, optionally on a specific constraint/index.
+ */
+export function isUniqueViolation(error: unknown, constraint?: string): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: unknown; constraint_name?: unknown; constraint?: unknown; cause?: unknown };
+    if (candidate.code === "23505") {
+      if (!constraint) return true;
+      const name = candidate.constraint_name ?? candidate.constraint;
+      return typeof name !== "string" || name === constraint;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
+type AgentContextSnapshot = {
   task: {
     id: string;
     title: string;
@@ -219,6 +246,25 @@ export async function createAgentJob(taskId: string, workspaceId: string, userId
   if (active) throw new Error("ACTIVE_AGENT_JOB_EXISTS");
 
   const context = await buildAgentContext(taskId, workspaceId);
+  // The check above is only a fast path. Two concurrent dispatches can both
+  // pass it; the partial unique index then rejects the second insert, which we
+  // surface as the same ACTIVE_AGENT_JOB_EXISTS conflict.
+  try {
+    return await insertAgentJob(taskId, workspaceId, userId, context);
+  } catch (error) {
+    if (isUniqueViolation(error, AGENT_JOB_ACTIVE_UNIQUE_INDEX)) {
+      throw new Error("ACTIVE_AGENT_JOB_EXISTS");
+    }
+    throw error;
+  }
+}
+
+function insertAgentJob(
+  taskId: string,
+  workspaceId: string,
+  userId: string,
+  context: Awaited<ReturnType<typeof buildAgentContext>>
+) {
   return db.transaction(async (tx) => {
     const [job] = await tx
       .insert(agentJobs)
@@ -262,37 +308,17 @@ export async function authenticateAgentToken(request: Request) {
   });
   if (!row || row.expiresAt.getTime() <= Date.now()) return null;
 
+  // A token only acts for its creator. If that user has since lost access to
+  // the token's workspace (removed as member, ownership transferred), the
+  // token must stop working even though it was never revoked.
+  const access = await requireWorkspaceAccess(row.userId, row.workspaceId);
+  if (!access.ok) return null;
+
   await db
     .update(agentAccessTokens)
     .set({ lastUsedAt: new Date() })
     .where(eq(agentAccessTokens.id, row.id));
   return row;
-}
-
-export async function markAgentJobsOutdatedForDocument(docId: string, workspaceId: string) {
-  const affected = await db
-    .update(agentJobs)
-    .set({ status: "outdated", updatedAt: new Date() })
-    .where(
-      and(
-        eq(agentJobs.workspaceId, workspaceId),
-        inArray(agentJobs.status, [...ACTIVE_AGENT_JOB_STATUSES]),
-        sql`${agentJobs.taskId} in (select id from ${tasks} where ${tasks.docId} = ${docId})`
-      )
-    )
-    .returning({ id: agentJobs.id });
-
-  if (affected.length > 0) {
-    await db.insert(agentJobEvents).values(
-      affected.map(({ id }) => ({
-        jobId: id,
-        workspaceId,
-        type: "outdated",
-        message: "The approved plan changed. Refresh the agent brief before review.",
-      }))
-    );
-  }
-  return affected.length;
 }
 
 export async function getAgentJobDetail(jobId: string, workspaceId: string) {

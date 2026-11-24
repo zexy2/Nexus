@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,26 +14,34 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/lib/i18n/provider";
-import { ArrowLeft, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { NexusMark } from "@/components/shared/nexus-mark";
+
+// The query string never changes while this page is mounted; the server
+// snapshot is empty so SSR and hydration match, then the client value applies.
+const subscribeToNothing = () => () => {};
+const readSearch = () => window.location.search;
+const readServerSearch = () => "";
 
 export default function ResetPasswordPage() {
   const { t } = useLocale();
-  const [token, setToken] = useState("");
+  const search = useSyncExternalStore(subscribeToNothing, readSearch, readServerSearch);
+  const params = new URLSearchParams(search);
+  const token = params.get("token") || "";
+  const hasLinkError = Boolean(params.get("error"));
+  const [linkErrorDismissed, setLinkErrorDismissed] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setToken(params.get("token") || "");
-    setError(params.get("error") ? t("auth.tokenMissing") : "");
-  }, [t]);
+  const [formError, setError] = useState("");
+  // An ?error= from the reset link shows until the first submit replaces it.
+  const error = formError || (hasLinkError && !linkErrorDismissed ? t("auth.tokenMissing") : "");
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError("");
+    setLinkErrorDismissed(true);
 
     if (!token) {
       setError(t("auth.tokenMissing"));
@@ -73,7 +81,7 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center justify-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80">
-            <Sparkles className="size-6 text-primary-foreground" />
+            <NexusMark size={24} className="text-primary-foreground" />
           </div>
           <span className="text-2xl font-bold">Nexus</span>
         </div>

@@ -1,15 +1,22 @@
+import { isErrorCode, logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { workspaceIntegrations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
+import { getCanonicalAppUrl } from "@/lib/integrations/crypto";
 import {
-  consumeIntegrationConnectState,
-  getCanonicalAppUrl,
-  readIntegrationConnectState,
-} from "@/lib/integrations/crypto";
+  authorizeIntegrationConnectState,
+  claimIntegrationConnectState,
+} from "@/lib/integrations/connect-state-guard";
+import {
+  buildGitHubReconnectMetadata,
+  selectedRepositoryFullName,
+} from "@/lib/integrations/github-reconnect";
 import {
   exchangeGitHubOAuthCode,
   getGitHubAppConfig,
   listGitHubInstallationsForUser,
+  listInstallationRepositories,
   verifyGitHubInstallationForUser,
 } from "@/lib/integrations/providers/github-client";
 
@@ -39,13 +46,17 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const connectState = await readIntegrationConnectState("github", state);
-  if (!connectState) {
+  // Session user must be the user who started the flow and still own the
+  // target workspace. The state is only claimed right before persisting,
+  // because a first-time install round-trips through GitHub with it.
+  const authorization = await authorizeIntegrationConnectState("github", state, { consume: false });
+  if (!authorization.ok) {
     return redirectToSettings(request, {
       integration: "github",
-      error: "invalid_state",
+      error: authorization.error,
     });
   }
+  const connectState = authorization.connectState;
 
   try {
     const callbackUrl = new URL(
@@ -89,6 +100,46 @@ export async function GET(request: NextRequest) {
       installationId = String(installation.id);
     }
 
+    // One-time use: claim atomically before writing, so a replayed or
+    // concurrent callback with the same state cannot link again.
+    const claimed = await claimIntegrationConnectState("github", state, authorization.userId);
+    if (!claimed) {
+      return redirectToSettings(request, {
+        integration: "github",
+        error: "invalid_state",
+      });
+    }
+
+    // Keep the repository selection across a reconnect when the
+    // installation can still access it; otherwise every approved write would
+    // fail until the owner re-selects the repository.
+    const previous = await db.query.workspaceIntegrations.findFirst({
+      where: and(
+        eq(workspaceIntegrations.workspaceId, connectState.workspaceId),
+        eq(workspaceIntegrations.provider, "github")
+      ),
+      columns: { installationId: true, metadata: true },
+    });
+    let accessibleRepositories: Awaited<ReturnType<typeof listInstallationRepositories>> | null = null;
+    if (previous && selectedRepositoryFullName(previous.metadata)) {
+      try {
+        accessibleRepositories = await listInstallationRepositories(installationId);
+      } catch (error) {
+        console.warn("[GitHub] Could not verify repository access on reconnect:", error);
+      }
+    }
+    const metadata = buildGitHubReconnectMetadata({
+      base: {
+        setupVerifiedAt: new Date().toISOString(),
+        accountLogin: installation.account?.login,
+        connectMode: connectState.metadata?.githubInstallationId ? "setup_callback" : "existing_installation",
+      },
+      previousMetadata: previous?.metadata,
+      previousInstallationId: previous?.installationId,
+      installationId,
+      accessibleRepositories,
+    });
+
     await db
       .insert(workspaceIntegrations)
       .values({
@@ -99,11 +150,7 @@ export async function GET(request: NextRequest) {
         externalAccountName: installation.account?.login || "GitHub",
         installationId,
         scopes: ["metadata:read", "issues:write", "pull_requests:read", "checks:read", "contents:read"],
-        metadata: {
-          setupVerifiedAt: new Date().toISOString(),
-          accountLogin: installation.account?.login,
-          connectMode: connectState.metadata?.githubInstallationId ? "setup_callback" : "existing_installation",
-        },
+        metadata,
         createdBy: connectState.userId,
       })
       .onConflictDoUpdate({
@@ -114,23 +161,21 @@ export async function GET(request: NextRequest) {
           externalAccountName: installation.account?.login || "GitHub",
           installationId,
           scopes: ["metadata:read", "issues:write", "pull_requests:read", "checks:read", "contents:read"],
-          metadata: {
-            setupVerifiedAt: new Date().toISOString(),
-            accountLogin: installation.account?.login,
-            connectMode: connectState.metadata?.githubInstallationId ? "setup_callback" : "existing_installation",
-          },
+          metadata,
           lastError: null,
           updatedAt: new Date(),
         },
       });
 
-    await consumeIntegrationConnectState("github", state);
-
     return redirectToSettings(request, { integration: "github", connected: "true" });
   } catch (error) {
+    // Only machine-readable codes go into the redirect URL; anything else
+    // (provider/database errors) is logged server-side.
+    const message = error instanceof Error ? error.message : "";
+    if (!isErrorCode(message)) logInternalError("github OAuth callback", error, request.headers);
     return redirectToSettings(request, {
       integration: "github",
-      error: error instanceof Error ? error.message : "github_callback_failed",
+      error: isErrorCode(message) ? message : "github_callback_failed",
     });
   }
 }

@@ -5,14 +5,20 @@ import {
   agentJobs,
   agentJobSubmissions,
   tasks,
+  workspaceIntegrations,
   workspaceRepositories,
 } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import {
+  AGENT_WORKING_STATUSES,
   authenticateAgentToken,
   pullRequestBelongsToRepository,
 } from "@/lib/agent-handoff";
 import { checkPersistentRateLimit, writeAuditLog } from "@/lib/production-guardrails";
+import {
+  GitHubVerificationError,
+  verifyGitHubPullRequestSubmission,
+} from "@/lib/integrations/providers/github-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -148,6 +154,40 @@ async function ownedJob(jobId: string, workspaceId: string, tokenId?: string) {
   });
 }
 
+/**
+ * Thrown inside a transaction when the guarded status transition matched no
+ * row: the job was cancelled, marked outdated, reviewed or re-claimed after the
+ * snapshot we validated against. Rolls back everything written so far.
+ */
+class JobNotRunningError extends Error {
+  constructor() {
+    super("JOB_NOT_RUNNING");
+    this.name = "JobNotRunningError";
+  }
+}
+
+/**
+ * WHERE clause for transitions made by the claiming agent. The status and
+ * token predicates are re-evaluated under the row lock taken by UPDATE, so a
+ * concurrent cancel/outdate/refresh always wins over a stale agent call.
+ */
+function workingJobWhere(jobId: string, workspaceId: string, tokenId: string) {
+  return and(
+    eq(agentJobs.id, jobId),
+    eq(agentJobs.workspaceId, workspaceId),
+    eq(agentJobs.claimedByTokenId, tokenId),
+    inArray(agentJobs.status, [...AGENT_WORKING_STATUSES])
+  );
+}
+
+async function jobNotRunningResult(jobId: string, workspaceId: string, tokenId: string) {
+  const current = await ownedJob(jobId, workspaceId, tokenId);
+  if (current?.status === "outdated") {
+    return toolResult({ error: "AGENT_CONTEXT_OUTDATED", contextVersion: current.contextVersion }, true);
+  }
+  return toolResult({ error: "JOB_NOT_RUNNING", status: current?.status ?? null }, true);
+}
+
 async function callTool(name: string, args: Record<string, unknown>, token: NonNullable<Awaited<ReturnType<typeof authenticateAgentToken>>>) {
   const writeTools = new Set(["claim_job", "report_progress", "submit_result", "report_failure"]);
   const requiredScope = writeTools.has(name) ? "agent:write" : "agent:read";
@@ -231,16 +271,25 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
     const message = stringArg(args, "message");
     if (!message) return toolResult({ error: "message is required" }, true);
     const phase = stringArg(args, "phase");
-    await db.transaction(async (tx) => {
-      await tx.update(agentJobs).set({ status: "running", updatedAt: new Date() }).where(eq(agentJobs.id, jobId));
-      await tx.insert(agentJobEvents).values({
+    try {
+      await db.transaction(async (tx) => {
+        const [updated] = await tx.update(agentJobs)
+          .set({ status: "running", updatedAt: new Date() })
+          .where(workingJobWhere(jobId, token.workspaceId, token.id))
+          .returning({ id: agentJobs.id });
+        if (!updated) throw new JobNotRunningError();
+        await tx.insert(agentJobEvents).values({
         jobId,
         workspaceId: token.workspaceId,
         type: "progress",
-        message: message.slice(0, 2000),
-        metadata: phase ? { phase: phase.slice(0, 80) } : null,
+          message: message.slice(0, 2000),
+          metadata: phase ? { phase: phase.slice(0, 80) } : null,
+        });
       });
-    });
+    } catch (error) {
+      if (error instanceof JobNotRunningError) return jobNotRunningResult(jobId, token.workspaceId, token.id);
+      throw error;
+    }
     return toolResult({ jobId, status: "running" });
   }
 
@@ -248,10 +297,20 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
     if (!["claimed", "running"].includes(job.status)) return toolResult({ error: "JOB_NOT_RUNNING" }, true);
     const message = stringArg(args, "message");
     if (!message) return toolResult({ error: "message is required" }, true);
-    await db.transaction(async (tx) => {
-      await tx.update(agentJobs).set({ status: "failed", completedAt: new Date() }).where(eq(agentJobs.id, jobId));
-      await tx.insert(agentJobEvents).values({ jobId, workspaceId: token.workspaceId, type: "failed", message: message.slice(0, 4000) });
-    });
+    try {
+      await db.transaction(async (tx) => {
+        const now = new Date();
+        const [updated] = await tx.update(agentJobs)
+          .set({ status: "failed", completedAt: now, updatedAt: now })
+          .where(workingJobWhere(jobId, token.workspaceId, token.id))
+          .returning({ id: agentJobs.id });
+        if (!updated) throw new JobNotRunningError();
+        await tx.insert(agentJobEvents).values({ jobId, workspaceId: token.workspaceId, type: "failed", message: message.slice(0, 4000) });
+      });
+    } catch (error) {
+      if (error instanceof JobNotRunningError) return jobNotRunningResult(jobId, token.workspaceId, token.id);
+      throw error;
+    }
     await writeAuditLog({
       userId: token.userId,
       workspaceId: token.workspaceId,
@@ -272,9 +331,48 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
     if (!pullRequestUrl || !commitSha || !summary || !/^[0-9a-f]{7,64}$/i.test(commitSha) || testsInput.length === 0) {
       return toolResult({ error: "PR, commit SHA, summary and at least one test result are required." }, true);
     }
-    const repository = await db.query.workspaceRepositories.findFirst({ where: eq(workspaceRepositories.id, job.repositoryId) });
+    const repository = await db.query.workspaceRepositories.findFirst({
+      where: and(
+        eq(workspaceRepositories.id, job.repositoryId),
+        eq(workspaceRepositories.workspaceId, token.workspaceId)
+      ),
+    });
     if (!repository || !pullRequestBelongsToRepository(pullRequestUrl, repository)) {
       return toolResult({ error: "PULL_REQUEST_REPOSITORY_MISMATCH" }, true);
+    }
+    const githubIntegration = await db.query.workspaceIntegrations.findFirst({
+      where: and(
+        eq(workspaceIntegrations.workspaceId, token.workspaceId),
+        eq(workspaceIntegrations.provider, "github"),
+        eq(workspaceIntegrations.status, "connected")
+      ),
+    });
+    if (!githubIntegration?.installationId) {
+      return toolResult({
+        error: "GITHUB_VERIFICATION_NOT_CONFIGURED",
+        message: "A connected GitHub App is required before submitting a pull request.",
+        retryable: false,
+      }, true);
+    }
+    let githubVerification;
+    try {
+      githubVerification = await verifyGitHubPullRequestSubmission({
+        installationId: githubIntegration.installationId,
+        owner: repository.repositoryOwner,
+        repo: repository.repositoryName,
+        defaultBranch: repository.defaultBranch,
+        pullRequestUrl,
+        commitSha,
+      });
+    } catch (error) {
+      if (error instanceof GitHubVerificationError) {
+        return toolResult({
+          error: error.code,
+          message: error.message,
+          retryable: error.retryable,
+        }, true);
+      }
+      throw error;
     }
     const tests = testsInput.flatMap((value) => {
       if (!value || typeof value !== "object") return [];
@@ -303,39 +401,83 @@ async function callTool(name: string, args: Record<string, unknown>, token: NonN
     if (evidence.length !== evidenceInput.length || missingCriteria.length > 0) {
       return toolResult({ error: "ACCEPTANCE_EVIDENCE_INCOMPLETE", missingCriteria }, true);
     }
-    const [{ nextRevision }] = await db.select({
-      nextRevision: sql<number>`coalesce(max(${agentJobSubmissions.revision}), 0) + 1`,
-    }).from(agentJobSubmissions).where(eq(agentJobSubmissions.jobId, jobId));
     const now = new Date();
-    const submission = await db.transaction(async (tx) => {
-      const [created] = await tx.insert(agentJobSubmissions).values({
-        jobId,
-        workspaceId: token.workspaceId,
-        revision: Number(nextRevision),
-        pullRequestUrl,
-        commitSha,
-        summary: summary.slice(0, 5000),
-        tests,
-        acceptanceEvidence: evidence,
-      }).returning();
-      await tx.update(agentJobs).set({ status: "submitted", submittedAt: now, updatedAt: now }).where(eq(agentJobs.id, jobId));
-      await tx.update(tasks).set({ status: "in_review", completedAt: null, updatedAt: now }).where(eq(tasks.id, job.taskId));
-      await tx.insert(agentJobEvents).values({
-        jobId,
-        workspaceId: token.workspaceId,
-        type: "submitted",
-        message: "Pull request submitted for human review.",
-        metadata: { submissionId: created.id, pullRequestUrl, revision: created.revision },
+    let submission: typeof agentJobSubmissions.$inferSelect;
+    try {
+      submission = await db.transaction(async (tx) => {
+        // Transition first: this re-checks status/ownership under the row lock,
+        // so a cancel or outdate that landed while we were verifying the PR on
+        // GitHub is never overwritten, and nothing below is written.
+        const [transitioned] = await tx.update(agentJobs)
+          .set({ status: "submitted", submittedAt: now, updatedAt: now })
+          .where(workingJobWhere(jobId, token.workspaceId, token.id))
+          .returning({ id: agentJobs.id, taskId: agentJobs.taskId });
+        if (!transitioned) throw new JobNotRunningError();
+        const [{ nextRevision }] = await tx.select({
+          nextRevision: sql<number>`coalesce(max(${agentJobSubmissions.revision}), 0) + 1`,
+        }).from(agentJobSubmissions).where(eq(agentJobSubmissions.jobId, jobId));
+        const [created] = await tx.insert(agentJobSubmissions).values({
+          jobId,
+          workspaceId: token.workspaceId,
+          revision: Number(nextRevision),
+          pullRequestUrl,
+          commitSha,
+          summary: summary.slice(0, 5000),
+          tests,
+          acceptanceEvidence: evidence,
+        }).returning();
+        await tx.update(tasks).set({ status: "in_review", completedAt: null, updatedAt: now }).where(eq(tasks.id, transitioned.taskId));
+        await tx.insert(agentJobEvents).values({
+          jobId,
+          workspaceId: token.workspaceId,
+          type: "submitted",
+          message: "Pull request submitted for human review.",
+          metadata: {
+            submissionId: created.id,
+            pullRequestUrl,
+            revision: created.revision,
+            githubVerification: {
+              pullRequestNumber: githubVerification.number,
+              headSha: githubVerification.headSha,
+              headBranch: githubVerification.headBranch,
+              baseBranch: githubVerification.baseBranch,
+            },
+          },
+        });
+        return created;
       });
-      return created;
-    });
+    } catch (error) {
+      if (error instanceof JobNotRunningError) return jobNotRunningResult(jobId, token.workspaceId, token.id);
+      throw error;
+    }
     await writeAuditLog({
       userId: token.userId,
       workspaceId: token.workspaceId,
       event: "agent.result_submitted",
-      metadata: { jobId, submissionId: submission.id, pullRequestUrl, revision: submission.revision },
+      metadata: {
+        jobId,
+        submissionId: submission.id,
+        pullRequestUrl,
+        revision: submission.revision,
+        githubVerification: {
+          pullRequestNumber: githubVerification.number,
+          headSha: githubVerification.headSha,
+          baseBranch: githubVerification.baseBranch,
+        },
+      },
     });
-    return toolResult({ jobId, status: "submitted", submissionId: submission.id, humanApprovalRequired: true });
+    return toolResult({
+      jobId,
+      status: "submitted",
+      submissionId: submission.id,
+      humanApprovalRequired: true,
+      githubVerification: {
+        pullRequestNumber: githubVerification.number,
+        pullRequestUrl: githubVerification.url,
+        headSha: githubVerification.headSha,
+        baseBranch: githubVerification.baseBranch,
+      },
+    });
   }
 
   return toolResult({ error: `Unknown tool: ${name}` }, true);

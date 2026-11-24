@@ -3,6 +3,7 @@ import { Inter, Geist_Mono, Newsreader, Playfair_Display } from "next/font/googl
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n/provider";
+import { APPEARANCE_BOOT_SCRIPT } from "@/lib/appearance";
 
 // Primary body font - Clean, modern
 const inter = Inter({
@@ -54,6 +55,10 @@ export const metadata: Metadata = {
     description:
       "Change the plan once. Nexus finds the impact, proposes task updates, waits for approval, and keeps delivery work aligned.",
   },
+  icons: {
+    icon: [{ url: "/brand/nexus-mark.svg", type: "image/svg+xml" }],
+    apple: "/brand/nexus-mark.svg",
+  },
 };
 
 export default function RootLayout({
@@ -63,6 +68,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        {/* Applies the cached dashboard theme/compact mode before first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
+      </head>
       <body
         className={`${inter.variable} ${geistMono.variable} ${newsreader.variable} ${playfairDisplay.variable} antialiased`}
         suppressHydrationWarning

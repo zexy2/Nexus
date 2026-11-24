@@ -1,32 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vectors, docs } from "@nexus/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { aiUnavailableResponse, enforceAiBudget } from "@/lib/production-guardrails";
 
 export const runtime = "nodejs";
-
-// Simple cosine similarity calculation
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    const aVal = a[i] ?? 0;
-    const bVal = b[i] ?? 0;
-    dotProduct += aVal * bVal;
-    normA += aVal * aVal;
-    normB += bVal * bVal;
-  }
-  
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
-}
 
 // Extract plain text from BlockNote JSON content
 function extractTextFromContent(content: unknown): string {
@@ -139,13 +119,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const aiBudget = await enforceAiBudget({
-      userId: protection.user.id,
-      email: protection.user.email,
-      kind: "embedding",
-    });
-    if (!aiBudget.ok) return aiBudget.response;
-    
     // Get the document
     const doc = await db.query.docs.findFirst({
       where: and(eq(docs.id, docId), eq(docs.workspaceId, access.workspaceId)),
@@ -164,23 +137,32 @@ export async function POST(req: NextRequest) {
       });
     }
     
+    if (!forceRegenerate) {
+      const existingVectors = await db.query.vectors.findFirst({
+        where: and(eq(vectors.sourceId, docId), eq(vectors.workspaceId, access.workspaceId)),
+      });
+      if (existingVectors) {
+        return NextResponse.json({
+          message: "Embeddings already exist",
+          chunksCreated: 0
+        });
+      }
+    }
+
+    // Budget is consumed only when embeddings will actually be generated
+    // (valid, authorized request for an existing document with content).
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "embedding",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
+
     // Delete existing vectors for this document if regenerating
     if (forceRegenerate) {
       await db.delete(vectors).where(and(eq(vectors.sourceId, docId), eq(vectors.workspaceId, access.workspaceId)));
     }
-    
-    // Check if vectors already exist
-    const existingVectors = await db.query.vectors.findFirst({
-      where: and(eq(vectors.sourceId, docId), eq(vectors.workspaceId, access.workspaceId)),
-    });
-    
-    if (existingVectors && !forceRegenerate) {
-      return NextResponse.json({ 
-        message: "Embeddings already exist",
-        chunksCreated: 0 
-      });
-    }
-    
+
     // Chunk the content
     const chunks = chunkText(textContent);
     
@@ -252,8 +234,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const query = searchParams.get("q");
     const workspaceId = searchParams.get("workspaceId");
-    const limit = parseInt(searchParams.get("limit") || "5", 10);
-    const threshold = parseFloat(searchParams.get("threshold") || "0.3");
+    const parsedLimit = parseInt(searchParams.get("limit") || "5", 10);
+    const safeLimit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 5;
+    const parsedThreshold = parseFloat(searchParams.get("threshold") || "0.3");
+    const safeThreshold = Number.isFinite(parsedThreshold) ? parsedThreshold : 0.3;
     
     if (!query) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
@@ -267,48 +251,64 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
     
+    const aiBudget = await enforceAiBudget({
+      userId: protection.user.id,
+      email: protection.user.email,
+      kind: "embedding",
+    });
+    if (!aiBudget.ok) return aiBudget.response;
+
     // Generate embedding for query
     const queryEmbedding = await generateEmbedding(query);
-    
-    // Get all vectors (in production, use pgvector for efficient similarity search)
-    const allVectors = await db.query.vectors.findMany({
-      where: and(eq(vectors.sourceType, "doc"), eq(vectors.workspaceId, access.workspaceId)),
-    });
-    
-    // Calculate similarities
-    const results = allVectors
-      .map((v) => {
-        const embedding = v.embeddingJson as number[] | null;
-        if (!embedding) return null;
-        
-        const similarity = cosineSimilarity(queryEmbedding, embedding);
-        return {
-          id: v.id,
-          sourceId: v.sourceId,
-          content: v.content,
-          similarity,
-          metadata: v.metadata,
-        };
-      })
-      .filter((r): r is NonNullable<typeof r> => r !== null && r.similarity >= threshold)
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, limit);
-    
-    // Get associated documents
-    const docIds = [...new Set(results.map(r => r.sourceId))];
-    const docsList = docIds.length > 0 
-      ? await Promise.all(
-          docIds.map(id => db.query.docs.findFirst({ where: and(eq(docs.id, id), eq(docs.workspaceId, access.workspaceId)) }))
-        )
-      : [];
-    
-    const docsMap = new Map(docsList.filter(Boolean).map(d => [d!.id, d]));
-    
+    const embeddingStr = `[${queryEmbedding.join(",")}]`;
+
+    // Nearest-neighbour search runs in Postgres (pgvector `<=>` = cosine
+    // distance, served by vectors_embedding_hnsw_idx) instead of loading every
+    // vector of the workspace into memory.
+    const rows = (await db.execute(sql`
+      SELECT id, source_id, content, metadata,
+             1 - (embedding <=> ${embeddingStr}::vector) AS similarity
+      FROM vectors
+      WHERE source_type = 'doc'
+        AND workspace_id = ${access.workspaceId}
+        AND embedding IS NOT NULL
+      ORDER BY embedding <=> ${embeddingStr}::vector
+      LIMIT ${safeLimit}
+    `)) as unknown as Array<{
+      id: string;
+      source_id: string;
+      content: string;
+      metadata: Record<string, unknown> | null;
+      similarity: number | string;
+    }>;
+
+    const results = rows
+      .map((row) => ({
+        id: row.id,
+        sourceId: row.source_id,
+        content: row.content,
+        similarity: Number(row.similarity),
+        metadata: row.metadata,
+      }))
+      .filter((row) => row.similarity >= safeThreshold);
+
+    // Associated documents in one query (was one query per document).
+    const docIds = [...new Set(results.map((r) => r.sourceId))];
+    const docsList =
+      docIds.length > 0
+        ? await db
+            .select()
+            .from(docs)
+            .where(and(inArray(docs.id, docIds), eq(docs.workspaceId, access.workspaceId)))
+        : [];
+
+    const docsMap = new Map(docsList.map((d) => [d.id, d]));
+
     const enrichedResults = results.map(r => ({
       ...r,
       document: docsMap.get(r.sourceId) || null,
     }));
-    
+
     return NextResponse.json({
       query,
       results: enrichedResults,

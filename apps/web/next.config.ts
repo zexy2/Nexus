@@ -2,14 +2,6 @@ import type { NextConfig } from "next";
 import path from "node:path";
 
 const nextConfig: NextConfig = {
-  // Transpile R3F / Three.js packages for proper ESM handling
-  transpilePackages: [
-    'three',
-    '@react-three/fiber',
-    '@react-three/drei',
-    '@react-three/postprocessing',
-  ],
-
   turbopack: {
     root: path.resolve(process.cwd(), "../.."),
   },
@@ -52,7 +44,20 @@ const nextConfig: NextConfig = {
     // connection to the collaboration server. Production enforces the policy;
     // development keeps report-only mode so local tooling remains usable.
     const isProduction = process.env.NODE_ENV === "production";
-    const collabWs = process.env.NEXT_PUBLIC_COLLABORATION_URL || "ws://localhost:1234";
+    const configuredCollabWs = process.env.NEXT_PUBLIC_COLLABORATION_URL;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+    const collabSources = new Set(["ws://localhost:1234"]);
+    if (configuredCollabWs) collabSources.add(configuredCollabWs);
+    if (appUrl) {
+      try {
+        const parsedAppUrl = new URL(appUrl);
+        collabSources.add(
+          `${parsedAppUrl.protocol === "https:" ? "wss:" : "ws:"}//${parsedAppUrl.host}`,
+        );
+      } catch {
+        // Keep the local fallback when APP_URL is malformed.
+      }
+    }
     const scriptSources = ["'self'", "'unsafe-inline'"];
     if (!isProduction) scriptSources.push("'unsafe-eval'");
     const csp = [
@@ -61,7 +66,7 @@ const nextConfig: NextConfig = {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://images.unsplash.com https://cdn.coverr.co https://*.pexels.com",
       "font-src 'self' data:",
-      `connect-src 'self' ${collabWs}`,
+      `connect-src 'self' ${Array.from(collabSources).join(" ")}`,
       "media-src 'self' blob: https://cdn.coverr.co",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",

@@ -5,6 +5,7 @@ import { agentExecutions, workspaces, workspaceMembers } from "@nexus/database/s
 import { eq, desc, and, inArray, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { reconcileRunningWorkflowExecutions } from "@/lib/workflow-reconcile";
+import { expireStaleCommandExecutions } from "@/lib/command-lease";
 
 export const runtime = "nodejs";
 
@@ -71,12 +72,16 @@ export async function GET(request: NextRequest) {
       errorMessage: string | null;
       temporalWorkflowId: string | null;
       startedAt: Date | null;
+      heartbeatAt: Date | null;
       completedAt: Date | null;
       createdAt: Date;
     };
 
+    // In-process commands (cmd-*) have no Temporal run to reconcile against;
+    // expire the ones whose lease lapsed before the Temporal reconcile pass.
+    const leaseChecked = await expireStaleCommandExecutions(executions);
     const reconciledExecutions = await reconcileRunningWorkflowExecutions(
-      executions as ExecutionRow[],
+      leaseChecked as ExecutionRow[],
       { userId: session.user.id, request }
     );
 

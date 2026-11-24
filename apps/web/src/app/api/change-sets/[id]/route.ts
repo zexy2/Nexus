@@ -107,6 +107,8 @@ export async function GET(
           provider: operation.provider,
           operationType: operation.operationType,
           status: operation.status,
+          syncStatus: operation.syncStatus,
+          syncError: operation.syncError,
           error: operation.error,
           response: operation.response,
           attemptCount: operation.attemptCount,

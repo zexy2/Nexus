@@ -6,7 +6,13 @@
  * call when a key is present, and error propagation on a failed send.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isEmailConfigured, sendEmail, actionEmailHtml } from "@/lib/email";
+import {
+  isEmailConfigured,
+  sendEmail,
+  actionEmailHtml,
+  canDeliverPasswordReset,
+  EmailNotConfiguredError,
+} from "@/lib/email";
 
 const ORIGINAL_FETCH = global.fetch;
 const saved = { key: process.env.RESEND_API_KEY, from: process.env.EMAIL_FROM };
@@ -67,6 +73,38 @@ describe("sendEmail", () => {
     process.env.RESEND_API_KEY = "re_test";
     global.fetch = vi.fn(async () => new Response("nope", { status: 422 })) as never;
     await expect(sendEmail({ to: "a@b.com", subject: "x", html: "x" })).rejects.toThrow(/Email send failed: 422/);
+  });
+});
+
+describe("Password reset link logged when no email provider", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("production without a provider throws and never logs the link", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    global.fetch = vi.fn() as never;
+
+    const link = "https://nexus.example/reset-password/SECRET_TOKEN";
+    await expect(
+      sendEmail({ to: "a@b.com", subject: "Reset", html: link, text: link })
+    ).rejects.toBeInstanceOf(EmailNotConfiguredError);
+
+    const logged = [...logSpy.mock.calls, ...errorSpy.mock.calls].flat().join(" ");
+    expect(logged).not.toContain("SECRET_TOKEN");
+    expect(logged).not.toContain("a@b.com");
+    expect(canDeliverPasswordReset()).toBe(false);
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("production with a provider and development without one can deliver resets", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.RESEND_API_KEY = "re_test";
+    expect(canDeliverPasswordReset()).toBe(true);
+    delete process.env.RESEND_API_KEY;
+    vi.stubEnv("NODE_ENV", "development");
+    expect(canDeliverPasswordReset()).toBe(true);
   });
 });
 

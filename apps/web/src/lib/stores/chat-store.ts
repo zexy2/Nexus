@@ -32,7 +32,7 @@ export interface Message {
   };
 }
 
-export interface ChatSession {
+interface ChatSession {
   id: string;
   title: string;
   messages: Message[];
@@ -41,7 +41,7 @@ export interface ChatSession {
   updatedAt: number;
 }
 
-export interface ActiveAgent {
+interface ActiveAgent {
   id: string;
   name: string;
   mode: AgentMode;
@@ -51,7 +51,7 @@ export interface ActiveAgent {
   startedAt?: number;
 }
 
-export interface AgentDefinition {
+interface AgentDefinition {
   id: string;
   label: string;
   description: string;
@@ -70,7 +70,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Nexus',
     description: 'Chooses the required workspace tools automatically',
     icon: Sparkles,
-    color: 'text-violet-400',
+    color: 'text-violet-700 dark:text-violet-400',
     gradient: 'from-violet-500 to-purple-600',
   },
   research: {
@@ -78,7 +78,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Research',
     description: 'Workspace analysis and optional web search',
     icon: Search,
-    color: 'text-blue-400',
+    color: 'text-blue-700 dark:text-blue-400',
     gradient: 'from-blue-500 to-cyan-500',
   },
   writer: {
@@ -86,7 +86,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Drafting',
     description: 'Structured document drafting and editing',
     icon: FileText,
-    color: 'text-emerald-400',
+    color: 'text-emerald-700 dark:text-emerald-400',
     gradient: 'from-emerald-500 to-teal-500',
   },
   coder: {
@@ -94,7 +94,7 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Technical help',
     description: 'Code explanation and technical problem solving',
     icon: Code,
-    color: 'text-orange-400',
+    color: 'text-orange-700 dark:text-orange-400',
     gradient: 'from-orange-500 to-amber-500',
   },
   task: {
@@ -102,45 +102,10 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     label: 'Work breakdown',
     description: 'Turns scope into structured delivery tasks',
     icon: ListTodo,
-    color: 'text-rose-400',
+    color: 'text-rose-700 dark:text-rose-400',
     gradient: 'from-rose-500 to-pink-500',
   },
 };
-
-// ==========================================
-// SUGGESTED PROMPTS
-// ==========================================
-
-export const SUGGESTED_PROMPTS = [
-  {
-    id: 'research',
-    title: 'Research a topic',
-    prompt: 'Research the latest trends in...',
-    icon: '🔍',
-    gradient: 'from-blue-500/20 to-cyan-500/20',
-  },
-  {
-    id: 'write',
-    title: 'Write content',
-    prompt: 'Write a professional email about...',
-    icon: '✍️',
-    gradient: 'from-emerald-500/20 to-teal-500/20',
-  },
-  {
-    id: 'code',
-    title: 'Generate code',
-    prompt: 'Create a React component that...',
-    icon: '💻',
-    gradient: 'from-orange-500/20 to-amber-500/20',
-  },
-  {
-    id: 'plan',
-    title: 'Plan a project',
-    prompt: 'Create a project plan for...',
-    icon: '📋',
-    gradient: 'from-rose-500/20 to-pink-500/20',
-  },
-];
 
 // ==========================================
 // STORE INTERFACE
@@ -419,6 +384,9 @@ export const useChatStore = create<ChatStore>()(
                 appendStreamingContent(chunk);
               }
             }
+            // Flush bytes of a character left incomplete by the last chunk.
+            const tail = decoder.decode();
+            if (tail) appendStreamingContent(tail);
           }
           
           // Add assistant message with streamed content
@@ -471,19 +439,3 @@ export const useChatStore = create<ChatStore>()(
     }
   )
 );
-
-// ==========================================
-// HELPER HOOKS
-// ==========================================
-
-export function useActiveAgent(agentId: AgentMode) {
-  return useChatStore((state) => 
-    state.activeAgents.find((a) => a.id === agentId)
-  );
-}
-
-export function useIsAgentWorking() {
-  return useChatStore((state) => 
-    state.activeAgents.some((a) => a.status === 'working' || a.status === 'thinking')
-  );
-}

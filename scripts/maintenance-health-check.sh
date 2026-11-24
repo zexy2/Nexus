@@ -13,7 +13,20 @@ timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 log_file="$LOG_DIR/health-$(date +%F).log"
 health_url="${BASE_URL%/}/api/health"
 
-body="$(curl -fsS --max-time "$CURL_TIMEOUT_SECONDS" "$health_url")"
+# Detailed health (commit, worker heartbeat age) needs HEALTH_CHECK_TOKEN;
+# without it the public status-only view is logged.
+ENV_FILE="${ENV_FILE:-.env.production}"
+# shellcheck source=lib/load-env.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
+if command -v node >/dev/null 2>&1; then
+  load_env_values "$ENV_FILE" HEALTH_CHECK_TOKEN
+fi
+
+curl_args=(-fsS --max-time "$CURL_TIMEOUT_SECONDS")
+if [[ -n "${HEALTH_CHECK_TOKEN:-}" ]]; then
+  curl_args+=(-H "x-health-token: $HEALTH_CHECK_TOKEN")
+fi
+body="$(curl "${curl_args[@]}" "$health_url")"
 
 overall_status="unknown"
 commit_sha="unknown"

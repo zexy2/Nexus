@@ -1,4 +1,4 @@
-import { getDb, type Database as DbType } from "@nexus/database";
+import { getDb } from "@nexus/database";
 // Re-export drizzle operators from the same source as schema to avoid version conflicts
 export { eq, desc, asc, and, or, gte, lte, like, sql, inArray, isNull, isNotNull } from "drizzle-orm";
 
@@ -16,8 +16,6 @@ export const db = new Proxy({} as Db, {
     return typeof value === "function" ? value.bind(real) : value;
   },
 }) as Db;
-
-export type Database = DbType;
 
 // Re-export schema items for convenience
 export * from "@nexus/database";

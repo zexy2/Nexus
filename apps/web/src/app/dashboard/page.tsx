@@ -90,9 +90,9 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.1 }}
       className={cn(
-        'group relative border-b border-white/10 px-0 py-4 transition-colors',
-        'hover:bg-white/[0.02]',
-        isActive && 'ring-1 ring-white/20'
+        'group relative border-b border-border px-0 py-4 transition-colors',
+        'hover:bg-foreground/[0.02]',
+        isActive && 'ring-1 ring-foreground/20'
       )}
     >
       <div className="flex items-start gap-4">
@@ -100,9 +100,9 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
         <div className="relative">
           <div className={cn(
             'h-12 w-12 rounded-xl flex items-center justify-center',
-            isActive ? 'bg-white/10' : 'bg-white/5'
+            isActive ? 'bg-foreground/10' : 'bg-foreground/5'
           )}>
-            <agent.icon className="h-5 w-5 text-white/80" />
+            <agent.icon className="h-5 w-5 text-foreground" />
           </div>
           {isActive && (
             <motion.span
@@ -136,7 +136,7 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
         {/* Status */}
         <span className={cn(
           'text-[10px] font-medium uppercase tracking-wider px-2 py-1 rounded-full',
-          isActive ? 'text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-white/5'
+          isActive ? 'text-emerald-700 dark:text-emerald-500 bg-emerald-500/10' : 'text-muted-foreground bg-foreground/5'
         )}>
           {t(`dashboard.status${agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}`)}
         </span>
@@ -154,13 +154,13 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: index * 0.05 }}
         whileHover={{ x: 4 }}
-        className="group flex items-center gap-4 border-b border-white/10 py-4 transition-all duration-300 hover:bg-white/[0.02]"
+        className="group flex items-center gap-4 border-b border-border py-4 transition-all duration-300 hover:bg-foreground/[0.02]"
       >
-        <div className="h-10 w-10 rounded-lg bg-white/10 flex items-center justify-center">
-          <FileText className="h-4 w-4 text-white/70" />
+        <div className="h-10 w-10 rounded-lg bg-foreground/10 flex items-center justify-center">
+          <FileText className="h-4 w-4 text-foreground-secondary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate group-hover:text-white transition-colors">{cleanDocTitle(doc.title)}</p>
+          <p className="font-medium truncate group-hover:text-foreground transition-colors">{cleanDocTitle(doc.title)}</p>
           <p className="text-xs text-muted-foreground">{formatRelativeTime(doc.updatedAt)}</p>
         </div>
         <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -187,8 +187,8 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
       className={cn(
-        'group flex items-center gap-3 border-b border-white/10 py-4 transition-all duration-300',
-        checked ? 'opacity-50 bg-transparent' : 'hover:bg-white/[0.02]'
+        'group flex items-center gap-3 border-b border-border py-4 transition-all duration-300',
+        checked ? 'opacity-50 bg-transparent' : 'hover:bg-foreground/[0.02]'
       )}
     >
       <motion.button
@@ -196,7 +196,7 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
         onClick={() => { setChecked(!checked); onToggle(); }}
         className={cn(
           'h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
-          checked ? 'bg-white border-white' : 'border-white/30 hover:border-white/50'
+          checked ? 'bg-foreground border-foreground' : 'border-foreground/30 hover:border-foreground/50'
         )}
       >
         {checked && <CheckCircle2 className="h-3 w-3 text-background" />}
@@ -315,16 +315,16 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
-      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+      <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-7 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-white/35">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-foreground-faint">
             <CheckCircle2 className="size-4" />
             {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
-          <h1 className="text-3xl font-semibold text-white md:text-4xl">
+          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">
             {t(`dashboard.greeting${getGreeting()}`)}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-subtle">
             {t('dashboard.description')}
           </p>
         </div>
@@ -345,7 +345,7 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <section className="mb-8 grid grid-cols-2 gap-px border-y border-white/10 bg-white/10 lg:grid-cols-4">
+      <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 lg:grid-cols-4">
         {([
           { label: t('dashboard.statTasksCompleted'), value: taskStats.done, icon: <CheckCircle2 className="h-4 w-4" /> },
           { label: t('dashboard.statDocuments'), value: docs.length, icon: <FileText className="h-4 w-4" /> },
@@ -354,76 +354,79 @@ export default function DashboardPage() {
         ] as Array<{ label: string; value: number | string; icon: ReactNode }>).map((stat) => (
           <div key={stat.label} className="bg-background px-4 py-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <span className="text-xs text-white/40">{stat.label}</span>
-              <span className="text-white/45">{stat.icon}</span>
+              <span className="text-xs text-foreground-faint">{stat.label}</span>
+              <span className="text-foreground-subtle">{stat.icon}</span>
             </div>
-            <div className="text-3xl font-semibold tabular-nums text-white">{stat.value}</div>
+            <div className="text-3xl font-semibold tabular-nums text-foreground">{stat.value}</div>
           </div>
         ))}
       </section>
 
-      <div className="grid gap-8 xl:grid-cols-2">
-        <section className="min-w-0">
+      <div className="grid gap-8 xl:grid-cols-2 xl:items-start">
+        <div className="contents xl:block xl:space-y-8">
+        <section className="order-1 min-w-0">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+              <div className="text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
                 {t('dashboard.bentoAiWorkspace')}
               </div>
-              <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoAgentActivity')}</h2>
+              <h2 className="mt-2 text-xl font-semibold text-foreground">{t('dashboard.bentoAgentActivity')}</h2>
             </div>
-            <Link href="/dashboard/agents" className="inline-flex items-center gap-2 text-sm text-white/50 transition-colors hover:text-white">
+            <Link href="/dashboard/agents" className="inline-flex items-center gap-2 text-sm text-foreground-subtle transition-colors hover:text-foreground">
               {t('dashboard.viewAllAgents')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="border-y border-white/10">
+          <div className="border-y border-border">
             {agents.map((agent, i) => (
               <AgentCard key={agent.id} agent={agent} index={i} />
             ))}
           </div>
         </section>
 
-        <section className="min-w-0">
+        <section className="order-3 min-w-0">
           <div className="mb-4">
-            <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+            <div className="text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
               {t('dashboard.bentoWorkspace')}
             </div>
-            <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoRecentDocs')}</h2>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">{t('dashboard.bentoRecentDocs')}</h2>
           </div>
           {docs.length === 0 ? (
-            <div className="border-y border-white/10 py-8 text-center">
-              <FileText className="mx-auto mb-3 h-8 w-8 text-white/30" />
-              <p className="mb-4 text-sm text-white/50">{t('dashboard.noDocuments')}</p>
+            <div className="border-y border-border py-8 text-center">
+              <FileText className="mx-auto mb-3 h-8 w-8 text-foreground-faint" />
+              <p className="mb-4 text-sm text-foreground-subtle">{t('dashboard.noDocuments')}</p>
               <Button size="sm" onClick={() => openModal('createDocument')}>
                 {t('dashboard.createFirstDoc')}
               </Button>
             </div>
           ) : (
-            <div className="border-y border-white/10">
+            <div className="border-y border-border">
               {docs.map((doc, i) => (
                 <DocumentCard key={doc.id} doc={doc} index={i} />
               ))}
             </div>
           )}
         </section>
+        </div>
 
-        <section className="min-w-0">
+        <div className="contents xl:block xl:space-y-8">
+        <section className="order-2 min-w-0">
           <div className="mb-4">
-            <div className="text-xs font-medium uppercase tracking-[0.16em] text-white/35">
+            <div className="text-xs font-medium uppercase tracking-[0.16em] text-foreground-faint">
               {t('dashboard.bentoToday')}
             </div>
-            <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard.bentoPriorityTasks')}</h2>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">{t('dashboard.bentoPriorityTasks')}</h2>
           </div>
           {tasks.length === 0 ? (
-            <div className="border-y border-white/10 py-8 text-center">
-              <ListTodo className="mx-auto mb-3 h-8 w-8 text-white/30" />
-              <p className="mb-4 text-sm text-white/50">{t('dashboard.noTasks')}</p>
+            <div className="border-y border-border py-8 text-center">
+              <ListTodo className="mx-auto mb-3 h-8 w-8 text-foreground-faint" />
+              <p className="mb-4 text-sm text-foreground-subtle">{t('dashboard.noTasks')}</p>
               <Button size="sm" onClick={() => openModal('createTask')}>
                 {t('dashboard.createFirstTask')}
               </Button>
             </div>
           ) : (
-            <div className="border-y border-white/10">
+            <div className="border-y border-border">
               {tasks.map((task, i) => (
                 <TaskItem key={task.id} task={task} index={i} onToggle={() => {}} />
               ))}
@@ -431,9 +434,9 @@ export default function DashboardPage() {
           )}
         </section>
 
-        <section className="min-w-0">
-          <h2 className="mb-4 text-xl font-semibold text-white">{t('dashboard.bentoQuickActions')}</h2>
-          <div className="grid grid-cols-2 gap-px border border-white/10 bg-white/10">
+        <section className="order-4 min-w-0">
+          <h2 className="mb-4 text-xl font-semibold text-foreground">{t('dashboard.bentoQuickActions')}</h2>
+          <div className="grid grid-cols-2 gap-px border border-border bg-foreground/10">
             {([
               { icon: <FileText className="h-5 w-5" />, label: t('dashboard.qaPlans'), href: '/dashboard/docs' },
               { icon: <ListTodo className="h-5 w-5" />, label: t('dashboard.qaWork'), href: '/dashboard/tasks' },
@@ -447,7 +450,7 @@ export default function DashboardPage() {
             }>).map((action) => {
               const content = (
                 <>
-                  <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
+                  <div className="h-10 w-10 rounded-xl bg-foreground/10 flex items-center justify-center">
                     {action.icon}
                   </div>
                   <span className="text-xs font-medium">{action.label}</span>
@@ -459,7 +462,7 @@ export default function DashboardPage() {
                   <Link
                     key={action.label}
                     href={action.href}
-                    className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-white/[0.03]"
+                    className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-foreground/[0.03]"
                   >
                     {content}
                   </Link>
@@ -472,7 +475,7 @@ export default function DashboardPage() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => action.action && openModal(action.action)}
-                  className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-white/[0.03]"
+                  className="flex min-h-32 flex-col items-center justify-center gap-2 bg-background p-4 transition-colors hover:bg-foreground/[0.03]"
                 >
                   {content}
                 </motion.button>
@@ -480,6 +483,7 @@ export default function DashboardPage() {
             })}
           </div>
         </section>
+        </div>
       </div>
     </div>
   );

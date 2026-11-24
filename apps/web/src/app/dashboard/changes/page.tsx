@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -57,6 +57,8 @@ type ChangeProposal = {
     provider: string;
     operationType: string;
     status: string;
+    syncStatus: string;
+    syncError: string | null;
     error: string | null;
     attemptCount: number;
     attemptedAt: string | null;
@@ -80,17 +82,19 @@ type ChangeSetDetail = Omit<ChangeSetSummary, "proposals"> & {
 };
 
 const statusStyles: Record<string, string> = {
-  pending: "border-amber-400/30 bg-amber-400/10 text-amber-200",
-  pending_external: "border-purple-400/30 bg-purple-400/10 text-purple-200",
-  external_pending: "border-purple-400/30 bg-purple-400/10 text-purple-200",
-  running: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
-  applied: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  failed_retryable: "border-red-400/30 bg-red-400/10 text-red-200",
-  failed_terminal: "border-red-400/30 bg-red-400/10 text-red-200",
-  partially_applied: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
-  external_failed: "border-red-400/30 bg-red-400/10 text-red-200",
-  rejected: "border-white/10 bg-white/5 text-white/50",
-  expired: "border-white/10 bg-white/5 text-white/40",
+  pending: "border-amber-400/30 bg-amber-400/10 text-amber-800 dark:text-amber-200",
+  applying: "border-cyan-400/30 bg-cyan-400/10 text-cyan-800 dark:text-cyan-200",
+  pending_external: "border-purple-400/30 bg-purple-400/10 text-purple-800 dark:text-purple-200",
+  external_pending: "border-purple-400/30 bg-purple-400/10 text-purple-800 dark:text-purple-200",
+  running: "border-cyan-400/30 bg-cyan-400/10 text-cyan-800 dark:text-cyan-200",
+  succeeded: "border-emerald-400/30 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200",
+  applied: "border-emerald-400/30 bg-emerald-400/10 text-emerald-800 dark:text-emerald-200",
+  failed_retryable: "border-red-400/30 bg-red-400/10 text-red-800 dark:text-red-200",
+  failed_terminal: "border-red-400/30 bg-red-400/10 text-red-800 dark:text-red-200",
+  partially_applied: "border-cyan-400/30 bg-cyan-400/10 text-cyan-800 dark:text-cyan-200",
+  external_failed: "border-red-400/30 bg-red-400/10 text-red-800 dark:text-red-200",
+  rejected: "border-border bg-foreground/5 text-foreground-subtle",
+  expired: "border-border bg-foreground/5 text-foreground-faint",
 };
 
 export default function ChangesPage() {
@@ -100,8 +104,11 @@ export default function ChangesPage() {
   const requestedChangeSetId = searchParams.get("changeSet");
   const [changeSets, setChangeSets] = useState<ChangeSetSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ChangeSetDetail | null>(null);
+  const [loadedDetail, setDetail] = useState<ChangeSetDetail | null>(null);
+  // Clearing the selection hides the detail without an extra state update.
+  const detail = selectedId ? loadedDetail : null;
   const [selectedProposalIds, setSelectedProposalIds] = useState<Set<string>>(new Set());
+  const selectionInitializedFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<"apply" | "reject" | null>(null);
 
@@ -119,6 +126,9 @@ export default function ChangesPage() {
   const statusLabel = useCallback((status: string) => {
     if (
       status === "pending" ||
+      status === "applying" ||
+      status === "running" ||
+      status === "succeeded" ||
       status === "applied" ||
       status === "partially_applied" ||
       status === "rejected" ||
@@ -127,39 +137,50 @@ export default function ChangesPage() {
       return t(`changes.status.${status}`);
     }
     if (status === "external_pending") {
-      return locale === "tr" ? "dış yazım bekliyor" : "external pending";
+      return t("changes.status.external_pending");
     }
     if (status === "pending_external") {
-      return locale === "tr" ? "dış yazım kuyruğunda" : "external queued";
+      return t("changes.status.pending_external");
     }
     if (status === "external_failed") {
-      return locale === "tr" ? "dış yazım başarısız" : "external write failed";
+      return t("changes.status.external_failed");
     }
     return status;
-  }, [locale, t]);
+  }, [t]);
 
   const operationStatusLabel = useCallback((status: string) => {
-    const labels: Record<string, [string, string]> = {
-      pending: ["Kuyrukta", "Queued"],
-      running: ["Uygulanıyor", "Running"],
-      succeeded: ["Tamamlandı", "Completed"],
-      failed_retryable: ["Yeniden denenebilir", "Retryable failure"],
-      failed_terminal: ["Uygulanamadı", "Terminal failure"],
+    const labels: Record<string, string> = {
+      pending: "changes.operationStatus.pending",
+      running: "changes.operationStatus.running",
+      succeeded: "changes.operationStatus.succeeded",
+      failed_retryable: "changes.operationStatus.failed_retryable",
+      failed_terminal: "changes.operationStatus.failed_terminal",
     };
-    const pair = labels[status];
-    return pair ? pair[locale === "tr" ? 0 : 1] : status;
-  }, [locale]);
+    const key = labels[status];
+    return key ? t(key) : status;
+  }, [t]);
 
   const operationPassiveLabel = useCallback((status: string) => {
-    const labels: Record<string, [string, string]> = {
-      pending: ["Otomatik uygulanacak", "Will run automatically"],
-      running: ["Uygulanıyor", "Running"],
-      succeeded: ["Tamamlandı", "Completed"],
-      failed_terminal: ["Tekrar denenemez", "Cannot retry"],
+    const labels: Record<string, string> = {
+      pending: "changes.operationPassive.pending",
+      running: "changes.operationPassive.running",
+      succeeded: "changes.operationPassive.succeeded",
+      failed_terminal: "changes.operationPassive.failed_terminal",
     };
-    const pair = labels[status];
-    return pair ? pair[locale === "tr" ? 0 : 1] : operationStatusLabel(status);
-  }, [locale, operationStatusLabel]);
+    const key = labels[status];
+    return key ? t(key) : operationStatusLabel(status);
+  }, [operationStatusLabel, t]);
+
+  const operationUiStatus = useCallback((operation: ChangeProposal["externalOperations"][number]) => {
+    if (
+      operation.status === "succeeded" &&
+      operation.syncStatus !== "not_required" &&
+      operation.syncStatus !== "succeeded"
+    ) {
+      return operation.syncStatus;
+    }
+    return operation.status;
+  }, []);
 
   const actionLabel = useCallback((action: string) => {
     const fallback: Record<string, string> = {
@@ -197,16 +218,22 @@ export default function ChangesPage() {
     if (!response.ok) throw new Error(t("changes.detailLoadError"));
     const next = await response.json() as ChangeSetDetail;
     setDetail(next);
-    setSelectedProposalIds(
-      new Set(
-        next.proposals
-          .filter((proposal) => proposal.status === "pending")
-          .map((proposal) => proposal.id)
-      )
-    );
+    const pendingIds = next.proposals
+      .filter((proposal) => proposal.status === "pending")
+      .map((proposal) => proposal.id);
+    if (selectionInitializedFor.current !== id) {
+      selectionInitializedFor.current = id;
+      setSelectedProposalIds(new Set(pendingIds));
+    } else {
+      const pendingIdSet = new Set(pendingIds);
+      setSelectedProposalIds((current) =>
+        new Set([...current].filter((proposalId) => pendingIdSet.has(proposalId)))
+      );
+    }
   }, [t]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void fetchChangeSets()
       .catch((error) => showToast.error(error instanceof Error ? error.message : t("changes.loadError")))
       .finally(() => setLoading(false));
@@ -214,9 +241,10 @@ export default function ChangesPage() {
 
   useEffect(() => {
     if (!selectedId) {
-      setDetail(null);
+      selectionInitializedFor.current = null;
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void fetchDetail(selectedId).catch((error) =>
       showToast.error(error instanceof Error ? error.message : t("changes.detailLoadError"))
     );
@@ -224,11 +252,17 @@ export default function ChangesPage() {
 
   useEffect(() => {
     const hasPending = changeSets.some((changeSet) =>
-      changeSet.status === "pending" || changeSet.status === "external_pending"
+      changeSet.status === "pending" ||
+      changeSet.status === "applying" ||
+      changeSet.status === "running" ||
+      changeSet.status === "pending_external" ||
+      changeSet.status === "external_pending"
     );
     const hasPendingOperation = detail?.proposals.some((proposal) =>
       proposal.externalOperations.some((operation) =>
-        operation.status === "pending" || operation.status === "running"
+        operationUiStatus(operation) === "pending" ||
+        operationUiStatus(operation) === "running" ||
+        operationUiStatus(operation) === "failed_retryable"
       )
     ) ?? false;
     if (!hasPending && !hasPendingOperation && !resolving) return;
@@ -238,7 +272,7 @@ export default function ChangesPage() {
       if (selectedId) void fetchDetail(selectedId);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [changeSets, detail, fetchChangeSets, fetchDetail, resolving, selectedId]);
+  }, [changeSets, detail, fetchChangeSets, fetchDetail, operationUiStatus, resolving, selectedId]);
 
   const pendingProposals = useMemo(
     () => detail?.proposals.filter((proposal) => proposal.status === "pending") || [],
@@ -247,18 +281,28 @@ export default function ChangesPage() {
 
   const resolutionCopy = useMemo(() => {
     if (!detail || detail.status === "pending") return null;
+    if (detail.status === "applying" || detail.status === "running") {
+      return {
+        title: locale === "tr" ? "Değişiklikler uygulanıyor" : "Changes are being applied",
+        description:
+          locale === "tr"
+            ? "Görevler ve dış sistem yazımları tamamlanana kadar durum otomatik yenileniyor."
+            : "Status updates automatically until tasks and external writes finish.",
+        className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-800 dark:text-cyan-100",
+      };
+    }
     if (detail.status === "partially_applied") {
       return {
         title: t("changes.resolution.partialTitle"),
         description: t("changes.resolution.partialDesc"),
-        className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+        className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-800 dark:text-cyan-100",
       };
     }
     if (detail.status === "applied") {
       return {
         title: t("changes.resolution.appliedTitle"),
         description: t("changes.resolution.appliedDesc"),
-        className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+        className: "border-emerald-400/20 bg-emerald-400/10 text-emerald-800 dark:text-emerald-100",
       };
     }
     if (detail.status === "external_pending") {
@@ -268,7 +312,7 @@ export default function ChangesPage() {
           locale === "tr"
             ? "Plan kabul edildi. GitHub ve Linear güncellemeleri otomatik olarak uygulanıyor."
             : "The plan was accepted. GitHub and Linear updates are being applied automatically.",
-        className: "border-purple-400/20 bg-purple-400/10 text-purple-100",
+        className: "border-purple-400/20 bg-purple-400/10 text-purple-800 dark:text-purple-100",
       };
     }
     if (detail.status === "external_failed") {
@@ -276,22 +320,22 @@ export default function ChangesPage() {
         title: locale === "tr" ? "Dış sistem güncellemesi başarısız" : "External update failed",
         description:
           locale === "tr"
-            ? "Internal değişiklik yapılmadı veya dış yazımlar tamamlanamadı. Aşağıdaki hata ayrıntısını inceleyip operasyonu yeniden deneyin."
-            : "No internal change was applied or the external writes could not complete. Review the error and retry the failed operation.",
-        className: "border-red-400/20 bg-red-400/10 text-red-100",
+            ? "İç görevler ayrı uygulanmış olabilir. Başarısız dış operasyonları inceleyip yalnızca onları yeniden deneyin."
+            : "Internal tasks may have been applied separately. Review the failed external operations and retry only those.",
+        className: "border-red-400/20 bg-red-400/10 text-red-800 dark:text-red-100",
       };
     }
     if (detail.status === "expired") {
       return {
         title: t("changes.resolution.expiredTitle"),
         description: t("changes.resolution.expiredDesc"),
-        className: "border-white/10 bg-white/[0.04] text-white/65",
+        className: "border-border bg-foreground/[0.04] text-foreground-secondary",
       };
     }
     return {
       title: t("changes.resolution.rejectedTitle"),
       description: t("changes.resolution.rejectedDesc"),
-      className: "border-white/10 bg-white/[0.04] text-white/65",
+      className: "border-border bg-foreground/[0.04] text-foreground-secondary",
     };
   }, [detail, locale, t]);
 
@@ -364,17 +408,17 @@ export default function ChangesPage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(body?.message || body?.error || "External write failed");
+        throw new Error(body?.message || body?.error || t("changes.externalWriteFailed"));
       }
       showToast.success(locale === "tr" ? "Dış sistem yazımı yeniden kuyruğa alındı" : "External write queued again");
       if (detail) await fetchDetail(detail.id);
     } catch (error) {
-      showToast.error(error instanceof Error ? error.message : "External write failed");
+      showToast.error(error instanceof Error ? error.message : t("changes.externalWriteFailed"));
     }
   };
 
   const appliedTaskCount = detail?.proposals.filter(
-    (proposal) => proposal.status === "applied" && proposal.task?.id
+    (proposal) => proposal.action === "create_task" && proposal.status === "applied" && proposal.task?.id
   ).length || 0;
 
   if (loading) {
@@ -387,14 +431,14 @@ export default function ChangesPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
-      <header className="mb-10 flex flex-col justify-between gap-5 border-b border-white/10 pb-7 md:flex-row md:items-end">
+      <header className="mb-10 flex flex-col justify-between gap-5 border-b border-border pb-7 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-amber-300">
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
             <GitPullRequestArrow className="size-4" />
             {t("changes.label")}
           </div>
-          <h1 className="text-3xl font-semibold text-white md:text-4xl">{t("changes.title")}</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">
+          <h1 className="text-3xl font-semibold text-foreground md:text-4xl">{t("changes.title")}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-subtle">
             {t("changes.description")}
           </p>
         </div>
@@ -405,10 +449,10 @@ export default function ChangesPage() {
       </header>
 
       {changeSets.length === 0 ? (
-        <div className="flex min-h-[420px] flex-col items-center justify-center border-y border-white/10 text-center">
-          <CheckCircle2 className="mb-4 size-9 text-emerald-300" />
-          <h2 className="text-xl font-medium text-white">{t("changes.emptyTitle")}</h2>
-          <p className="mt-2 max-w-md text-sm text-white/50">
+        <div className="flex min-h-[420px] flex-col items-center justify-center border-y border-border text-center">
+          <CheckCircle2 className="mb-4 size-9 text-emerald-700 dark:text-emerald-300" />
+          <h2 className="text-xl font-medium text-foreground">{t("changes.emptyTitle")}</h2>
+          <p className="mt-2 max-w-md text-sm text-foreground-subtle">
             {t("changes.emptyDesc")}
           </p>
           <Button asChild className="mt-6">
@@ -417,7 +461,7 @@ export default function ChangesPage() {
         </div>
       ) : (
         <div className="grid gap-8 lg:grid-cols-[340px_minmax(0,1fr)]">
-          <aside className="border-r border-white/10 pr-0 lg:pr-6">
+          <aside className="border-r border-border pr-0 lg:pr-6">
             <div className="space-y-1">
               {changeSets.map((changeSet) => (
                 <button
@@ -426,12 +470,12 @@ export default function ChangesPage() {
                   className={cn(
                     "w-full border-l-2 px-4 py-4 text-left transition-colors",
                     selectedId === changeSet.id
-                      ? "border-white bg-white/[0.06]"
-                      : "border-transparent hover:border-white/20 hover:bg-white/[0.03]"
+                      ? "border-foreground bg-foreground/[0.06]"
+                      : "border-transparent hover:border-foreground/20 hover:bg-foreground/[0.03]"
                   )}
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <span className="truncate text-sm font-medium text-white">
+                    <span className="truncate text-sm font-medium text-foreground">
                       {displayDocTitle(changeSet.docTitle)}
                     </span>
                     <Badge
@@ -441,10 +485,10 @@ export default function ChangesPage() {
                       {statusLabel(changeSet.status)}
                     </Badge>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/45">
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-foreground-subtle">
                     {displayGeneratedCopy(changeSet.summary)}
                   </p>
-                  <div className="mt-3 flex items-center gap-3 text-[11px] text-white/35">
+                  <div className="mt-3 flex items-center gap-3 text-[11px] text-foreground-faint">
                     <span>{changeSet.proposals.total} {t("changes.proposals")}</span>
                     <span>{formatRelativeDate(changeSet.createdAt, locale)}</span>
                   </div>
@@ -460,7 +504,7 @@ export default function ChangesPage() {
               </div>
             ) : (
               <>
-                <div className="flex flex-col justify-between gap-5 border-b border-white/10 pb-6 md:flex-row md:items-start">
+                <div className="flex flex-col justify-between gap-5 border-b border-border pb-6 md:flex-row md:items-start">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge
@@ -469,12 +513,12 @@ export default function ChangesPage() {
                       >
                         {statusLabel(detail.status)}
                       </Badge>
-                      <span className="font-mono text-xs text-white/35">
+                      <span className="font-mono text-xs text-foreground-faint">
                         {detail.id.slice(0, 8)}
                       </span>
                     </div>
-                    <h2 className="mt-4 text-2xl font-semibold text-white">{displayDocTitle(detail.docTitle)}</h2>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-white/55">
+                    <h2 className="mt-4 text-2xl font-semibold text-foreground">{displayDocTitle(detail.docTitle)}</h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
                       {displayGeneratedCopy(detail.summary)}
                     </p>
                   </div>
@@ -494,7 +538,7 @@ export default function ChangesPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-px border-b border-white/10 bg-white/10 sm:grid-cols-5">
+                <div className="grid grid-cols-2 gap-px border-b border-border bg-foreground/10 sm:grid-cols-5">
                   {[
                     [t("changes.stats.added"), detail.stats.added || 0],
                     [t("changes.stats.modified"), detail.stats.modified || 0],
@@ -503,8 +547,8 @@ export default function ChangesPage() {
                     [t("changes.stats.proposals"), detail.proposals.length],
                   ].map(([label, value]) => (
                     <div key={String(label)} className="bg-background px-4 py-5">
-                      <div className="text-2xl font-semibold text-white">{value}</div>
-                      <div className="mt-1 text-xs text-white/40">{label}</div>
+                      <div className="text-2xl font-semibold text-foreground">{value}</div>
+                      <div className="mt-1 text-xs text-foreground-faint">{label}</div>
                     </div>
                   ))}
                 </div>
@@ -519,8 +563,8 @@ export default function ChangesPage() {
                 )}
 
                 {appliedTaskCount > 0 && detail.status !== "pending" && (
-                  <div className="mt-4 flex flex-col justify-between gap-3 border border-white/10 px-5 py-4 sm:flex-row sm:items-center">
-                    <span className="text-sm text-white/65">
+                  <div className="mt-4 flex flex-col justify-between gap-3 border border-border px-5 py-4 sm:flex-row sm:items-center">
+                    <span className="text-sm text-foreground-secondary">
                       {locale === "tr"
                         ? `${appliedTaskCount} görev teslimat panosuna uygulandı.`
                         : `${appliedTaskCount} tasks were applied to the delivery board.`}
@@ -537,14 +581,14 @@ export default function ChangesPage() {
                 <div className="py-6">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-semibold text-white">{t("changes.proposedTitle")}</h3>
-                      <p className="mt-1 text-xs text-white/40">
+                      <h3 className="text-sm font-semibold text-foreground">{t("changes.proposedTitle")}</h3>
+                      <p className="mt-1 text-xs text-foreground-faint">
                         {t("changes.proposedDesc")}
                       </p>
                     </div>
                     {detail.status === "pending" && pendingProposals.length > 0 && (
                       <button
-                        className="text-xs text-white/50 hover:text-white"
+                        className="text-xs text-foreground-subtle hover:text-foreground"
                         onClick={() =>
                           setSelectedProposalIds(
                             selectedProposalIds.size === pendingProposals.length
@@ -560,7 +604,7 @@ export default function ChangesPage() {
                     )}
                   </div>
 
-                  <div className="divide-y divide-white/10 border-y border-white/10">
+                  <div className="divide-y divide-border border-y border-border">
                     {detail.proposals.map((proposal) => (
                       <label
                         key={proposal.id}
@@ -577,86 +621,90 @@ export default function ChangesPage() {
                               aria-label={`${t("changes.selectProposal")} ${displayGeneratedCopy(proposal.title)}`}
                             />
                           ) : proposal.status === "applied" ? (
-                            <Check className="size-4 text-emerald-300" />
+                            <Check className="size-4 text-emerald-700 dark:text-emerald-300" />
                           ) : (
-                            <X className="size-4 text-white/35" />
+                            <X className="size-4 text-foreground-faint" />
                           )}
                         </div>
                         <div>
-                          <Badge variant="outline" className="border-white/10 bg-white/5 text-white/60">
+                          <Badge variant="outline" className="border-border bg-foreground/5 text-muted-foreground">
                             {actionLabel(proposal.action)}
                           </Badge>
                           {proposal.requirement?.stableKey && (
-                            <div className="mt-2 font-mono text-xs text-cyan-300">
+                            <div className="mt-2 font-mono text-xs text-cyan-700 dark:text-cyan-300">
                               {proposal.requirement.stableKey}
                             </div>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="font-medium text-white">
+                          <div className="font-medium text-foreground">
                             {displayGeneratedCopy(proposal.title)}
                           </div>
-                          <p className="mt-1 text-sm leading-5 text-white/45">
+                          <p className="mt-1 text-sm leading-5 text-foreground-subtle">
                             {displayGeneratedCopy(proposal.rationale)}
                           </p>
                           {proposal.task?.title && (
-                            <p className="mt-2 text-xs text-white/35">
+                            <p className="mt-2 text-xs text-foreground-faint">
                               {t("changes.currentTask")}: {displayGeneratedCopy(proposal.task.title)}
                             </p>
                           )}
                           {proposal.externalOperations.length > 0 && (
                             <div className="mt-3 space-y-2">
-                              {proposal.externalOperations.map((operation) => (
-                                <div
-                                  key={operation.id}
-                                  className="flex flex-col gap-2 border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between"
-                                >
-                                  <div>
-                                    <span className="font-mono uppercase text-white/35">
-                                      {operation.provider}
-                                    </span>{" "}
-                                    <span>{actionLabel(operation.operationType)}</span>
-                                    <Badge
-                                      variant="outline"
-                                      className={cn("ml-2", statusStyles[operation.status] || "border-white/10 bg-white/5")}
-                                    >
-                                      {operationStatusLabel(operation.status)}
-                                    </Badge>
-                                    <span className="ml-2 text-white/35">
-                                      {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
-                                    </span>
-                                    {operation.error && (
-                                      <p className="mt-1 text-red-300">{operation.error}</p>
+                              {proposal.externalOperations.map((operation) => {
+                                const operationStatus = operationUiStatus(operation);
+                                const operationError = operation.error || operation.syncError;
+                                return (
+                                  <div
+                                    key={operation.id}
+                                    className="flex flex-col gap-2 border border-border bg-foreground/[0.03] px-3 py-2 text-xs text-foreground-subtle sm:flex-row sm:items-center sm:justify-between"
+                                  >
+                                    <div>
+                                      <span className="font-mono uppercase text-foreground-faint">
+                                        {operation.provider}
+                                      </span>{" "}
+                                      <span>{actionLabel(operation.operationType)}</span>
+                                      <Badge
+                                        variant="outline"
+                                        className={cn("ml-2", statusStyles[operationStatus] || "border-border bg-foreground/5")}
+                                      >
+                                        {operationStatusLabel(operationStatus)}
+                                      </Badge>
+                                      <span className="ml-2 text-foreground-faint">
+                                        {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
+                                      </span>
+                                      {operationError && (
+                                        <p className="mt-1 text-red-700 dark:text-red-300">{operationError}</p>
+                                      )}
+                                    </div>
+                                    {operationStatus === "failed_retryable" ? (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 px-2 text-xs"
+                                        onClick={(event) => {
+                                          event.preventDefault();
+                                          void retryExternalOperation(operation.id);
+                                        }}
+                                      >
+                                        {locale === "tr" ? "Yeniden dene" : "Retry"}
+                                      </Button>
+                                    ) : (
+                                      <span className="text-right text-[11px] text-foreground-faint">
+                                        {operationPassiveLabel(operationStatus)}
+                                      </span>
                                     )}
                                   </div>
-                                  {operation.status === "failed_retryable" ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 px-2 text-xs"
-                                      onClick={(event) => {
-                                        event.preventDefault();
-                                        void retryExternalOperation(operation.id);
-                                      }}
-                                    >
-                                      {locale === "tr" ? "Yeniden dene" : "Retry"}
-                                    </Button>
-                                  ) : (
-                                    <span className="text-right text-[11px] text-white/35">
-                                      {operationPassiveLabel(operation.status)}
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-xs text-white/50">
+                          <div className="font-mono text-xs text-foreground-subtle">
                             {proposal.confidence}%
                           </div>
-                          <div className="mt-1 text-[10px] uppercase tracking-wide text-white/30">
+                          <div className="mt-1 text-[10px] uppercase tracking-wide text-foreground-faint">
                             {t("changes.confidence")}
                           </div>
                         </div>
@@ -666,14 +714,14 @@ export default function ChangesPage() {
                 </div>
 
                 {detail.status === "pending" && (
-                  <div className="sticky bottom-4 flex flex-col justify-between gap-4 border border-white/10 bg-black/90 p-4 backdrop-blur-xl sm:flex-row sm:items-center">
+                  <div className="sticky bottom-4 flex flex-col justify-between gap-4 border border-border bg-popover/95 p-4 backdrop-blur-xl sm:flex-row sm:items-center">
                     <div className="flex items-center gap-3">
-                      <CircleDot className="size-4 text-amber-300" />
+                      <CircleDot className="size-4 text-amber-700 dark:text-amber-300" />
                       <div>
-                        <div className="text-sm font-medium text-white">
+                        <div className="text-sm font-medium text-foreground">
                           {selectedProposalIds.size} / {pendingProposals.length} {t("changes.selected")}
                         </div>
-                        <div className="text-xs text-white/40">
+                        <div className="text-xs text-foreground-faint">
                           {t("changes.unselectedRejected")}
                         </div>
                       </div>

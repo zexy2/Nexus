@@ -73,6 +73,7 @@ vi.mock("postgres", () => ({
 import {
   applyPlanChangeSet,
   externalErrorIsRetryable,
+  externalWriteOperationNeedsWork,
   resolveExternalChangeSetStatus,
 } from "../../../../../packages/workflows/src/activities";
 
@@ -87,6 +88,9 @@ describe("external write policy", () => {
   it("does not retry provider validation or permission errors", () => {
     expect(externalErrorIsRetryable(Object.assign(new Error("invalid"), { status: 400 }))).toBe(false);
     expect(externalErrorIsRetryable(Object.assign(new Error("forbidden"), { status: 403 }))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("GitHub installation is missing"))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("GitHub issue create requires payload.title"))).toBe(false);
+    expect(externalErrorIsRetryable(new Error("Unsupported external provider: github"))).toBe(false);
   });
 
   it("calculates truthful terminal change-set states", () => {
@@ -94,6 +98,13 @@ describe("external write policy", () => {
     expect(resolveExternalChangeSetStatus({ succeeded: 1, failed: 1, internalApplied: 0 })).toBe("partially_applied");
     expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 1, internalApplied: 2 })).toBe("partially_applied");
     expect(resolveExternalChangeSetStatus({ succeeded: 0, failed: 2, internalApplied: 0 })).toBe("external_failed");
+  });
+
+  it("reruns pending sync after provider write already succeeded", () => {
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "pending" })).toBe(true);
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "running" })).toBe(true);
+    expect(externalWriteOperationNeedsWork({ status: "succeeded", syncStatus: "succeeded" })).toBe(false);
+    expect(externalWriteOperationNeedsWork({ status: "failed_retryable", syncStatus: "not_required" })).toBe(true);
   });
 });
 

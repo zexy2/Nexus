@@ -1,9 +1,11 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { externalWriteOperations } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { requireWorkspaceOwner } from "@/lib/workspace-auth";
+import { startWorkflowOnce } from "@/lib/temporal-start";
 
 export const runtime = "nodejs";
 
@@ -35,21 +37,36 @@ export async function POST(
     );
   }
 
+  const retryable =
+    operation.status === "failed_retryable" ||
+    (operation.status === "succeeded" && operation.syncStatus === "failed_retryable");
+  if (!retryable) {
+    return NextResponse.json(
+      {
+        error: "OPERATION_NOT_RETRYABLE",
+        message: "Only failed retryable operations can be retried.",
+      },
+      { status: 409 }
+    );
+  }
+
   try {
-    const temporal = await import("@nexus/workflows/client");
-    const result = await temporal.startWorkflow(
+    // Deterministic id: a second click while the retry is running attaches to
+    // it instead of starting a duplicate retry of the same operation.
+    const result = await startWorkflowOnce(
       "externalWriteRetryWorkflow",
       {
         operationId: operation.id,
         changeSetId: operation.changeSetId,
         userId: session.user.id,
       },
-      { workflowId: `external-write-retry-${operation.id}-${Date.now()}` }
+      { workflowId: `external-write-retry-${operation.id}` }
     );
     return NextResponse.json({ ok: true, ...result, status: "running" }, { status: 202 });
   } catch (error) {
+    const requestId = logInternalError("External write retry", error, _request.headers);
     return NextResponse.json(
-      { error: "TEMPORAL_UNAVAILABLE", message: error instanceof Error ? error.message : "Workflow engine is unavailable." },
+      { error: "TEMPORAL_UNAVAILABLE", message: "Workflow engine is unavailable.", requestId },
       { status: 503 }
     );
   }

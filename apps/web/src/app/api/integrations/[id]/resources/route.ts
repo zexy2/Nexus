@@ -1,3 +1,4 @@
+import { logInternalError } from "@/lib/api-response";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { workspaceIntegrations } from "@nexus/database/schema";
@@ -40,8 +41,9 @@ export async function GET(
         { status: error.status }
       );
     }
+    const requestId = logInternalError("Integration resources", error, _request.headers);
     return NextResponse.json(
-      { error: "PROVIDER_API_FAILED", message: error instanceof Error ? error.message : "Provider request failed." },
+      { error: "PROVIDER_API_FAILED", message: "Provider request failed.", requestId },
       { status: 502 }
     );
   }
