@@ -1,9 +1,39 @@
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
+
+type DemoCookies = Awaited<ReturnType<BrowserContext["cookies"]>>;
+
+// POST /api/demo/session is rate limited to 5 requests per minute per IP
+// (RATE_LIMITS.demoLogin). Logging in once per serial run, instead of once per
+// test, keeps CI retries well below that budget: a retry restarts the worker,
+// which clears this cache and logs in exactly once more.
+let demoCookies: DemoCookies | null = null;
 
 async function enterPublicDemo(page: Page) {
   await page.goto("/login");
+
+  const sessionResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/api/demo/session" &&
+      response.request().method() === "POST"
+  );
   await page.getByTestId("public-demo-login").click();
-  await page.waitForURL(/\/dashboard/);
+
+  // Fail with the server's reason (rate limit, capacity, ...) instead of a
+  // generic navigation timeout.
+  const response = await sessionResponse;
+  expect(response.status(), await response.text()).toBe(200);
+
+  await page.waitForURL(/\/dashboard(?:[/?#]|$)/);
+  demoCookies = await page.context().cookies();
+}
+
+async function ensurePublicDemo(page: Page) {
+  if (!demoCookies) {
+    await enterPublicDemo(page);
+    return;
+  }
+
+  await page.context().addCookies(demoCookies);
 }
 
 async function dragWithPointer(page: Page, source: Locator, target: Locator) {
@@ -60,7 +90,7 @@ test.describe("cost-free public demo core", () => {
   });
 
   test("a task can move through Review and Done and persists on the server", async ({ page }) => {
-    await enterPublicDemo(page);
+    await ensurePublicDemo(page);
 
     const title = `E2E Task ${Date.now()}`;
     const createResponse = await page.request.post("/api/tasks", {
