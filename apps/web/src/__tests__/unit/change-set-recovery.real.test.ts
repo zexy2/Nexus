@@ -89,7 +89,9 @@ import {
 import { POST as rejectChangeSet } from "@/app/api/change-sets/[id]/reject/route";
 import { POST as analyzeChange } from "@/app/api/plans/[docId]/analyze-change/route";
 
-const now = new Date("2026-11-21T12:00:00Z");
+// Relative to the real clock: the route handlers read Date.now(), so a fixed
+// date here turns "recent" into "overdue" once the 72 h window has passed.
+const now = new Date();
 const recent = new Date(now.getTime() - 60 * 60 * 1000);
 const overdue = new Date(now.getTime() - PLAN_CHANGE_REVIEW_WINDOW_MS - PLAN_CHANGE_EXPIRY_GRACE_MS - 1000);
 
