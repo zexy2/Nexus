@@ -46,42 +46,48 @@ type Box = NonNullable<Awaited<ReturnType<Locator["boundingBox"]>>>;
 // band and measure only after the layout has settled.
 const AUTO_SCROLL_EDGE = 0.2;
 
-async function dragWithPointer(page: Page, source: Locator, target: Locator) {
-  await target.evaluate((element) => {
-    const top = element.getBoundingClientRect().top;
-    window.scrollBy({ top: top - window.innerHeight * 0.25, behavior: "instant" });
-  });
-
-  let sourceBox: Box | null = null;
-  let targetBox: Box | null = null;
+async function stableBoxes(source: Locator, target: Locator): Promise<[Box, Box]> {
+  let boxes: [Box | null, Box | null] = [null, null];
   let previous = "";
 
-  // Wait until both boxes exist and stop moving (entrance animation, data load).
+  // Both boxes must exist and stop moving (entrance animation, data load).
   await expect.poll(async () => {
-    sourceBox = await source.boundingBox();
-    targetBox = await target.boundingBox();
-    const current = JSON.stringify([sourceBox, targetBox]);
-    const stable = Boolean(sourceBox && targetBox) && current === previous;
+    boxes = [await source.boundingBox(), await target.boundingBox()];
+    const current = JSON.stringify(boxes);
+    const stable = Boolean(boxes[0] && boxes[1]) && current === previous;
     previous = current;
     return stable;
   }, { intervals: [100] }).toBe(true);
 
+  const [sourceBox, targetBox] = boxes;
   if (!sourceBox || !targetBox) throw new Error("Drag source or target is not measurable");
-  const sb: Box = sourceBox;
-  const tb: Box = targetBox;
+  return [sourceBox, targetBox];
+}
+
+async function dragWithPointer(page: Page, source: Locator, target: Locator) {
+  // Center the drag source vertically (in whichever ancestor scrolls), then
+  // re-measure after the scroll.
+  await stableBoxes(source, target);
+  await source.evaluate((element) => {
+    element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+  });
+  const [sourceBox, targetBox] = await stableBoxes(source, target);
 
   const viewportHeight = page.viewportSize()?.height ?? 720;
   const minY = viewportHeight * AUTO_SCROLL_EDGE + 8;
   const maxY = viewportHeight * (1 - AUTO_SCROLL_EDGE) - 8;
 
-  const sourceX = sb.x + sb.width / 2;
-  const sourceY = sb.y + Math.min(sb.height / 2, 48);
-  const targetX = tb.x + tb.width / 2;
-  const targetY = Math.min(Math.max(tb.y + 80, minY), tb.y + tb.height - 24, maxY);
+  const sourceX = sourceBox.x + sourceBox.width / 2;
+  const sourceY = sourceBox.y + Math.min(sourceBox.height / 2, 48);
+  const targetX = targetBox.x + targetBox.width / 2;
+  const targetY = Math.min(Math.max(targetBox.y + 80, minY), maxY);
 
   expect(sourceY, "drag source must sit outside the auto-scroll zone").toBeGreaterThanOrEqual(minY);
-  expect(sourceY).toBeLessThanOrEqual(maxY);
-  expect(targetY, "drop point must sit inside the target column").toBeGreaterThan(tb.y);
+  expect(sourceY, "drag source must sit outside the auto-scroll zone").toBeLessThanOrEqual(maxY);
+  expect(targetY, "drop point must sit inside the target column").toBeGreaterThan(targetBox.y);
+  expect(targetY, "drop point must sit inside the target column").toBeLessThan(
+    targetBox.y + targetBox.height
+  );
 
   await page.mouse.move(sourceX, sourceY);
   await page.mouse.down();
@@ -120,6 +126,9 @@ test.describe("cost-free public demo core", () => {
   });
 
   test("a task can move through Review and Done and persists on the server", async ({ page }) => {
+    // A taller viewport keeps a whole Kanban column inside the band between
+    // dnd-kit's auto-scroll zones, so the drag never scrolls the page.
+    await page.setViewportSize({ width: 1280, height: 1100 });
     await ensurePublicDemo(page);
 
     const title = `E2E Task ${Date.now()}`;
