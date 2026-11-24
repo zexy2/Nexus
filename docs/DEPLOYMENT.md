@@ -22,6 +22,7 @@ ADMIN_EMAILS=your-email@example.com
 DEMO_ACCESS_CODE=
 DEMO_SESSION_TTL_MINUTES=60
 DEMO_MAX_ACTIVE_SESSIONS=25
+DEMO_SESSION_RATE_LIMIT_PER_MINUTE=10
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
@@ -61,6 +62,7 @@ Operational settings (all optional; defaults shown in `.env.production.example`)
 | `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
 | `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
 | `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+| `DEMO_SESSION_RATE_LIMIT_PER_MINUTE` | web | Demo logins allowed per minute per client IP. Raise it for visitors behind a shared office NAT; `DEMO_MAX_ACTIVE_SESSIONS` and the `AI_DEMO_*` limits remain the real cost guard. Empty/unset/invalid = `10`. |
 | `CSP_ENFORCE` | web | `true` enforces the Content-Security-Policy, `false` sends report-only. Empty/unset = enforce in production, report-only otherwise. |
 | `REQUIRE_INTEGRATION_PROVIDERS` | web | Comma list (`github`, `linear`) of providers whose missing credentials fail `/api/health`. Empty/unset = none required (unless legacy `REQUIRE_INTEGRATIONS_HEALTH=true`, which implies `github`). |
 | `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_PER_MINUTE_LIMIT` | web | Cost-runaway safety cap across ALL users. Defaults 5000/day, 120/min. |
@@ -195,14 +197,22 @@ What `deploy.sh <tag>` does, stopping at the first failure:
    (they are baked into the browser bundle). A mismatch aborts before anything
    changes; fix the repository variables (below) or set
    `DEPLOY_SKIP_PUBLIC_ENV_CHECK=1` deliberately.
-6. Records the running image ref in `.deploy/previous` (for `--rollback`).
+6. Records the running images in `.deploy/previous` (for `--rollback`)
+   before anything running is changed, including on the very first run. A
+   registry ref shared by all three services (`ghcr.io/zexy2/nexus-*:sha-...`)
+   is recorded as is; anything else (compose-built `nexus-<svc>` images,
+   `latest`, mixed versions) is pinned by tagging the running image IDs as
+   `nexus-<svc>:rollback-pre-<UTC stamp>` and recording that.
 7. **Migrate** (`docker compose run --rm migrate`), then **worker** (waits for
    "Waiting for workflows"), then **web + collaboration** (waits for both
    container health checks, `DEPLOY_HEALTH_TIMEOUT`, default 240s).
 8. `GET /api/health` with `HEALTH_CHECK_TOKEN` must return 200.
 9. Records `.deploy/current` and appends `.deploy/history`, then removes app
-   images other than the current and previous refs (`docker image prune` for
-   dangling layers).
+   images other than the current and previous releases (`docker image prune`
+   for dangling layers). Pruning is skipped entirely when no previous release
+   is recorded, and it never removes an image used by any container, an image
+   the current/previous refs point at, or any `rollback-*` tag (remove old
+   `rollback-*` tags by hand when they are no longer wanted).
 
 On failure it prints `compose ps` and the worker/web/collaboration logs and
 exits non-zero. **It never rolls the database back**: the pre-deploy dump is
