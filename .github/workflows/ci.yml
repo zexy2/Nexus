@@ -161,8 +161,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      NET: ${{ job.services.postgres.network }}
-      PG_ID: ${{ job.services.postgres.id }}
       DATABASE_URL: postgresql://nexus:nexus@postgres:5432/nexus
       COLLAB_AUTH_SECRET: nexus-ci-collab-secret-at-least-32-characters
       SMOKE_DOC_ID: 00000000-0000-4000-8000-0000000000d1
@@ -172,6 +170,15 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      # The `job` context is not available in job-level env.
+      - name: Export service container network
+        env:
+          SERVICE_NET: ${{ job.services.postgres.network }}
+          SERVICE_PG_ID: ${{ job.services.postgres.id }}
+        run: |
+          echo "NET=$SERVICE_NET" >> "$GITHUB_ENV"
+          echo "PG_ID=$SERVICE_PG_ID" >> "$GITHUB_ENV"
 
       # Temporal needs ~30s to create its schema; start it before the build so
       # it is ready by the time the worker and web smoke tests run.
