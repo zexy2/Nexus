@@ -139,15 +139,33 @@ jobs:
           if-no-files-found: warn
 
   docker:
-    name: Docker image (linux/arm64)
-    # Production runs on an ARM64 host, so the image is built natively on
+    name: Docker images (linux/arm64)
+    # Production runs on an ARM64 host, so the images are built natively on
     # GitHub's arm64 runner (free for public repos, much faster than QEMU).
-    # web, worker and collaboration all build this same Dockerfile and final
-    # stage and differ only in CMD, so one build plus per-service smoke checks
-    # covers all three. Nothing is pushed to a registry.
+    # All four targets (web, worker, collaboration, migrate) are built in one
+    # bake from the multi-target Dockerfile, then each is started for real
+    # against Postgres (pgvector) and Temporal. Nothing is pushed here.
     runs-on: ubuntu-24.04-arm
     needs: [lint, typecheck]
-    timeout-minutes: 30
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: nexus
+          POSTGRES_PASSWORD: nexus
+          POSTGRES_DB: nexus
+        options: >-
+          --health-cmd "pg_isready -U nexus -d nexus"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NET: ${{ job.services.postgres.network }}
+      PG_ID: ${{ job.services.postgres.id }}
+      DATABASE_URL: postgresql://nexus:nexus@postgres:5432/nexus
+      COLLAB_AUTH_SECRET: nexus-ci-collab-secret-at-least-32-characters
+      SMOKE_DOC_ID: 00000000-0000-4000-8000-0000000000d1
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -155,33 +173,170 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/arm64
-          push: false
-          load: true
-          tags: nexus:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_APP_URL=http://localhost:3000
-            NEXT_PUBLIC_COLLABORATION_URL=ws://localhost:1234
+      # Temporal needs ~30s to create its schema; start it before the build so
+      # it is ready by the time the worker and web smoke tests run.
+      - name: Start Temporal (same image as production)
+        run: |
+          docker run -d --name temporal --network "$NET" \
+            -e DB=postgres12 -e DB_PORT=5432 -e POSTGRES_USER=nexus \
+            -e POSTGRES_PWD=nexus -e POSTGRES_SEEDS=postgres \
+            temporalio/auto-setup:1.29.7 < /dev/null
 
-      - name: Smoke-check runtime image
+      - name: Build images
+        uses: docker/bake-action@v7
+        env:
+          TAGS: ci
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          NEXT_PUBLIC_COLLABORATION_URL: ws://localhost:1234
+        with:
+          files: docker-bake.hcl
+          load: true
+          set: |
+            *.platform=linux/arm64
+            web.cache-from=type=gha,scope=web
+            web.cache-to=type=gha,scope=web,mode=max
+            worker.cache-from=type=gha,scope=worker
+            worker.cache-to=type=gha,scope=worker,mode=max
+            collaboration.cache-from=type=gha,scope=collaboration
+            collaboration.cache-to=type=gha,scope=collaboration,mode=max
+            migrate.cache-from=type=gha,scope=migrate
+            migrate.cache-to=type=gha,scope=migrate,mode=max
+
+      - name: Image sizes
         run: |
           set -euo pipefail
-          echo "--- base: Node 24, corepack and pnpm as the unprivileged node user"
-          docker run --rm nexus:ci sh -c 'id -un && node --version && corepack --version && pnpm --version'
-          docker run --rm nexus:ci node -e 'if (process.versions.node.split(".")[0] !== "24") { console.error("expected Node 24, got " + process.version); process.exit(1) }'
-          echo "--- web: Next.js production build present"
-          docker run --rm -w /app/apps/web nexus:ci sh -c 'test -f .next/BUILD_ID && cat .next/BUILD_ID'
-          echo "--- worker: Temporal native core-bridge loads"
-          docker run --rm -w /app/packages/workflows nexus:ci node -e 'const w = require("@temporalio/worker"); if (typeof w.NativeConnection !== "function") process.exit(1); console.log("temporal worker ok", process.platform, process.arch)'
-          echo "--- collaboration: tsx entrypoint resolves"
-          docker run --rm -w /app/apps/web nexus:ci sh -c 'test -f src/server/collaboration.ts && pnpm exec tsx --version'
+          {
+            echo "### Docker image sizes (linux/arm64)"
+            echo
+            echo "| Image | Size |"
+            echo "| --- | --- |"
+            for t in web worker collaboration migrate; do
+              bytes=$(docker image inspect "nexus-$t:ci" --format '{{.Size}}')
+              echo "| nexus-$t | $(numfmt --to=iec --suffix=B "$bytes") ($bytes bytes) |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: "Smoke: all images run as the unprivileged node user on Node 24 arm64"
+        run: |
+          set -euo pipefail
+          for t in web worker collaboration migrate; do
+            out=$(docker run --rm --entrypoint node "nexus-$t:ci" -e 'console.log(require("os").userInfo().username, process.version, process.arch)' < /dev/null)
+            echo "nexus-$t: $out"
+            case "$out" in "node v24."*" arm64") ;; *) echo "unexpected runtime for nexus-$t"; exit 1 ;; esac
+          done
+
+      - name: "Smoke: migrate (fresh database, then a no-op second run)"
+        run: |
+          set -euo pipefail
+          expected=$(ls packages/database/drizzle/*.sql | wc -l)
+          count() { docker exec "$PG_ID" psql -U nexus -d nexus -Atc 'select count(*) from drizzle.__drizzle_migrations'; }
+          docker run --rm --network "$NET" -e DATABASE_URL nexus-migrate:ci < /dev/null
+          first=$(count)
+          echo "applied after first run: $first (expected $expected)"
+          test "$first" -eq "$expected"
+          docker run --rm --network "$NET" -e DATABASE_URL nexus-migrate:ci < /dev/null
+          second=$(count)
+          echo "applied after second run: $second"
+          test "$second" -eq "$first"
+          # Seed one document for the collaboration websocket smoke test.
+          docker exec -i "$PG_ID" psql -v ON_ERROR_STOP=1 -U nexus -d nexus <<SQL
+          insert into users (id, name, email) values ('ci-smoke', 'CI smoke', 'ci-smoke@example.invalid');
+          insert into workspaces (id, name, owner_id) values ('00000000-0000-4000-8000-0000000000a1', 'CI smoke', 'ci-smoke');
+          insert into docs (id, workspace_id) values ('$SMOKE_DOC_ID', '00000000-0000-4000-8000-0000000000a1');
+          SQL
+
+      - name: "Smoke: worker connects to Temporal and bundles workflows"
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if docker exec temporal sh -c 'temporal operator namespace describe -n default --address temporal:7233 || tctl --address temporal:7233 --ns default namespace describe' > /dev/null 2>&1; then
+              echo "temporal ready after ~$((i * 3))s"; break
+            fi
+            if [ "$i" -eq 60 ]; then docker logs --tail 50 temporal; exit 1; fi
+            sleep 3
+          done
+          docker run -d --name worker --network "$NET" \
+            -e DATABASE_URL -e TEMPORAL_ADDRESS=temporal:7233 -e NODE_ENV=production \
+            nexus-worker:ci < /dev/null
+          for i in $(seq 1 60); do
+            if docker logs worker 2>&1 | grep -q "Waiting for workflows"; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' worker)" != "true" ] || [ "$i" -eq 60 ]; then
+              docker logs worker; exit 1
+            fi
+            sleep 2
+          done
+          docker logs worker 2>&1 | grep -E "Workflow bundle created|Worker connected|Task Queue"
+          docker logs worker 2>&1 | grep -q "Workflow bundle created"
+
+      - name: "Smoke: collaboration serves HTTP and authorised Yjs websockets"
+        run: |
+          set -euo pipefail
+          docker run -d --name collab --network "$NET" \
+            -e DATABASE_URL -e COLLAB_AUTH_SECRET \
+            -e COLLABORATION_HOST=0.0.0.0 -e COLLABORATION_PORT=1234 \
+            nexus-collaboration:ci < /dev/null
+          for i in $(seq 1 30); do
+            if body=$(docker run --rm --network "$NET" --entrypoint node nexus-collaboration:ci \
+                -e 'fetch("http://collab:1234").then(async r=>{const t=await r.text(); console.log(r.status, t); process.exit(r.ok?0:1)}).catch(()=>process.exit(1))' < /dev/null); then
+              echo "$body"; break
+            fi
+            if [ "$i" -eq 30 ]; then docker logs collab; exit 1; fi
+            sleep 1
+          done
+          echo "$body" | grep -q '"persistence":"postgres"'
+          docker run --rm --network "$NET" -v "$PWD/scripts/ci:/ci:ro" \
+            -e COLLAB_URL=ws://collab:1234 -e COLLAB_AUTH_SECRET -e DOC_ID="$SMOKE_DOC_ID" \
+            --entrypoint node nexus-collaboration:ci /ci/collab-ws-smoke.mjs < /dev/null \
+            || { docker logs collab; exit 1; }
+
+      - name: "Smoke: web standalone server"
+        run: |
+          set -euo pipefail
+          docker run -d --name web --network "$NET" -p 3000:3000 \
+            -e DATABASE_URL -e COLLAB_AUTH_SECRET \
+            -e TEMPORAL_ADDRESS=temporal:7233 -e TEMPORAL_NAMESPACE=default \
+            -e BETTER_AUTH_SECRET=nexus-ci-web-secret-at-least-32-characters \
+            -e BETTER_AUTH_URL=http://localhost:3000 \
+            -e AUTH_TRUSTED_ORIGINS=http://localhost:3000 \
+            -e COLLABORATION_HEALTH_URL=http://collab:1234 \
+            -e HEALTH_CHECK_TOKEN=ci-health-token \
+            -e APP_COMMIT_SHA="$GITHUB_SHA" \
+            -e OTEL_ENABLED=true \
+            nexus-web:ci < /dev/null
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -H 'x-health-token: ci-health-token' http://127.0.0.1:3000/api/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then break; fi
+            if [ "$i" -eq 60 ]; then docker logs web; exit 1; fi
+            sleep 2
+          done
+          echo "/api/health -> $code"; cat /tmp/health.json; echo
+          # Every dependency the image talks to must be reachable from it.
+          for svc in database temporal collaboration worker; do
+            status=$(jq -r ".services.$svc.status" /tmp/health.json)
+            echo "$svc: $status"
+            test "$status" = "healthy" || { docker logs web; exit 1; }
+          done
+          for path in / /login /register /icon.svg; do
+            c=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path")
+            echo "$path -> $c"; test "$c" = "200"
+          done
+          css=$(curl -s http://127.0.0.1:3000/login | grep -oE '/_next/static/[^"]+\.css' | head -1)
+          c=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$css")
+          echo "$css -> $c"; test "$c" = "200"
+          c=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{}' http://127.0.0.1:3000/api/auth/sign-in/email)
+          echo "POST /api/auth/sign-in/email (empty body) -> $c"; case "$c" in 4??) ;; *) docker logs web; exit 1 ;; esac
+          echo "--- sharp (image optimisation) loads from the traced output"
+          docker exec web node -e 'const p=require.resolve("next/dist/server/image-optimizer",{paths:["/app/apps/web"]}); require(require.resolve("sharp",{paths:[p]}))({create:{width:2,height:2,channels:3,background:"#000"}}).png().toBuffer().then(b=>console.log("sharp ok", b.length))'
+          echo "--- container log"
+          docker logs web 2>&1 | tail -20
+          if docker logs web 2>&1 | grep -E "Cannot find module|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND"; then exit 1; fi
+
+      - name: Container logs on failure
+        if: failure()
+        run: |
+          for c in temporal worker collab web; do
+            echo "::group::$c"; docker logs --tail 200 "$c" 2>&1 || true; echo "::endgroup::"
+          done
 
   e2e:
     name: E2E Tests

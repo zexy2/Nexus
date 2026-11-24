@@ -80,7 +80,7 @@ Delivered as stacked PRs #46 (phase 0) -> #48 (phase 1) -> #50 (phase 2) -> #51 
 - **Race guards:** guards added to the code paths that previously raced (phase 1).
 - **Offline sync engine:** non-blocking queue, field-level conflicts, per-user storage.
 - **Collaboration:** collab token refresh and offline editing.
-- **Infra:** Temporal images pinned (auto-setup 1.29.7, ui 2.58.1), web Dockerfile `HEALTHCHECK`, collab service has its own healthcheck, worker container healthcheck disabled (it has no HTTP endpoint; liveness is the DB heartbeat in `/api/health`).
+- **Infra:** Temporal images pinned (auto-setup 1.29.7, ui 2.58.1), multi-target Dockerfile (`web` Next.js standalone, `worker`, `collaboration` single bundle, `migrate`) with a web `HEALTHCHECK`, collab service has its own healthcheck, worker container healthcheck disabled (it has no HTTP endpoint; liveness is the DB heartbeat in `/api/health`).
 - **CI:** CodeQL, `pnpm audit`, secret scanning and Dependabot are added in PR #49 (not part of this stack), and coverage runs in CI from phase 4.
 
 ### Tests and coverage

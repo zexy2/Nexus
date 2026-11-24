@@ -4,6 +4,22 @@ x-logging: &default-logging
     max-size: "20m"
     max-file: "5"
 
+# Build arguments shared by every app target. They must be identical for all
+# services so web/worker/collaboration/migrate reuse one `builder` stage.
+# NEXT_PUBLIC_* values are inlined into the web client bundle at build time.
+x-build-args: &build-args
+  NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+  NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
+  NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
+  NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
+  NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED: ${NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED:-false}
+
+# Images: `build` keeps local builds working (`docker compose build`), `image`
+# names the result. The defaults reproduce the historical local names
+# (nexus-web:latest, ...). For registry deploys set
+#   NEXUS_IMAGE_PREFIX=ghcr.io/zexy2/nexus NEXUS_IMAGE_TAG=sha-abc1234
+# and use `docker compose pull` + `up --no-build` (see scripts/deploy.sh).
+
 services:
   postgres:
     logging: *default-logging
@@ -44,15 +60,12 @@ services:
 
   web:
     logging: *default-logging
+    image: ${NEXUS_IMAGE_PREFIX:-nexus}-web:${NEXUS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
-        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
-        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
-        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
-        NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED: ${NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED:-false}
+      target: web
+      args: *build-args
     restart: unless-stopped
     depends_on:
       postgres:
@@ -139,26 +152,24 @@ services:
 
   worker:
     logging: *default-logging
+    image: ${NEXUS_IMAGE_PREFIX:-nexus}-worker:${NEXUS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
-        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
-        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
-        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
+      target: worker
+      args: *build-args
     restart: unless-stopped
     depends_on:
       temporal:
         condition: service_started
       postgres:
         condition: service_healthy
-    command: ["pnpm", "--filter", "@nexus/workflows", "worker"]
+    # Image CMD: node dist/worker.js (precompiled; no tsx/pnpm at runtime).
     # SIGTERM drains the worker; in-flight activities get WORKER_SHUTDOWN_GRACE_TIME
     # to finish, so the container stop timeout must be longer than that.
     stop_grace_period: 60s
-    # The image HEALTHCHECK probes the web port; the worker serves no HTTP.
-    # Its liveness is reported through the worker heartbeat in /api/health.
+    # The worker serves no HTTP. Its liveness is reported through the worker
+    # heartbeat in /api/health.
     healthcheck:
       disable: true
     environment:
@@ -181,18 +192,16 @@ services:
 
   collaboration:
     logging: *default-logging
+    image: ${NEXUS_IMAGE_PREFIX:-nexus}-collaboration:${NEXUS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
-        NEXT_PUBLIC_COLLABORATION_URL: ${NEXT_PUBLIC_COLLABORATION_URL:?NEXT_PUBLIC_COLLABORATION_URL is required}
-        NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-true}
-        NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED:-false}
+      target: collaboration
+      args: *build-args
     restart: unless-stopped
-    command: ["pnpm", "--filter", "@nexus/web", "collab"]
-    # Overrides the image's web HEALTHCHECK: the collaboration server answers
-    # any HTTP GET on its port with 200 when Postgres persistence is active.
+    # Image CMD: node dist-collab/collaboration.mjs (one esbuild bundle).
+    # The collaboration server answers any HTTP GET on its port with 200 when
+    # Postgres persistence is active.
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:1234').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 30s
@@ -211,6 +220,26 @@ services:
       COLLAB_AUTH_SECRET: ${COLLAB_AUTH_SECRET:?COLLAB_AUTH_SECRET is required}
     ports:
       - "${COLLABORATION_BIND:-127.0.0.1}:${COLLABORATION_PORT:-1234}:1234"
+
+  # One-shot migration runner (drizzle-kit + guarded baseline). Not started by
+  # `up`; run it explicitly before rolling out new app code:
+  #   docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+  migrate:
+    logging: *default-logging
+    image: ${NEXUS_IMAGE_PREFIX:-nexus}-migrate:${NEXUS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrate
+      args: *build-args
+    profiles: ["tools"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nexus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nexus}
 
   temporal-ui:
     logging: *default-logging

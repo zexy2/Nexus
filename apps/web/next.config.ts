@@ -1,10 +1,19 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+const monorepoRoot = path.resolve(process.cwd(), "../..");
+
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(process.cwd(), "../.."),
+    root: monorepoRoot,
   },
+
+  // Self-contained server build for the slim `web` Docker target: only the
+  // traced runtime files are copied into the image (no dev dependencies).
+  // Tracing starts at the monorepo root so workspace packages
+  // (@nexus/database, @nexus/workflows) and pnpm's store are included.
+  output: "standalone",
+  outputFileTracingRoot: monorepoRoot,
 
   // Image optimization
   images: {
