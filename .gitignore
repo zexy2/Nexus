@@ -98,3 +98,6 @@ test-results/
 .cache/
 tmp/
 temp/
+
+# Deploy script state (rollback refs, last health response)
+.deploy/

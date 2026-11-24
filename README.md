@@ -176,6 +176,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
+Releases after the first install: CI publishes `ghcr.io/zexy2/nexus-{web,worker,collaboration,migrate}` for every green `main`, and `scripts/deploy.sh [main|sha-xxxxxxx]` on the server backs up the database, pulls, migrates and restarts in order (`--rollback` returns to the previous images).
+
 Production uses migrations. `db:push` is local-only and should not be used for deploys.
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for environment variables (see also `.env.production.example`), the deploy order, reverse proxy notes, smoke checks, backups, and the maintenance timers.

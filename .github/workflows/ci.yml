@@ -4,6 +4,12 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # Manual run on main re-runs the checks and republishes the images.
+  workflow_dispatch:
+
+# Default token scope for every job; only `publish` adds packages: write.
+permissions:
+  contents: read
 
 env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -31,6 +37,10 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      # shellcheck ships with the ubuntu runner image.
+      - name: Shellcheck deploy script
+        run: shellcheck -x scripts/deploy.sh
 
   typecheck:
     name: Type Check
@@ -411,3 +421,85 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+
+  publish:
+    name: Publish images (GHCR)
+    # Runs only for main (push or manual dispatch) and only after every other
+    # CI job, including the image smoke tests, has passed.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [lint, typecheck, build, test, docker, e2e]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: publish-images-main
+      cancel-in-progress: false
+    env:
+      IMAGE_PREFIX: ghcr.io/zexy2/nexus
+      # Inlined into the browser bundle at build time, so they must be the
+      # production values. Override with repository variables; scripts/deploy.sh
+      # refuses images whose values differ from the server's .env.production.
+      NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://nexus.zekiakgul.dev' }}
+      NEXT_PUBLIC_COLLABORATION_URL: ${{ vars.NEXT_PUBLIC_COLLABORATION_URL || 'wss://nexus.zekiakgul.dev/collab' }}
+      NEXT_PUBLIC_DEMO_MODE: ${{ vars.NEXT_PUBLIC_DEMO_MODE || 'true' }}
+      NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: ${{ vars.NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED || 'false' }}
+      NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED: ${{ vars.NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED || 'false' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Image tags
+        id: meta
+        run: |
+          short="${GITHUB_SHA::7}"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "TAGS=main,sha-$short" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/bake-action@v7
+        with:
+          files: docker-bake.hcl
+          push: true
+          provenance: false
+          set: |
+            *.platform=linux/arm64
+            *.labels.org.opencontainers.image.revision=${{ github.sha }}
+            web.cache-from=type=gha,scope=publish-web
+            web.cache-to=type=gha,scope=publish-web,mode=max
+            worker.cache-from=type=gha,scope=publish-worker
+            worker.cache-to=type=gha,scope=publish-worker,mode=max
+            collaboration.cache-from=type=gha,scope=publish-collaboration
+            collaboration.cache-to=type=gha,scope=publish-collaboration,mode=max
+            migrate.cache-from=type=gha,scope=publish-migrate
+            migrate.cache-to=type=gha,scope=publish-migrate,mode=max
+
+      - name: Published images
+        env:
+          SHORT: ${{ steps.meta.outputs.short }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Published to GHCR (linux/arm64)"
+            echo
+            echo "Deploy on the server: \`scripts/deploy.sh sha-$SHORT\` (or \`scripts/deploy.sh\` for \`main\`)."
+            echo
+            echo "| Image | Tags | Compressed size |"
+            echo "| --- | --- | --- |"
+            for t in web worker collaboration migrate; do
+              ref="$IMAGE_PREFIX-$t:sha-$SHORT"
+              bytes=$(docker buildx imagetools inspect --raw "$ref" | jq '[.layers[].size] | add')
+              echo "| \`$IMAGE_PREFIX-$t\` | \`main\`, \`sha-$SHORT\` | $(numfmt --to=iec --suffix=B "$bytes") |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
