@@ -336,9 +336,11 @@ prune_images() {
       while IFS= read -r image; do
         [[ -z "$image" || "$image" == *"<none>"* ]] && continue
         ref=no
-        for k in "${keep[@]}"; do [[ "$k" == "$image" ]] && ref=yes; done
-        if [[ "$ref" == no ]]; then
-          docker image rm "$image" > /dev/null 2>&1 < /dev/null && echo "removed $image" || true
+        for k in "${keep[@]}"; do
+          if [[ "$k" == "$image" ]]; then ref=yes; fi
+        done
+        if [[ "$ref" == no ]] && docker image rm "$image" > /dev/null 2>&1 < /dev/null; then
+          echo "removed $image"
         fi
       done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' "$prefix-$svc" < /dev/null)
     done
