@@ -1,5 +1,12 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
+    logging: *default-logging
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
@@ -16,6 +23,7 @@ services:
       retries: 5
 
   temporal:
+    logging: *default-logging
     # Pinned: `latest` silently upgrades the server on a pull. auto-setup is
     # only published up to 1.29.x (Temporal deprecated it); moving to 1.30+
     # means temporalio/server + admin-tools schema setup. Compatible with
@@ -35,6 +43,7 @@ services:
     # Do not publish 7233 on a public VPS.
 
   web:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile
@@ -129,6 +138,7 @@ services:
       retries: 5
 
   worker:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile
@@ -170,6 +180,7 @@ services:
       AI_MAX_STEPS_PER_WORKFLOW: ${AI_MAX_STEPS_PER_WORKFLOW:-}
 
   collaboration:
+    logging: *default-logging
     build:
       context: .
       dockerfile: Dockerfile
@@ -202,6 +213,7 @@ services:
       - "${COLLABORATION_BIND:-127.0.0.1}:${COLLABORATION_PORT:-1234}:1234"
 
   temporal-ui:
+    logging: *default-logging
     image: temporalio/ui:2.58.1
     profiles: ["ops"]
     restart: unless-stopped
@@ -215,6 +227,7 @@ services:
       - "${TEMPORAL_UI_BIND:-127.0.0.1}:${TEMPORAL_UI_PORT:-8080}:8080"
 
   jaeger:
+    logging: *default-logging
     image: jaegertracing/all-in-one:1.54
     profiles: ["ops"]
     restart: unless-stopped
