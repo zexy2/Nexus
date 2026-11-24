@@ -44,6 +44,8 @@
  * clearLocalData() deletes both on sign-out.
  */
 
+import { getBrowserStorage } from "./browser-storage";
+
 export type SyncStatus = "connecting" | "connected" | "disconnected" | "syncing" | "error";
 
 type Row = Record<string, unknown>;
@@ -465,7 +467,7 @@ export class SyncEngine {
     this.serverUrl = (opts.serverUrl ?? "").replace(/\/$/, "");
     this.userId = opts.userId ?? null;
     this.storage =
-      opts.storage !== undefined ? opts.storage : typeof localStorage !== "undefined" ? localStorage : null;
+      opts.storage !== undefined ? opts.storage : getBrowserStorage();
     this.fetchImpl = opts.fetch ?? ((...args) => fetch(...args));
     this.now = opts.now ?? Date.now;
     this.isOnline = opts.isOnline ?? (() => typeof navigator === "undefined" || navigator.onLine);

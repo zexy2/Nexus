@@ -98,4 +98,33 @@ describe("GitHub impact linking", () => {
     expect(map.get("REQ-001")).toBe("issue-1");
     expect(map.get("REQ-002")).toBe("issue-1");
   });
+
+  describe("false positives", () => {
+    const refs = (body: string) => extractPullRequestReferences({ title: "t", body });
+
+    it("ignores CSS hex colors after color-like properties", () => {
+      expect(refs("set color: #123456 and background:#999 here")).toEqual([]);
+      expect(refs("background-color: #000000;")).toEqual([]);
+    });
+
+    it("still counts numeric references outside CSS context", () => {
+      expect(refs("see #123456 and #12")).toEqual(["#123456", "#12"]);
+    });
+
+    it("ignores references in fenced code blocks", () => {
+      expect(refs("before #1\n```\nFixes #2\n#3\n```\nafter #4")).toEqual(["#1", "#4"]);
+      expect(refs("~~~sh\n#5\n~~~\n#6")).toEqual(["#6"]);
+      expect(refs("text\n```\n#7 unterminated")).toEqual([]);
+    });
+
+    it("ignores references in inline code", () => {
+      expect(refs("use `#8` and `Fixes #9` but see #10")).toEqual(["#10"]);
+    });
+
+    it("stays linear on pathological input", () => {
+      const start = Date.now();
+      refs("`".repeat(50_000) + "\n" + "```".repeat(20_000) + " ".repeat(50_000));
+      expect(Date.now() - start).toBeLessThan(1000);
+    });
+  });
 });

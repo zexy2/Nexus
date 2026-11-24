@@ -13,6 +13,39 @@ process.env.OPENAI_API_KEY = "sk-test-openai-key";
 process.env.ANTHROPIC_API_KEY = "sk-ant-test-key";
 process.env.GROQ_API_KEY = "gsk_test-groq-key";
 
+// Node >= 25 ships a built-in global `localStorage` that shadows/breaks jsdom's
+// (it throws or lacks methods without --localstorage-file). Install an explicit
+// in-memory Storage on both window and globalThis so tests never depend on it.
+class MemoryStorage implements Storage {
+  private store = new Map<string, string>();
+  get length() {
+    return this.store.size;
+  }
+  clear() {
+    this.store.clear();
+  }
+  getItem(key: string) {
+    return this.store.has(key) ? (this.store.get(key) as string) : null;
+  }
+  key(index: number) {
+    return Array.from(this.store.keys())[index] ?? null;
+  }
+  removeItem(key: string) {
+    this.store.delete(key);
+  }
+  setItem(key: string, value: string) {
+    this.store.set(key, String(value));
+  }
+}
+
+// Only for jsdom suites; `@vitest-environment node` suites have no window.
+for (const name of typeof window === "undefined" ? [] : (["localStorage", "sessionStorage"] as const)) {
+  const storage = new MemoryStorage();
+  for (const target of [globalThis, window] as object[]) {
+    Object.defineProperty(target, name, { value: storage, configurable: true, writable: true });
+  }
+}
+
 // The platform fetch, captured before it is mocked below. Provider contract
 // tests (ai-provider-contract.test.ts) use it to talk to a local fake server.
 const realFetch = globalThis.fetch;

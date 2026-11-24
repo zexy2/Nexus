@@ -294,7 +294,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
     } finally {
       signingOut.current = false;
       // Full navigation: drops every in-memory store and the sync engine.
-      if (navigate) window.location.assign('/login');
+      if (navigate) window.location.assign(new URL('/login', window.location.origin).href);
     }
   }, [engine, user?.id]);
 
