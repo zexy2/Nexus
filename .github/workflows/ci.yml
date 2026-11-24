@@ -290,8 +290,12 @@ jobs:
             || { docker logs collab; exit 1; }
 
       - name: "Smoke: web standalone server"
+        env:
+          # Throwaway value for this job's container only.
+          HEALTH_CHECK_TOKEN: nexus-ci-health-check-value
         run: |
           set -euo pipefail
+          printf 'x-health-token: %s\n' "$HEALTH_CHECK_TOKEN" > /tmp/health-headers
           docker run -d --name web --network "$NET" -p 3000:3000 \
             -e DATABASE_URL -e COLLAB_AUTH_SECRET \
             -e TEMPORAL_ADDRESS=temporal:7233 -e TEMPORAL_NAMESPACE=default \
@@ -299,12 +303,12 @@ jobs:
             -e BETTER_AUTH_URL=http://localhost:3000 \
             -e AUTH_TRUSTED_ORIGINS=http://localhost:3000 \
             -e COLLABORATION_HEALTH_URL=http://collab:1234 \
-            -e HEALTH_CHECK_TOKEN=ci-health-token \
+            -e HEALTH_CHECK_TOKEN \
             -e APP_COMMIT_SHA="$GITHUB_SHA" \
             -e OTEL_ENABLED=true \
             nexus-web:ci < /dev/null
           for i in $(seq 1 60); do
-            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -H 'x-health-token: ci-health-token' http://127.0.0.1:3000/api/health || true)
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' -H @/tmp/health-headers http://127.0.0.1:3000/api/health || true)
             if [ "$code" = "200" ] || [ "$code" = "503" ]; then break; fi
             if [ "$i" -eq 60 ]; then docker logs web; exit 1; fi
             sleep 2

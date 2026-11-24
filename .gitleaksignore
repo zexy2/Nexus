@@ -1,0 +1,2 @@
+# Throwaway CI-only health token in a smoke test (fixed in the next commit).
+29ef143570aabc03c46e31841fd52f79a0ac28be:.github/workflows/ci.yml:curl-auth-header:307
