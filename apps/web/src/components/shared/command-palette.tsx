@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 import { navShortcutLabel } from "@/lib/shortcuts";
+import { useUIStore } from "@/lib/store";
 import {
   Home,
   FileText,
@@ -40,7 +41,7 @@ const commands: CommandDef[] = [
   { id: "settings", labelKey: "nav.settings", icon: Settings, action: "/dashboard/settings", group: "navigation" },
 
   // Actions
-  { id: "new-doc", labelKey: "docs.newDoc", descKey: "palette.newDocDesc", icon: Plus, action: "/dashboard/docs/new", group: "actions" },
+  { id: "new-doc", labelKey: "docs.newDoc", descKey: "palette.newDocDesc", icon: Plus, action: () => useUIStore.getState().openModal("createDocument"), group: "actions" },
   { id: "new-task", labelKey: "tasks.newTask", descKey: "palette.newTaskDesc", icon: Plus, action: "/dashboard/tasks/new", group: "actions" },
   { id: "start-chat", labelKey: "palette.startChat", descKey: "palette.startChatDesc", icon: MessageSquare, action: "/dashboard/chat", group: "actions" },
 ];
@@ -158,7 +159,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       />
 
       {/* Dialog */}
-      <div className="fixed left-1/2 top-[18%] z-[100] -translate-x-1/2 w-full max-w-xl px-4 animate-fade-up">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("palette.placeholder")}
+        className="fixed left-1/2 top-[18%] z-[100] -translate-x-1/2 w-full max-w-xl px-4 animate-fade-up"
+      >
         <div className="bg-popover border border-border rounded-xl shadow-2xl overflow-hidden">
           {/* Search Input */}
           <div className="flex items-center gap-3 px-4 py-3 border-b border-border">

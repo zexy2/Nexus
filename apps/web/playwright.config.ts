@@ -39,11 +39,27 @@ export default defineConfig({
     },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'pnpm --filter @nexus/database --filter @nexus/workflows build && pnpm dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
-  },
+  /*
+   * Run the app and the realtime collaboration server before the tests.
+   * Playwright starts these in order, so the collaboration server (which
+   * imports the built @nexus/database package) starts after the first command
+   * has built it. Both need DATABASE_URL; the web app issues collaboration
+   * tokens and the collaboration server verifies them with the same
+   * COLLAB_AUTH_SECRET.
+   */
+  webServer: [
+    {
+      command: 'pnpm --filter @nexus/database --filter @nexus/workflows build && pnpm dev',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120 * 1000,
+    },
+    {
+      command: 'pnpm --filter @nexus/web collab',
+      // The health endpoint answers 200 once Postgres persistence is healthy.
+      url: 'http://localhost:1234',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60 * 1000,
+    },
+  ],
 });
