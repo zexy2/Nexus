@@ -236,7 +236,7 @@ jobs:
         run: pnpm --filter @nexus/web exec playwright install chromium
 
       - name: Run E2E tests
-        run: pnpm --filter @nexus/web exec playwright test --project=chromium
+        run: pnpm --filter @nexus/web exec playwright test --project=chromium --repeat-each=4 --retries=0
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7
