@@ -22,6 +22,7 @@ ADMIN_EMAILS=your-email@example.com
 DEMO_ACCESS_CODE=
 DEMO_SESSION_TTL_MINUTES=60
 DEMO_MAX_ACTIVE_SESSIONS=25
+DEMO_SESSION_RATE_LIMIT_PER_MINUTE=10
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
@@ -61,6 +62,7 @@ Operational settings (all optional; defaults shown in `.env.production.example`)
 | `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
 | `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
 | `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+| `DEMO_SESSION_RATE_LIMIT_PER_MINUTE` | web | Demo logins allowed per minute per client IP. Raise it for visitors behind a shared office NAT; `DEMO_MAX_ACTIVE_SESSIONS` and the `AI_DEMO_*` limits remain the real cost guard. Empty/unset/invalid = `10`. |
 | `CSP_ENFORCE` | web | `true` enforces the Content-Security-Policy, `false` sends report-only. Empty/unset = enforce in production, report-only otherwise. |
 | `REQUIRE_INTEGRATION_PROVIDERS` | web | Comma list (`github`, `linear`) of providers whose missing credentials fail `/api/health`. Empty/unset = none required (unless legacy `REQUIRE_INTEGRATIONS_HEALTH=true`, which implies `github`). |
 | `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_PER_MINUTE_LIMIT` | web | Cost-runaway safety cap across ALL users. Defaults 5000/day, 120/min. |

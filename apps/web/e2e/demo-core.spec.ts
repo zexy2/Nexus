@@ -2,8 +2,8 @@ import { expect, test, type BrowserContext, type Locator, type Page } from "@pla
 
 type DemoCookies = Awaited<ReturnType<BrowserContext["cookies"]>>;
 
-// POST /api/demo/session is rate limited to 5 requests per minute per IP
-// (RATE_LIMITS.demoLogin). Logging in once per serial run, instead of once per
+// POST /api/demo/session is rate limited per IP (RATE_LIMITS.demoLogin,
+// DEMO_SESSION_RATE_LIMIT_PER_MINUTE, default 10). Logging in once per serial run, instead of once per
 // test, keeps CI retries well below that budget: a retry restarts the worker,
 // which clears this cache and logs in exactly once more.
 let demoCookies: DemoCookies | null = null;

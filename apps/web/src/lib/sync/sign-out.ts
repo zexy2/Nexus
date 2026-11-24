@@ -18,6 +18,7 @@
  *      shared machine never hands the next user a previous user's cache.
  */
 import type { SyncEngine } from "./engine";
+import { getBrowserStorage } from "./browser-storage";
 import { clearOfflineCommands, countQueuedOfflineCommands } from "./offline-commands";
 
 export const CHAT_STORE_KEY = "nexus-chat-store";
@@ -65,7 +66,7 @@ export async function signOutAndClearLocalData(options: {
   clearExtraLocalData?: () => Promise<void>;
 }): Promise<SignOutResult> {
   const { engine, signOut, confirmDiscard, clearExtraLocalData } = options;
-  const storage = options.storage !== undefined ? options.storage : typeof localStorage !== "undefined" ? localStorage : null;
+  const storage = options.storage !== undefined ? options.storage : getBrowserStorage();
   const liveEngine = engine && !engine.isDestroyed ? engine : null;
 
   if (liveEngine) {
