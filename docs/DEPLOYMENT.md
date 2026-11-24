@@ -214,9 +214,16 @@ the per-service Dockerfile targets (the old shared `nexus-*:latest` image)
 is supported: the script adds the old worker/collaboration commands
 automatically.
 
-Packages must be pullable by the server. They are public; if a package is
-ever private, run `docker login ghcr.io` on the server once with a token
-that has `read:packages`.
+Packages must be pullable by the server. GHCR creates new packages as
+**private** and has no API to change that, so after the first publish the
+owner makes each of the four packages public once: github.com/zexy2 ->
+Packages -> `nexus-web` (then `nexus-worker`, `nexus-collaboration`,
+`nexus-migrate`) -> Package settings -> Danger Zone -> Change visibility ->
+Public. Check anonymously with
+`curl -s "https://ghcr.io/token?scope=repository:zexy2/nexus-web:pull"`
+(a token in the reply = public). Alternatively keep them private and run
+`docker login ghcr.io -u zexy2` once on the server with a personal access
+token that has only `read:packages`.
 
 Build-time values for the published web image come from repository
 variables (Settings -> Secrets and variables -> Actions -> Variables):
