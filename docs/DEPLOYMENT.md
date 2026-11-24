@@ -84,12 +84,57 @@ Each public demo login gets its own temporary user and workspace. `DEMO_SESSION_
 
 `pnpm smoke:prod` runs three AI workflows: document generation, task breakdown, and Living Plan impact analysis.
 
+## Images
+
+The `Dockerfile` has one slim target per service; all run as the unprivileged
+`node` user on `node:24-bookworm-slim` and share one `builder` stage:
+
+| Target | Compose service | Contents | Command |
+| --- | --- | --- | --- |
+| `web` | `web` | Next.js `output: "standalone"` server (traced runtime files only), `.next/static`, `public` | `node apps/web/server.js` |
+| `worker` | `worker` | `@nexus/workflows` built by tsup + production dependencies (`pnpm deploy --prod`), Temporal core-bridge for the build platform only | `node dist/worker.js` |
+| `collaboration` | `collaboration` | `src/server/collaboration.ts` bundled with esbuild into one file (no `node_modules`) | `node dist-collab/collaboration.mjs` |
+| `migrate` | `migrate` (profile `tools`) | drizzle-kit, SQL migrations, guarded baseline script | `pnpm db:migrate` |
+
+The app images contain no `pnpm`, `tsx` or source tree: **run migrations with
+the `migrate` service**, not through `web`:
+
+```bash
+# old (no longer works: the web image is a standalone Next.js server)
+#   docker compose ... run --rm --no-deps web pnpm db:migrate
+# new
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+```
+
+`migrate` waits for a healthy `postgres` (it is started if needed) and exits
+when done; a second run is a no-op. It is never started by `up`.
+
+Image names come from `NEXUS_IMAGE_PREFIX` / `NEXUS_IMAGE_TAG` in
+`docker-compose.prod.yml` (default `nexus-web:latest`, `nexus-worker:latest`,
+`nexus-collaboration:latest`, `nexus-migrate:latest`). The same file builds
+locally (`build:` + `target:`) and pulls registry images when the prefix points
+at a registry.
+
+Build-time values: the `NEXT_PUBLIC_*` variables are inlined into the browser
+bundle when the web image is built (they are build args, labelled on the image
+as `org.nexus.next-public-*`), and the security headers from `next.config.ts`,
+including the `CSP_ENFORCE` choice and the collaboration origin in the CSP,
+are computed at build time as well. Rebuild the images after changing any of
+them. Server-side settings (secrets, limits, `DATABASE_URL`, ...) are still
+read from the container environment at runtime.
+
+`docker buildx bake -f docker-bake.hcl` builds all four targets in one go
+(used by CI; see the file header for tag/prefix variables).
+
 ## Start
 
 ```bash
 export APP_COMMIT_SHA="$(git rev-parse HEAD)"
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
+COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
+$COMPOSE build
+$COMPOSE up -d postgres temporal
+$COMPOSE run --rm migrate
+$COMPOSE up -d
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
@@ -110,8 +155,8 @@ worker understands every workflow the new web can start:
 ```bash
 export APP_COMMIT_SHA="$(git rev-parse HEAD)"
 COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
-$COMPOSE build web worker collaboration
-$COMPOSE run --rm --no-deps web pnpm db:migrate   # 1. migrate
+$COMPOSE build web worker collaboration migrate
+$COMPOSE run --rm migrate                         # 1. migrate
 $COMPOSE up -d --no-deps worker                   # 2. worker
 $COMPOSE up -d --no-deps web collaboration        # 3. web + collab
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod

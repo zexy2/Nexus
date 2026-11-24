@@ -169,8 +169,10 @@ pnpm backup:postgres    # write a Postgres backup
 The production target is a single-team Docker VPS demo:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-docker compose --env-file .env.production -f docker-compose.prod.yml exec web pnpm db:migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml build
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d postgres temporal
+docker compose --env-file .env.production -f docker-compose.prod.yml run --rm migrate
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
