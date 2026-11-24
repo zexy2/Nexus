@@ -138,6 +138,8 @@ $COMPOSE up -d
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
+For later releases use `scripts/deploy.sh` (next section).
+
 Container logs rotate at 20MB x 5 files per service (json-file driver); the setting only applies when a container is recreated (`up -d` after a compose change).
 
 ### Updating a running deployment (deploy order)
@@ -152,6 +154,91 @@ worker understands every workflow the new web can start:
 3. **Web and collaboration together**: they share `COLLAB_AUTH_SECRET` and the
    collaboration token format, so do not run mismatched versions.
 
+#### Default: prebuilt images from GHCR (`scripts/deploy.sh`)
+
+Every push to `main` that passes CI (lint, type check, build, tests, E2E and
+the image smoke tests) publishes all four images for `linux/arm64`:
+
+```
+ghcr.io/zexy2/nexus-web            :main  :sha-<7-char commit>
+ghcr.io/zexy2/nexus-worker         :main  :sha-<7-char commit>
+ghcr.io/zexy2/nexus-collaboration  :main  :sha-<7-char commit>
+ghcr.io/zexy2/nexus-migrate        :main  :sha-<7-char commit>
+```
+
+(the `publish` job in `.github/workflows/ci.yml`; it can also be started by
+hand with **Run workflow** on `main`). The server only pulls, so it no longer
+needs build cache, dev dependencies or several GB of free disk per deploy.
+
+On the server, from the repository checkout (`~/Nexus`):
+
+```bash
+scripts/deploy.sh                # deploy :main (resolved to its sha-<commit> tag)
+scripts/deploy.sh sha-1a2b3c4    # deploy one specific build
+scripts/deploy.sh --rollback     # back to the previously running images (no migrate)
+```
+
+What `deploy.sh <tag>` does, stopping at the first failure:
+
+1. **Preflight**: docker + compose reachable, `.env.production` present, at
+   least 3GB free on Docker's data disk (`DEPLOY_MIN_FREE_GB`).
+2. `git pull --ff-only` (compose file and scripts; it re-executes itself if
+   `deploy.sh` changed).
+3. **Backup**: `pg_dump` of the app database to
+   `~/Avenox-Backups/nexus-predeploy/nexus-predeploy-<UTC stamp>.sql.gz`
+   (mode 600, newest 10 kept; `DEPLOY_BACKUP_DIR`, `DEPLOY_BACKUP_KEEP`).
+4. **Pull** `ghcr.io/zexy2/nexus-*:<tag>`. `main` is resolved to the immutable
+   `sha-<commit>` tag through the image's `org.opencontainers.image.revision`
+   label, so every service runs the same build even if `main` moves.
+5. **Public build values check**: the web image's `org.nexus.next-public-*`
+   labels must equal the `NEXT_PUBLIC_*` values in `.env.production`
+   (they are baked into the browser bundle). A mismatch aborts before anything
+   changes; fix the repository variables (below) or set
+   `DEPLOY_SKIP_PUBLIC_ENV_CHECK=1` deliberately.
+6. Records the running image ref in `.deploy/previous` (for `--rollback`).
+7. **Migrate** (`docker compose run --rm migrate`), then **worker** (waits for
+   "Waiting for workflows"), then **web + collaboration** (waits for both
+   container health checks, `DEPLOY_HEALTH_TIMEOUT`, default 240s).
+8. `GET /api/health` with `HEALTH_CHECK_TOKEN` must return 200.
+9. Records `.deploy/current` and appends `.deploy/history`, then removes app
+   images other than the current and previous refs (`docker image prune` for
+   dangling layers).
+
+On failure it prints `compose ps` and the worker/web/collaboration logs and
+exits non-zero. **It never rolls the database back**: the pre-deploy dump is
+there for a manual restore (see Backups). `scripts/deploy.sh --rollback`
+switches worker, web and collaboration back to the recorded previous images
+without running migrations, which is why migrations must stay backward
+compatible with the previous release. Rolling back to an image built before
+the per-service Dockerfile targets (the old shared `nexus-*:latest` image)
+is supported: the script adds the old worker/collaboration commands
+automatically.
+
+Packages must be pullable by the server. GHCR creates new packages as
+**private** and has no API to change that, so after the first publish the
+owner makes each of the four packages public once: github.com/zexy2 ->
+Packages -> `nexus-web` (then `nexus-worker`, `nexus-collaboration`,
+`nexus-migrate`) -> Package settings -> Danger Zone -> Change visibility ->
+Public. Check anonymously with
+`curl -s "https://ghcr.io/token?scope=repository:zexy2/nexus-web:pull"`
+(a token in the reply = public). Alternatively keep them private and run
+`docker login ghcr.io -u zexy2` once on the server with a personal access
+token that has only `read:packages`.
+
+Build-time values for the published web image come from repository
+variables (Settings -> Secrets and variables -> Actions -> Variables):
+`NEXT_PUBLIC_APP_URL` (default `https://nexus.zekiakgul.dev`),
+`NEXT_PUBLIC_COLLABORATION_URL` (default `wss://nexus.zekiakgul.dev/collab`),
+`NEXT_PUBLIC_DEMO_MODE` (`true`), `NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED`
+(`false`), `NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED` (`false`). They must match
+the server's `.env.production`; step 5 enforces it. After changing a
+variable, re-run the workflow on `main`.
+
+#### Fallback: build on the server
+
+If GHCR or Actions is unavailable, the same compose file still builds
+locally (needs several GB of free disk for the build cache):
+
 ```bash
 export APP_COMMIT_SHA="$(git rev-parse HEAD)"
 COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
@@ -160,7 +247,13 @@ $COMPOSE run --rm migrate                         # 1. migrate
 $COMPOSE up -d --no-deps worker                   # 2. worker
 $COMPOSE up -d --no-deps web collaboration        # 3. web + collab
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
+docker builder prune -f                           # reclaim the build cache
 ```
+
+Local builds are tagged `nexus-<service>:latest` (`NEXUS_IMAGE_PREFIX` and
+`NEXUS_IMAGE_TAG` unset). `NEXUS_IMAGE_PREFIX=nexus NEXUS_IMAGE_TAG=latest
+scripts/deploy.sh latest` runs the same guarded rollout (backup, migrate,
+ordered restart, health) for those local images.
 
 The block above under **Start** is for the first install only.
 
@@ -247,7 +340,9 @@ This installs four systemd timers:
   and prunes old `nexus-YYYY-*` backups after 14 days by default.
 - `nexus-docker-cleanup.timer` runs a conservative weekly cleanup for old
   build cache, dangling images, and stopped containers. It does not prune
-  volumes.
+  volumes. Tagged app images are pruned by `scripts/deploy.sh` itself (it
+  keeps the current and previous release for rollback); pre-deploy dumps
+  live separately in `~/Avenox-Backups/nexus-predeploy` (newest 10).
 - `nexus-db-cleanup.timer` runs daily (`scripts/maintenance-db-cleanup.sh`,
   also `pnpm maintenance:db-cleanup`) and deletes `workflow_activity_receipts`
   rows older than `RECEIPT_RETENTION_DAYS` (default 30, minimum 7). Receipts
