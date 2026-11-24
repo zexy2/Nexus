@@ -55,7 +55,7 @@ test.describe("command palette", () => {
     const created = page.waitForResponse(
       (response) => pathnameIs("/api/docs")(response) && response.request().method() === "POST"
     );
-    await dialog.getByRole("button", { name: "Create", exact: true }).click();
+    await dialog.getByRole("button", { name: "New Plan", exact: true }).click();
     const response = await created;
     expect(response.ok(), await response.text()).toBeTruthy();
     const { id } = (await response.json()) as { id: string };
