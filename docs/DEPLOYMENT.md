@@ -93,6 +93,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec web pn
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
 ```
 
+Container logs rotate at 20MB x 5 files per service (json-file driver); the setting only applies when a container is recreated (`up -d` after a compose change).
+
 ### Updating a running deployment (deploy order)
 
 Roll out in this order so new code never runs against an old schema and the
