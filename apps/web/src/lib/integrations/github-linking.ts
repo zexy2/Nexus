@@ -1,5 +1,8 @@
+// Separator is either one punctuation mark with optional surrounding whitespace
+// or plain whitespace. Kept unambiguous (no adjacent `\s*` groups) so long
+// whitespace runs stay linear instead of quadratic backtracking.
 const CLOSING_ISSUE_REFERENCE =
-  /\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)(?:\s*[:,-]?\s*|\/\s*)#(\d+)\b/gi;
+  /\b(?:fix(?:e[sd])?|close[sd]?|resolve[sd]?)(?:\s*[:,\/-]\s*|\s+)#(\d+)\b/gi;
 const ISSUE_REFERENCE = /(^|[^\w])#(\d+)\b/g;
 const REQUIREMENT_REFERENCE = /\bREQ-\d+\b/gi;
 

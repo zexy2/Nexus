@@ -35,6 +35,45 @@ describe("GitHub impact linking", () => {
     ).toEqual(["#123", "#456", "#789", "REQ-002"]);
   });
 
+  it("accepts trailing punctuation and parentheses around issue numbers", () => {
+    expect(
+      extractPullRequestReferences({
+        title: "Checkout polish (#21)",
+        body: "Fixes #12. Also closes #13, see #14; resolves: #15!",
+      })
+    ).toEqual(["#12", "#13", "#15", "#21", "#14"]);
+  });
+
+  it("ignores cross-repo refs, alphanumeric suffixes, URL anchors, and hex colors", () => {
+    expect(
+      extractPullRequestReferences({
+        title: "Fixes owner/repo#12",
+        body: [
+          "Closes #12a",
+          "See https://example.com/docs#34 and issue#56",
+          "Color #fff and #abc123",
+          "prefix #78 is a loose mention, but prefixed fix#79 is not",
+        ].join("\n"),
+      })
+    ).toEqual(["#78"]);
+  });
+
+  it("does not treat keywords without a separator as closing references", () => {
+    expect(
+      extractPullRequestReferences({
+        title: "Fixes#12",
+        body: "unfixed #13",
+      })
+    ).toEqual(["#13"]);
+  });
+
+  it("stays linear on long whitespace runs after a closing keyword", () => {
+    const body = `fixes${" ".repeat(100_000)}x ${"closes \t ".repeat(5_000)}`;
+    const startedAt = performance.now();
+    expect(extractPullRequestReferences({ title: "t", body })).toEqual([]);
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
   it("extracts requirement keys from title, body, and branch", () => {
     expect(
       extractPullRequestReferences({
