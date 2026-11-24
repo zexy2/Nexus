@@ -40,7 +40,10 @@ jobs:
 
       # shellcheck ships with the ubuntu runner image.
       - name: Shellcheck deploy script
-        run: shellcheck -x scripts/deploy.sh
+        run: shellcheck -x scripts/deploy.sh scripts/tests/deploy.test.sh scripts/tests/deploy-stubs/*
+
+      - name: Deploy script tests (stubbed docker)
+        run: bash scripts/tests/deploy.test.sh
 
   typecheck:
     name: Type Check
