@@ -77,14 +77,74 @@ free_gb() {
   df -Pk "$1" | awk 'NR == 2 { printf "%d", $4 / 1024 / 1024 }'
 }
 
-# "ghcr.io/zexy2/nexus-web:sha-abc" -> "ghcr.io/zexy2/nexus sha-abc"
-running_ref() {
-  local id image
-  id="$(dc ps -q web 2>/dev/null | awk 'NR == 1' || true)"
-  [[ -z "$id" ]] && return 0
-  image="$(docker inspect --format '{{.Config.Image}}' "$id" < /dev/null 2>/dev/null || true)"
-  if [[ "$image" =~ ^(.+)-web:([A-Za-z0-9_.-]+)$ ]]; then
-    printf '%s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+container_of() {
+  dc ps -q "$1" 2>/dev/null | awk 'NR == 1' || true
+}
+
+# Captures the images the running web/worker/collaboration containers use as
+# a ref `--rollback` can redeploy, in RUNNING_REF ("<prefix> <tag>"; empty
+# when nothing runs). Registry refs that all three share
+# ("ghcr.io/zexy2/nexus-<svc>:sha-abc") are recorded as is: they stay
+# pullable. Anything else (compose-built "nexus-web" without a tag, the
+# moving `latest`/`main`, mixed versions) is pinned by tagging the running
+# image IDs as nexus-<svc>:rollback-pre-<UTC stamp>, which prune never removes.
+capture_running() {
+  RUNNING_REF=""
+  local svcs=(web worker collaboration) ids=() refs=() i svc cid id ref
+  local prefix="" tag="" pinned=yes stamp
+  for svc in "${svcs[@]}"; do
+    cid="$(container_of "$svc")"
+    id=""; ref=""
+    if [[ -n "$cid" ]]; then
+      id="$(docker inspect --format '{{.Image}}' "$cid" < /dev/null 2>/dev/null || true)"
+      ref="$(docker inspect --format '{{.Config.Image}}' "$cid" < /dev/null 2>/dev/null || true)"
+    fi
+    ids+=("$id"); refs+=("$ref")
+  done
+  if [[ -z "${ids[0]}" ]]; then
+    warn "no running web container found; nothing to record for rollback"
+    return 0
+  fi
+  for i in 0 1 2; do
+    svc="${svcs[$i]}"; id="${ids[$i]}"; ref="${refs[$i]}"
+    if [[ -z "$id" ]] || ! [[ "$ref" =~ ^(.+/.+)-${svc}:([A-Za-z0-9_.-]+)$ ]]; then
+      pinned=no; continue
+    fi
+    if [[ -z "$prefix" ]]; then
+      prefix="${BASH_REMATCH[1]}"; tag="${BASH_REMATCH[2]}"
+    elif [[ "$prefix" != "${BASH_REMATCH[1]}" || "$tag" != "${BASH_REMATCH[2]}" ]]; then
+      pinned=no
+    fi
+    # The ref must still point at the image the container runs.
+    [[ "$(docker image inspect --format '{{.Id}}' "$ref" < /dev/null 2>/dev/null || true)" == "$id" ]] || pinned=no
+  done
+  if [[ "$pinned" == yes && "$tag" != main && "$tag" != latest ]]; then
+    RUNNING_REF="$prefix $tag"
+    echo "running images: $RUNNING_REF"
+    return 0
+  fi
+  stamp="rollback-pre-$(date -u +%Y%m%dT%H%M%SZ)"
+  for i in 0 1 2; do
+    svc="${svcs[$i]}"; id="${ids[$i]}"
+    if [[ -z "$id" ]]; then
+      warn "$svc is not running; rollback will not have a $svc image"
+      continue
+    fi
+    docker tag "$id" "nexus-$svc:$stamp" < /dev/null || die "cannot tag running $svc image ($id)"
+    echo "pinned running $svc (${refs[$i]:-?}, $id) as nexus-$svc:$stamp"
+  done
+  RUNNING_REF="nexus $stamp"
+}
+
+record_previous() {
+  local target="$1"
+  if [[ -z "$RUNNING_REF" ]]; then
+    warn "rollback state unchanged (nothing was running)"
+  elif [[ "$RUNNING_REF" == "$target" ]]; then
+    echo "already running $target; previous release unchanged"
+  else
+    printf '%s\n' "$RUNNING_REF" > "$STATE_DIR/previous"
+    echo "recorded previous: $RUNNING_REF"
   fi
 }
 
@@ -322,24 +382,42 @@ record_success() {
   printf '%s %s\n' "$(date -u +%FT%TZ)" "$ref" >> "$STATE_DIR/history"
 }
 
-# Remove app images other than the current and previous refs.
+# Remove app images other than the current and previous releases. Fail-safe:
+# skipped entirely without a recorded previous release; never removes an
+# image any container uses, an image the current/previous refs point at, or
+# a `rollback-*` tag.
 prune_images() {
   log "Prune old app images (keep current + previous)"
-  local keep=() ref prefix tag svc image f k
+  if [[ ! -s "$STATE_DIR/previous" ]]; then
+    echo "no previous release recorded in $STATE_DIR/previous; skipping prune so rollback stays possible"
+    return 0
+  fi
+  local keep=() keep_ids=" " prefix tag svc image f k id cid
   for f in current previous; do
     [[ -s "$STATE_DIR/$f" ]] || continue
     read -r prefix tag < "$STATE_DIR/$f"
-    for svc in "${APP_SERVICES[@]}"; do keep+=("$prefix-$svc:$tag"); done
+    for svc in "${APP_SERVICES[@]}"; do
+      keep+=("$prefix-$svc:$tag")
+      id="$(docker image inspect --format '{{.Id}}' "$prefix-$svc:$tag" < /dev/null 2>/dev/null || true)"
+      if [[ -n "$id" ]]; then keep_ids+="$id "; fi
+    done
   done
+  while IFS= read -r cid; do
+    [[ -z "$cid" ]] && continue
+    id="$(docker inspect --format '{{.Image}}' "$cid" < /dev/null 2>/dev/null || true)"
+    if [[ -n "$id" ]]; then keep_ids+="$id "; fi
+  done < <(docker ps -aq < /dev/null)
   for prefix in "$IMAGE_PREFIX" nexus; do
     for svc in "${APP_SERVICES[@]}"; do
       while IFS= read -r image; do
         [[ -z "$image" || "$image" == *"<none>"* ]] && continue
-        ref=no
+        [[ "${image##*:}" == rollback-* ]] && continue
         for k in "${keep[@]}"; do
-          if [[ "$k" == "$image" ]]; then ref=yes; fi
+          [[ "$k" == "$image" ]] && continue 2
         done
-        if [[ "$ref" == no ]] && docker image rm "$image" > /dev/null 2>&1 < /dev/null; then
+        id="$(docker image inspect --format '{{.Id}}' "$image" < /dev/null 2>/dev/null || true)"
+        [[ -z "$id" || "$keep_ids" == *" $id "* ]] && continue
+        if docker image rm "$image" > /dev/null 2>&1 < /dev/null; then
           echo "removed $image"
         fi
       done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' "$prefix-$svc" < /dev/null)
@@ -350,22 +428,18 @@ prune_images() {
 }
 
 deploy() {
-  local tag="$1" current
+  local tag="$1"
   preflight
+  log "Record running images"
+  capture_running
   git_pull "$tag"
   backup_db
   BACKUP_FILE_HINT="$(find "$BACKUP_DIR" -maxdepth 1 -name 'nexus-predeploy-*.sql.gz' | sort | tail -n 1)"
 
-  current="$(running_ref)"
   pull_images "$IMAGE_PREFIX" "$tag"
   check_public_env "$IMAGE_PREFIX-web:$RESOLVED_TAG"
-
-  if [[ -n "$current" && "$current" != "$IMAGE_PREFIX $RESOLVED_TAG" ]]; then
-    printf '%s\n' "$current" > "$STATE_DIR/previous"
-    echo "recorded previous: $current"
-  elif [[ -z "$current" ]]; then
-    warn "no running web container found; rollback state unchanged"
-  fi
+  # Written before anything running is touched (migrate is the first change).
+  record_previous "$IMAGE_PREFIX $RESOLVED_TAG"
 
   roll_out "$IMAGE_PREFIX" "$RESOLVED_TAG" yes
   record_success "$IMAGE_PREFIX $RESOLVED_TAG"
@@ -374,12 +448,12 @@ deploy() {
 }
 
 rollback() {
-  local prefix tag current
+  local prefix tag
   preflight
   [[ -s "$STATE_DIR/previous" ]] || die "no previous deployment recorded in $STATE_DIR/previous"
   read -r prefix tag < "$STATE_DIR/previous"
   log "Rollback to $prefix-*:$tag (no migration)"
-  current="$(running_ref)"
+  capture_running
   if [[ "$prefix" == */* ]]; then
     NEXUS_IMAGE_PREFIX="$prefix" NEXUS_IMAGE_TAG="$tag" dc pull --quiet web worker collaboration \
       || die "cannot pull $prefix-*:$tag"
@@ -389,9 +463,7 @@ rollback() {
     done
   fi
   roll_out "$prefix" "$tag" no
-  if [[ -n "$current" ]]; then
-    printf '%s\n' "$current" > "$STATE_DIR/previous"
-  fi
+  record_previous "$prefix $tag"
   record_success "$prefix $tag"
   log "Rolled back to $prefix-*:$tag"
 }

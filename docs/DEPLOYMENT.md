@@ -197,14 +197,22 @@ What `deploy.sh <tag>` does, stopping at the first failure:
    (they are baked into the browser bundle). A mismatch aborts before anything
    changes; fix the repository variables (below) or set
    `DEPLOY_SKIP_PUBLIC_ENV_CHECK=1` deliberately.
-6. Records the running image ref in `.deploy/previous` (for `--rollback`).
+6. Records the running images in `.deploy/previous` (for `--rollback`)
+   before anything running is changed, including on the very first run. A
+   registry ref shared by all three services (`ghcr.io/zexy2/nexus-*:sha-...`)
+   is recorded as is; anything else (compose-built `nexus-<svc>` images,
+   `latest`, mixed versions) is pinned by tagging the running image IDs as
+   `nexus-<svc>:rollback-pre-<UTC stamp>` and recording that.
 7. **Migrate** (`docker compose run --rm migrate`), then **worker** (waits for
    "Waiting for workflows"), then **web + collaboration** (waits for both
    container health checks, `DEPLOY_HEALTH_TIMEOUT`, default 240s).
 8. `GET /api/health` with `HEALTH_CHECK_TOKEN` must return 200.
 9. Records `.deploy/current` and appends `.deploy/history`, then removes app
-   images other than the current and previous refs (`docker image prune` for
-   dangling layers).
+   images other than the current and previous releases (`docker image prune`
+   for dangling layers). Pruning is skipped entirely when no previous release
+   is recorded, and it never removes an image used by any container, an image
+   the current/previous refs point at, or any `rollback-*` tag (remove old
+   `rollback-*` tags by hand when they are no longer wanted).
 
 On failure it prints `compose ps` and the worker/web/collaboration logs and
 exits non-zero. **It never rolls the database back**: the pre-deploy dump is
