@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# Stateful fake `docker` for scripts/tests/deploy.test.sh.
+#
+# State lives in $STUB_STATE:
+#   images      "<ref> <id>" per line (tags)
+#   containers  "<service> <Config.Image> <image id>" per line
+#   removed     refs removed with `docker image rm`
+#   calls       every invocation
+set -euo pipefail
+S="$STUB_STATE"
+touch "$S/images" "$S/containers" "$S/removed"
+echo "docker $*" >> "$S/calls"
+
+ref_id() { awk -v r="$1" '$1 == r { print $2; exit }' "$S/images"; }
+resolve() { # ref or id -> id
+  local id
+  id="$(ref_id "$1")"
+  if [[ -z "$id" ]] && awk -v i="$1" '$2 == i { f = 1 } END { exit !f }' "$S/images"; then id="$1"; fi
+  printf '%s' "$id"
+}
+add_image() { # ref id
+  awk -v r="$1" '$1 != r' "$S/images" > "$S/images.tmp"; mv "$S/images.tmp" "$S/images"
+  echo "$1 $2" >> "$S/images"
+}
+fake_id() { printf 'sha256:%s' "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"; }
+cid_service() { printf '%s' "${1#cid-}"; }
+container_field() { awk -v s="$1" -v f="$2" '$1 == s { print $f; exit }' "$S/containers"; }
+
+if [[ "${1:-}" == compose ]]; then
+  shift
+  args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --env-file|-f|--profile) shift 2 ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  prefix="${NEXUS_IMAGE_PREFIX:-nexus}" tag="${NEXUS_IMAGE_TAG:-latest}"
+  case "${args[0]}" in
+    version) echo "Docker Compose version v2.40.0" ;;
+    ps) svc="${args[${#args[@]}-1]}"; [[ -n "$(container_field "$svc" 1)" ]] && echo "cid-$svc" ;;
+    exec) echo "-- fake dump" ;;
+    run) [[ -n "$(ref_id "$prefix-migrate:$tag")" ]] || { echo "no image $prefix-migrate:$tag" >&2; exit 1; } ;;
+    pull)
+      for svc in "${args[@]:1}"; do
+        [[ "$svc" == -* ]] && continue
+        [[ "$prefix" == */* ]] || { echo "pull of local image" >&2; exit 1; }
+        [[ -n "$(ref_id "$prefix-$svc:$tag")" ]] || add_image "$prefix-$svc:$tag" "$(fake_id "$prefix-$svc:$tag")"
+      done ;;
+    up)
+      for svc in "${args[@]:1}"; do
+        [[ "$svc" == -* || "$svc" == never ]] && continue
+        id="$(ref_id "$prefix-$svc:$tag")"
+        [[ -n "$id" ]] || { echo "image $prefix-$svc:$tag missing" >&2; exit 1; }
+        awk -v s="$svc" '$1 != s' "$S/containers" > "$S/containers.tmp"; mv "$S/containers.tmp" "$S/containers"
+        echo "$svc $prefix-$svc:$tag $id" >> "$S/containers"
+      done ;;
+    logs) echo "fake logs" ;;
+  esac
+  exit 0
+fi
+
+case "$1" in
+  info)
+    if [[ "$*" == *DockerRootDir* ]]; then echo "$S"; fi ;;
+  pull)
+    ref="${*: -1}"
+    [[ -n "$(ref_id "$ref")" ]] || add_image "$ref" "$(fake_id "$ref")" ;;
+  tag)
+    id="$(resolve "$2")"; [[ -n "$id" ]] || { echo "no such image $2" >&2; exit 1; }
+    add_image "$3" "$id" ;;
+  ps)
+    awk '{ print "cid-" $1 }' "$S/containers" ;;
+  logs)
+    echo "Waiting for workflows..." ;;
+  inspect)
+    fmt="$3" svc="$(cid_service "$4")"
+    case "$fmt" in
+      '{{.Config.Image}}') container_field "$svc" 2 ;;
+      '{{.Image}}') container_field "$svc" 3 ;;
+      *State.Running*) echo "true/false" ;;
+      *Health*) echo healthy ;;
+      *) exit 1 ;;
+    esac ;;
+  image)
+    case "$2" in
+      inspect)
+        if [[ "${3:-}" == --format ]]; then fmt="$4" ref="$5"; else fmt="" ref="$3"; fi
+        id="$(resolve "$ref")"; [[ -n "$id" ]] || exit 1
+        case "$fmt" in
+          '') ;;
+          '{{.Id}}') echo "$id" ;;
+          *'.Config.Cmd'*)
+            if [[ "$id" == sha256:legacy* ]]; then echo '["pnpm","--filter","@nexus/web","start"]'; else echo '["node","dist/worker.js"]'; fi ;;
+          *org.opencontainers.image.revision*) [[ "$ref" == */* ]] && echo "9f6609c043202c7d8a8be641d369c08aaf106d0c" ;;
+          *next-public-app-url*) [[ "$id" == sha256:legacy* ]] || echo "https://nexus.example" ;;
+          *next-public-collaboration-url*) echo "wss://nexus.example/collab" ;;
+          *next-public-demo-mode*) echo true ;;
+          *next-public-public-signup-enabled*|*next-public-demo-access-code-required*) echo false ;;
+          *) ;;
+        esac ;;
+      ls)
+        repo="${*: -1}"
+        awk -v r="$repo" 'index($1, r ":") == 1 { print $1 }' "$S/images" ;;
+      rm)
+        ref="$3" id="$(ref_id "$3")"; [[ -n "$id" ]] || exit 1
+        others="$(awk -v r="$ref" -v i="$id" '$2 == i && $1 != r' "$S/images" | wc -l)"
+        if [[ "$others" -eq 0 ]] && awk -v i="$id" '$3 == i { f = 1 } END { exit !f }' "$S/containers"; then
+          echo "conflict: image is being used by running container" >&2; exit 1
+        fi
+        awk -v r="$ref" '$1 != r' "$S/images" > "$S/images.tmp"; mv "$S/images.tmp" "$S/images"
+        echo "$ref" >> "$S/removed" ;;
+      prune) ;;
+    esac ;;
+esac
+exit 0

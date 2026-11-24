@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Fake `git` for scripts/tests/deploy.test.sh: pull is a no-op, HEAD never moves.
+echo "git $*" >> "$STUB_STATE/calls"
+if [[ "${1:-}" == rev-parse ]]; then echo 1111111111111111111111111111111111111111; fi
+exit 0
