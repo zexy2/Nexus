@@ -128,7 +128,7 @@ scripts
 
 Requirements:
 
-- Node.js 22 (used by CI and the Docker image; `engines` allows 20+)
+- Node.js 24 LTS (used by CI and the Docker image; `engines` is `>=24 <25` — Node 25+ ships a global `localStorage` that breaks the web unit tests)
 - pnpm 10+
 - Docker
 - Gemini API key for AI workflows
