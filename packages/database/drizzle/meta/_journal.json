@@ -127,6 +127,13 @@
       "when": 1795424627843,
       "tag": "0017_docs_is_favorite",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795558840715,
+      "tag": "0018_ai_traces",
+      "breakpoints": true
     }
   ]
 }

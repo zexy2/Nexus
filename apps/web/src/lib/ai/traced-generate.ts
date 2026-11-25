@@ -3,10 +3,15 @@
  *
  * Every server-side LLM invocation goes through `generateTextTraced`, which
  * records an agent trace (model, provider, workspace, latency, tokens, status,
- * error) in the observability store read by the admin `/api/traces` page.
+ * error) in two places:
+ * - the in-memory observability store read by the admin `/api/traces` page
+ *   (last 200 calls of this process, includes truncated prompt/output), and
+ * - the `ai_traces` table (metadata only, no prompt/response content), which
+ *   survives restarts and backs the admin AI usage view.
  *
  * Tracing is strictly best-effort: any failure while writing a trace is
  * swallowed so it can never break, delay or change the result of the AI call.
+ * The table write is fire-and-forget (see trace-store.ts).
  */
 import { generateText } from "ai";
 import {
@@ -15,6 +20,7 @@ import {
   failAgentTrace,
   startAgentTrace,
 } from "@/lib/observability";
+import { persistAiTrace } from "@/lib/ai/trace-store";
 
 /** Traces live in process memory; keep the store bounded. */
 const MAX_TRACES = 200;
@@ -37,6 +43,10 @@ interface AiTraceMeta {
 interface AiTraceSummary {
   output?: string;
   tokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  toolsUsed?: string[];
+  steps?: number;
 }
 
 function modelIdOf(model: unknown): string | undefined {
@@ -54,6 +64,18 @@ function safely(fn: () => void): void {
   } catch (error) {
     console.warn("[observability] trace write failed:", error instanceof Error ? error.message : error);
   }
+}
+
+/** Metadata persisted to `ai_traces` (deliberately excludes `input`). */
+function persistedMeta(meta: AiTraceMeta) {
+  return {
+    name: meta.name,
+    agentType: meta.agentType,
+    userId: meta.userId,
+    workspaceId: meta.workspaceId,
+    provider: meta.provider,
+    model: meta.modelName,
+  };
 }
 
 /**
@@ -80,22 +102,43 @@ async function traceAiCall<T>(
   try {
     result = await fn();
   } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const message = error instanceof Error ? error.message : String(error);
     safely(() => {
       if (!traceId) return;
-      const trace = failAgentTrace(traceId, error instanceof Error ? error.message : String(error));
-      if (trace) trace.metadata.latencyMs = Date.now() - startedAt;
+      const trace = failAgentTrace(traceId, message);
+      if (trace) trace.metadata.latencyMs = latencyMs;
       cleanupTraces(MAX_TRACES);
     });
+    safely(() =>
+      persistAiTrace({ ...persistedMeta(meta), latencyMs, status: "error", errorMessage: message })
+    );
     throw error;
   }
 
+  const latencyMs = Date.now() - startedAt;
+  let summary: AiTraceSummary = {};
+  safely(() => {
+    summary = summarize(result);
+  });
   safely(() => {
     if (!traceId) return;
-    const summary = summarize(result);
     const trace = completeAgentTrace(traceId, (summary.output ?? "").slice(0, MAX_TEXT), summary.tokens ?? 0);
-    if (trace) trace.metadata.latencyMs = Date.now() - startedAt;
+    if (trace) trace.metadata.latencyMs = latencyMs;
     cleanupTraces(MAX_TRACES);
   });
+  safely(() =>
+    persistAiTrace({
+      ...persistedMeta(meta),
+      latencyMs,
+      status: "ok",
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
+      totalTokens: summary.tokens,
+      toolsUsed: summary.toolsUsed,
+      steps: summary.steps,
+    })
+  );
   return result;
 }
 
@@ -123,9 +166,19 @@ export async function generateTextTraced(
       input: meta.input ?? promptText(params),
     },
     () => generateText(params),
-    (result) => ({
-      output: result?.text,
-      tokens: result?.totalUsage?.totalTokens ?? result?.usage?.totalTokens ?? 0,
-    })
+    (result) => {
+      const usage = result?.totalUsage ?? result?.usage;
+      const toolNames = (result?.steps ?? []).flatMap((step) =>
+        (step?.toolCalls ?? []).map((call) => call?.toolName).filter((n): n is string => typeof n === "string")
+      );
+      return {
+        output: result?.text,
+        tokens: usage?.totalTokens ?? 0,
+        inputTokens: usage?.inputTokens,
+        outputTokens: usage?.outputTokens,
+        toolsUsed: Array.from(new Set(toolNames)),
+        steps: Array.isArray(result?.steps) ? result.steps.length : undefined,
+      };
+    }
   );
 }

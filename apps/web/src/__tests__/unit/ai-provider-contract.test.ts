@@ -21,11 +21,21 @@ import type { AddressInfo } from "node:net";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getRealFetch } from "../setup";
 
-const state = vi.hoisted(() => ({ defaultModel: "gemini-2.5-flash" }));
+const state = vi.hoisted(() => ({
+  defaultModel: "gemini-2.5-flash",
+  // Rows the trace writer would insert into ai_traces.
+  traceRows: [] as Record<string, unknown>[],
+}));
 
-// The model factory reads the user's preferred model from the database.
+// The model factory reads the user's preferred model from the database; the
+// trace writer inserts ai_traces rows (captured, not sent anywhere).
 vi.mock("@/lib/db", () => ({
   db: {
+    insert: () => ({
+      values: async (row: Record<string, unknown>) => {
+        state.traceRows.push(row);
+      },
+    }),
     query: {
       userSettings: {
         findFirst: async () => ({ userId: "user-1", defaultModel: state.defaultModel }),
@@ -110,6 +120,7 @@ afterAll(async () => {
 beforeEach(() => {
   recorded.length = 0;
   replies = [];
+  state.traceRows.length = 0;
   cleanupTraces(0);
   getRAGContext.mockResolvedValue("Roadmap doc: the Q3 launch moved to September.");
   mockedFetch = globalThis.fetch;
@@ -276,6 +287,21 @@ describe("Gemini contract (default provider)", () => {
     expect(result.steps).toBe(2);
     const [trace] = getAllTraces();
     expect(trace).toMatchObject({ status: "completed", agentType: "agent", tokens: 46 + 89 });
+
+    // The persisted ai_traces row is derived from the real SDK result.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.traceRows).toHaveLength(1);
+    expect(state.traceRows[0]).toMatchObject({
+      agentType: "agent",
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      inputTokens: 40 + 80,
+      outputTokens: 6 + 9,
+      totalTokens: 46 + 89,
+      status: "ok",
+      toolsUsed: ["searchWorkspace"],
+      steps: 2,
+    });
   });
 
   it("quota errors surface in a shape isAiQuotaError recognises", async () => {
