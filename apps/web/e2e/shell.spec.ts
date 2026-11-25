@@ -63,6 +63,60 @@ test.describe("command palette", () => {
   });
 });
 
+test.describe("workspace search", () => {
+  test("Cmd/Ctrl+K finds a created plan and task, groups them, and opens one with the keyboard", async ({ page }) => {
+    const stamp = Date.now().toString(36);
+    const planTitle = `Searchable plan zq${stamp}`;
+    const taskTitle = `Searchable task zq${stamp}`;
+    const planRes = await page.request.post("/api/docs", { data: { title: planTitle } });
+    expect(planRes.ok()).toBeTruthy();
+    const { id: planId } = (await planRes.json()) as { id: string };
+    const taskRes = await page.request.post("/api/tasks", {
+      data: { title: taskTitle, priority: "medium", status: "todo" },
+    });
+    expect(taskRes.ok()).toBeTruthy();
+
+    await page.goto("/dashboard");
+    await openPalette(page);
+    await page.getByPlaceholder("Type a command or search...").fill(`zq${stamp}`);
+
+    const plans = palette(page).getByTestId("palette-group-plans");
+    const tasks = palette(page).getByTestId("palette-group-tasks");
+    await expect(plans.getByRole("button", { name: new RegExp(planTitle) })).toBeVisible();
+    await expect(tasks.getByRole("button", { name: new RegExp(taskTitle) })).toBeVisible();
+    // The matched term is highlighted.
+    await expect(plans.locator("mark").first()).toHaveText(`zq${stamp}`);
+
+    // A query with no workspace match shows the empty state, navigation stays available.
+    await page.getByPlaceholder("Type a command or search...").fill(`nomatch${stamp}xx`);
+    await expect(palette(page).getByTestId("palette-search-status")).toHaveText("No matching plans or work");
+
+    // Keyboard: plans come before tasks; move down to the task and back up, then open the plan.
+    await page.getByPlaceholder("Type a command or search...").fill(`zq${stamp}`);
+    await expect(plans.getByRole("button", { name: new RegExp(planTitle) })).toBeVisible();
+    await expect(tasks.getByRole("button", { name: new RegExp(taskTitle) })).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Enter");
+    await expect(palette(page)).toBeHidden();
+    await expect(page).toHaveURL(new RegExp(`/dashboard/docs/${planId}$`));
+
+    // Reopened with an empty query, the opened plan is under "Recent".
+    await openPalette(page);
+    await expect(
+      palette(page).getByTestId("palette-group-recent").getByRole("button", { name: new RegExp(planTitle) })
+    ).toBeVisible();
+  });
+
+  test("shows an error state instead of results when the search API fails", async ({ page }) => {
+    await page.route("**/api/search?**", (route) => route.fulfill({ status: 500, body: "{}" }));
+    await page.goto("/dashboard");
+    await openPalette(page);
+    await page.getByPlaceholder("Type a command or search...").fill("anything");
+    await expect(palette(page).getByTestId("palette-search-status")).toContainText("Search is unavailable");
+  });
+});
+
 test.describe("settings", () => {
   async function chooseTheme(page: Page, theme: Theme) {
     const tabpanel = page.getByRole("tabpanel");
