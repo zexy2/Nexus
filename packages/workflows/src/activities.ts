@@ -161,7 +161,7 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function textFromDocumentContent(value: unknown): string {
+export function textFromDocumentContent(value: unknown): string {
   const chunks: string[] = [];
 
   const visit = (node: unknown) => {
@@ -244,6 +244,17 @@ function planCopy(language: PlanOutputLanguage) {
     initialSummary: "Initial requirements and delivery work were extracted from the plan.",
     stepInput: (title: string) => `Analyze ${title}`,
   };
+}
+
+/** Reason recorded on proposals that apply as a no-op against demo sample data. */
+export const SIMULATED_DEMO_REASON = "demo_read_only_integration";
+
+/**
+ * Integrations seeded for the public demo (`metadata.demoOnly === true`) hold
+ * read-only sample data with no provider credentials.
+ */
+export function isDemoOnlyIntegration(metadata: unknown): boolean {
+  return asRecord(metadata).demoOnly === true;
 }
 
 function normalizePriority(value: unknown): "low" | "medium" | "high" | "urgent" {
@@ -1401,6 +1412,19 @@ export async function persistPlanImpact(
       `;
 
       const localizedForTurkish = detectPlanOutputLanguage(`${analysis.title}\n${analysis.contentText}`) === "tr";
+      // Seeded demo integrations hold read-only sample data: a provider write
+      // can never succeed there. Such proposals are still shown (they explain
+      // the delivery trail) but are flagged so apply records them as a
+      // simulated no-op instead of a guaranteed terminal failure.
+      const simulatedIntegrationIds = new Set(
+        connectedIntegrations
+          .filter((integration) => isDemoOnlyIntegration(integration.metadata))
+          .map((integration) => integration.id)
+      );
+      const simulatedMetadata = (integrationId: string | null) =>
+        integrationId && simulatedIntegrationIds.has(integrationId)
+          ? { simulated: true, simulatedReason: SIMULATED_DEMO_REASON }
+          : {};
       const externalProposals: PlanProposalAnalysis[] = [];
       for (const link of externalIssueLinks) {
         const operationTitle = localizedForTurkish
@@ -1424,6 +1448,7 @@ export async function persistPlanImpact(
             metadata: {
               externalProvider: "linear",
               integrationId: link.integration_id,
+              ...simulatedMetadata(link.integration_id),
               payload: {
                 issueId: link.external_id,
                 body,
@@ -1445,6 +1470,7 @@ export async function persistPlanImpact(
               metadata: {
                 externalProvider: "github",
                 integrationId: link.integration_id,
+                ...simulatedMetadata(link.integration_id),
                 payload: {
                   issueNumber,
                   body,
@@ -1490,6 +1516,7 @@ export async function persistPlanImpact(
               metadata: {
                 externalProvider: "github",
                 integrationId: integration.id,
+                ...simulatedMetadata(integration.id),
                 payload: {
                   title: `${requirement.stableKey}: ${requirement.title}`,
                   body,
@@ -1517,6 +1544,7 @@ export async function persistPlanImpact(
               metadata: {
                 externalProvider: "linear",
                 integrationId: integration.id,
+                ...simulatedMetadata(integration.id),
                 payload: {
                   teamId,
                   projectId: typeof metadata.selectedProjectId === "string"
@@ -1783,20 +1811,62 @@ export async function applyPlanChangeSet(
             continue;
           }
 
-          const integrationRows = await tx<Array<{ id: string }>>`
-            SELECT id
+          const requestedIntegrationId =
+            typeof metadata.integrationId === "string" ? metadata.integrationId : null;
+          // Prefer the integration the proposal names; otherwise the newest
+          // one for this provider (unchanged fallback).
+          const integrationRows = await tx<Array<{
+            id: string;
+            metadata: Record<string, unknown> | null;
+          }>>`
+            SELECT id, metadata
             FROM workspace_integrations
             WHERE workspace_id = ${changeSet.workspace_id}::uuid
               AND provider = ${provider}
-            ORDER BY updated_at DESC
+            ORDER BY (id::text = ${requestedIntegrationId || ""}) DESC, updated_at DESC
             LIMIT 1
           `;
-          const integrationId =
-            typeof metadata.integrationId === "string"
-              ? metadata.integrationId
-              : integrationRows[0]?.id || null;
+          const integrationRow = integrationRows[0];
+          const integrationId = requestedIntegrationId || integrationRow?.id || null;
           if (!integrationId) {
             throw new Error(`No ${provider} integration is available for external proposal ${proposal.id}`);
+          }
+
+          // Read-only demo sample data: record the proposal as applied in
+          // simulation instead of queueing a provider write that can only
+          // fail ("GitHub installation is missing"). Covers change sets that
+          // were persisted before the proposal carried the simulated flag.
+          const simulated =
+            metadata.simulated === true ||
+            (integrationRow?.id === integrationId && isDemoOnlyIntegration(integrationRow.metadata));
+          if (simulated) {
+            await tx`
+              UPDATE change_proposals
+              SET status = 'applied',
+                  applied_at = now(),
+                  metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
+                    simulated: true,
+                    simulatedReason: SIMULATED_DEMO_REASON,
+                  })}::jsonb
+              WHERE id = ${proposal.id}
+            `;
+            await tx`
+              INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+              VALUES (
+                ${userId},
+                ${changeSet.workspace_id}::uuid,
+                ${`plan.${proposal.action}.simulated`},
+                ${"success"},
+                ${JSON.stringify({
+                  changeSetId,
+                  proposalId: proposal.id,
+                  provider,
+                  reason: SIMULATED_DEMO_REASON,
+                })}::jsonb
+              )
+            `;
+            applied++;
+            continue;
           }
 
           const operationRows = await tx<Array<{ id: string }>>`

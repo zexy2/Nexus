@@ -25,6 +25,7 @@ import { formatRelativeDate } from '@/lib/format';
 import { cleanDocTitle } from '@/lib/text';
 import { useT, useLocale } from '@/lib/i18n/provider';
 import { useUIStore } from '@/lib/store';
+import { DemoTourCard } from '@/components/demo/demo-tour-card';
 
 // Types
 interface Document {
@@ -315,6 +316,8 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
+      {/* Public demo only: the guided first-run loop comes before everything else. */}
+      <DemoTourCard />
       <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-7 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-foreground-faint">
