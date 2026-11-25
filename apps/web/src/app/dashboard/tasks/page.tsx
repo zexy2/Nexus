@@ -959,7 +959,10 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8">
+    <div
+      className="mx-auto min-h-screen max-w-[1500px] px-4 pb-24 pt-10 md:px-8"
+      data-local-first-ready={engine && workspaceId && userId ? "true" : "false"}
+    >
       <header className="mb-8 flex flex-col justify-between gap-5 border-b border-border pb-7 md:flex-row md:items-end">
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-medium tracking-[0.18em] text-foreground-faint">

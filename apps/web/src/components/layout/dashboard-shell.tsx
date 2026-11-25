@@ -355,6 +355,8 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             <motion.button
               type="button"
               onClick={() => setIssuesOpen(true)}
+              data-testid="sync-status"
+              data-sync-state={syncState}
               aria-haspopup="dialog"
               aria-label={
                 rejectedMutations > 0
@@ -438,6 +440,7 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
+                    data-testid="user-menu-trigger"
                     className="p-1 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
                   >
                     <Avatar className="h-8 w-8 ring-2 ring-foreground/10">

@@ -479,7 +479,12 @@ jobs:
       NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED: "false"
       AI_ENABLED: "false"
       DEMO_MAX_ACTIVE_SESSIONS: "10"
-      DEMO_SESSION_TTL_MINUTES: "15"
+      # Each Playwright worker logs in once and reuses the session for the
+      # whole run, so the session must outlive the run.
+      DEMO_SESSION_TTL_MINUTES: "60"
+      # Shared by the web app (issues collaboration tokens) and the realtime
+      # collaboration server that playwright.config.ts starts next to it.
+      COLLAB_AUTH_SECRET: nexus-ci-e2e-collab-secret-at-least-32-characters
     steps:
       - name: Checkout
         uses: actions/checkout@v7
