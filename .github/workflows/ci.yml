@@ -40,7 +40,9 @@ jobs:
 
       # shellcheck ships with the ubuntu runner image.
       - name: Shellcheck deploy script
-        run: shellcheck -x scripts/deploy.sh scripts/tests/deploy.test.sh scripts/tests/deploy-stubs/*
+        run: |
+          shellcheck -x scripts/deploy.sh scripts/tests/deploy.test.sh scripts/tests/deploy-stubs/*
+          shellcheck -s sh scripts/temporal/*.sh
 
       - name: Deploy script tests (stubbed docker)
         run: bash scripts/tests/deploy.test.sh
@@ -158,6 +160,10 @@ jobs:
     # All four targets (web, worker, collaboration, migrate) are built in one
     # bake from the multi-target Dockerfile, then each is started for real
     # against Postgres (pgvector) and Temporal. Nothing is pushed here.
+    # Temporal is started on the old auto-setup image, seeded with workflows,
+    # then upgraded in place (same database) through docker-compose.prod.yml's
+    # temporal-schema/temporal/temporal-namespace services, one minor at a
+    # time; the worker and web smoke tests then run against the new server.
     runs-on: ubuntu-24.04-arm
     needs: [lint, typecheck]
     timeout-minutes: 40
@@ -177,6 +183,11 @@ jobs:
       DATABASE_URL: postgresql://nexus:nexus@postgres:5432/nexus
       COLLAB_AUTH_SECRET: nexus-ci-collab-secret-at-least-32-characters
       SMOKE_DOC_ID: 00000000-0000-4000-8000-0000000000d1
+      COMPOSE_PROJECT_NAME: nexus-ci
+      # Upgrade path proven by the Temporal steps: the old production image,
+      # then every minor hop up to the version pinned in docker-compose.prod.yml.
+      TEMPORAL_OLD_IMAGE: temporalio/auto-setup:1.29.7
+      TEMPORAL_HOPS: "1.30.9 1.31.5"
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -192,15 +203,25 @@ jobs:
         run: |
           echo "NET=$SERVICE_NET" >> "$GITHUB_ENV"
           echo "PG_ID=$SERVICE_PG_ID" >> "$GITHUB_ENV"
+          # docker-compose.prod.yml + the CI overlay join this network.
+          echo "CI_SERVICE_NETWORK=$SERVICE_NET" >> "$GITHUB_ENV"
+          # Throwaway values: compose interpolates every required variable.
+          env_file="$RUNNER_TEMP/compose-ci.env"
+          printf '%s\n' POSTGRES_USER=nexus POSTGRES_PASSWORD=nexus \
+            BETTER_AUTH_SECRET=ci BETTER_AUTH_URL=http://localhost:3000 \
+            AUTH_TRUSTED_ORIGINS=http://localhost:3000 COLLAB_AUTH_SECRET=ci \
+            NEXT_PUBLIC_APP_URL=http://localhost:3000 \
+            NEXT_PUBLIC_COLLABORATION_URL=ws://localhost:1234 > "$env_file"
+          echo "COMPOSE_CI_ENV=$env_file" >> "$GITHUB_ENV"
 
-      # Temporal needs ~30s to create its schema; start it before the build so
-      # it is ready by the time the worker and web smoke tests run.
-      - name: Start Temporal (same image as production)
+      # The old server needs ~30s to create its schema; start it before the
+      # build so it is ready by the time the upgrade test seeds it.
+      - name: "Start the OLD Temporal (auto-setup 1.29.7, the pre-cutover production image)"
         run: |
           docker run -d --name temporal --network "$NET" \
             -e DB=postgres12 -e DB_PORT=5432 -e POSTGRES_USER=nexus \
             -e POSTGRES_PWD=nexus -e POSTGRES_SEEDS=postgres \
-            temporalio/auto-setup:1.29.7 < /dev/null
+            "$TEMPORAL_OLD_IMAGE" < /dev/null
 
       - name: Build images
         uses: docker/bake-action@v7
@@ -265,16 +286,79 @@ jobs:
           insert into docs (id, workspace_id) values ('$SMOKE_DOC_ID', '00000000-0000-4000-8000-0000000000a1');
           SQL
 
-      - name: "Smoke: worker connects to Temporal and bundles workflows"
+      - name: "Temporal upgrade 1/3: seed the old server with workflow data"
         run: |
           set -euo pipefail
           for i in $(seq 1 60); do
-            if docker exec temporal sh -c 'temporal operator namespace describe -n default --address temporal:7233 || tctl --address temporal:7233 --ns default namespace describe' > /dev/null 2>&1; then
-              echo "temporal ready after ~$((i * 3))s"; break
+            if docker exec temporal temporal operator namespace describe -n default --address temporal:7233 > /dev/null 2>&1; then
+              echo "old temporal ready after ~$((i * 3))s"; break
             fi
             if [ "$i" -eq 60 ]; then docker logs --tail 50 temporal; exit 1; fi
             sleep 3
           done
+          ver() { docker exec "$PG_ID" psql -U nexus -d "$1" -Atc 'select curr_version from schema_version'; }
+          echo "schema before: temporal=$(ver temporal) temporal_visibility=$(ver temporal_visibility)"
+          test "$(ver temporal)" = 1.18
+          test "$(ver temporal_visibility)" = 1.9
+          docker exec temporal temporal operator namespace describe -n default --address temporal:7233 -o json \
+            | jq -r '.config.workflowExecutionRetentionTtl' > "$RUNNER_TEMP/retention-before"
+          echo "namespace default retention before: $(cat "$RUNNER_TEMP/retention-before")"
+          docker run --rm --network "$NET" \
+            -v "$PWD/scripts/ci/temporal-upgrade-probe:/app/packages/workflows/ci-probe:ro" \
+            -e TEMPORAL_ADDRESS=temporal:7233 --entrypoint node \
+            nexus-worker:ci ci-probe/probe.cjs seed < /dev/null
+
+      - name: "Temporal upgrade 2/3: in-place upgrade via docker-compose.prod.yml, one minor per hop"
+        run: |
+          set -euo pipefail
+          dc() { docker compose --env-file "$COMPOSE_CI_ENV" -f docker-compose.prod.yml -f scripts/ci/temporal-upgrade-probe/compose.ci.yml "$@" < /dev/null; }
+          tctl() { dc run --rm --no-deps -T --entrypoint temporal temporal-namespace "$@" --address temporal:7233; }
+          ver() { docker exec "$PG_ID" psql -U nexus -d "$1" -Atc 'select curr_version from schema_version'; }
+          pinned=$(dc config --format json | jq -r .services.temporal.image)
+          last=${TEMPORAL_HOPS##* }
+          echo "compose pins $pinned; hops: $TEMPORAL_HOPS"
+          test "$pinned" = "temporalio/server:$last"
+          # Cutover: the old container goes away, its database stays.
+          docker stop temporal > /dev/null && docker rm temporal > /dev/null
+          for v in $TEMPORAL_HOPS; do
+            echo "::group::hop to $v"
+            export TEMPORAL_SERVER_VERSION="$v"
+            dc stop temporal
+            # Starts temporal-schema first; the server only starts if it exits 0.
+            dc up -d temporal
+            dc logs --no-color temporal-schema | tail -n 20
+            cid=$(dc ps -q temporal)
+            for i in $(seq 1 100); do
+              s=$(docker inspect -f '{{.State.Health.Status}}' "$cid")
+              [ "$s" = healthy ] && break
+              if [ "$i" -eq 100 ]; then dc logs --tail 80 temporal; exit 1; fi
+              sleep 3
+            done
+            dc run --rm --no-deps -T temporal-namespace
+            tctl operator cluster system
+            echo "schema after $v: temporal=$(ver temporal) temporal_visibility=$(ver temporal_visibility)"
+            echo "::endgroup::"
+          done
+          test "$(ver temporal)" = 1.19
+          test "$(ver temporal_visibility)" = 1.14
+          tctl operator cluster system -o json | jq -e --arg v "$last" '.serverVersion == $v'
+          after=$(tctl operator namespace describe -n default -o json | jq -r '.config.workflowExecutionRetentionTtl')
+          echo "namespace default retention after: $after"
+          test "$after" = "$(cat "$RUNNER_TEMP/retention-before")"
+          # The schema job is idempotent: a second run on the current schema is a no-op.
+          dc run --rm --no-deps -T temporal-schema
+
+      - name: "Temporal upgrade 3/3: pre-upgrade workflows survive and complete on the new server"
+        run: |
+          set -euo pipefail
+          docker run --rm --network "$NET" \
+            -v "$PWD/scripts/ci/temporal-upgrade-probe:/app/packages/workflows/ci-probe:ro" \
+            -e TEMPORAL_ADDRESS=temporal:7233 --entrypoint node \
+            nexus-worker:ci ci-probe/probe.cjs verify < /dev/null
+
+      - name: "Smoke: worker connects to Temporal and bundles workflows"
+        run: |
+          set -euo pipefail
           docker run -d --name worker --network "$NET" \
             -e DATABASE_URL -e TEMPORAL_ADDRESS=temporal:7233 -e NODE_ENV=production \
             nexus-worker:ci < /dev/null
@@ -361,6 +445,10 @@ jobs:
           for c in temporal worker collab web; do
             echo "::group::$c"; docker logs --tail 200 "$c" 2>&1 || true; echo "::endgroup::"
           done
+          echo "::group::compose temporal services"
+          docker compose --env-file "$COMPOSE_CI_ENV" -f docker-compose.prod.yml -f scripts/ci/temporal-upgrade-probe/compose.ci.yml \
+            logs --no-color --tail 200 temporal-schema temporal temporal-namespace < /dev/null 2>&1 || true
+          echo "::endgroup::"
 
   e2e:
     name: E2E Tests
