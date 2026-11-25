@@ -414,6 +414,10 @@ export default function DocsPage() {
   const [newDocEmoji, setNewDocEmoji] = useState("📄");
   const { engine, userId, workspaceId } = useLocalFirstContext();
   const [documents, setDocuments] = useState<Document[]>([]);
+  // Ids of plans whose body (not just title) matches the query, from the
+  // keyword-only /api/search (no AI cost). Best-effort: offline or on error the
+  // list falls back to title matching.
+  const [contentMatchIds, setContentMatchIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -497,10 +501,36 @@ export default function DocsPage() {
     });
   }, [engine, workspaceId, fetchDocuments]);
 
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      const reset = window.setTimeout(() => setContentMatchIds(new Set()), 0);
+      return () => window.clearTimeout(reset);
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?type=document&limit=25&q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as { results?: { id: string }[] };
+        setContentMatchIds(new Set((data.results ?? []).map((r) => r.id)));
+      } catch {
+        // offline / aborted: title matching still works
+      }
+    }, 250);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
   // Filter and sort documents
   const filteredDocuments = useMemo(() => {
-    let filtered = documents.filter((doc) =>
-      doc.title.toLowerCase().includes(searchQuery.toLowerCase())
+    const needle = searchQuery.trim().toLowerCase();
+    let filtered = documents.filter(
+      (doc) => doc.title.toLowerCase().includes(needle) || (needle.length >= 2 && contentMatchIds.has(doc.id))
     );
 
     if (showFavoritesOnly) {
@@ -525,7 +555,7 @@ export default function DocsPage() {
     });
 
     return filtered;
-  }, [documents, searchQuery, sortBy, showFavoritesOnly]);
+  }, [documents, searchQuery, contentMatchIds, sortBy, showFavoritesOnly]);
 
   // Handlers
   const handleCreateDocument = useCallback(async () => {
