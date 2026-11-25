@@ -325,17 +325,17 @@ importers:
   packages/workflows:
     dependencies:
       '@temporalio/activity':
-        specifier: ^1.18.1
-        version: 1.18.1
+        specifier: 1.18.2
+        version: 1.18.2
       '@temporalio/client':
-        specifier: ^1.18.1
-        version: 1.18.1
+        specifier: 1.18.2
+        version: 1.18.2
       '@temporalio/worker':
-        specifier: ^1.18.1
-        version: 1.18.1(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
+        specifier: 1.18.2
+        version: 1.18.2(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
       '@temporalio/workflow':
-        specifier: ^1.18.1
-        version: 1.18.1
+        specifier: 1.18.2
+        version: 1.18.2
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
@@ -347,8 +347,8 @@ importers:
         specifier: workspace:*
         version: link:../typescript-config
       '@temporalio/testing':
-        specifier: 1.18.1
-        version: 1.18.1(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
+        specifier: 1.18.2
+        version: 1.18.2(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
       '@types/node':
         specifier: ^22.15.7
         version: 22.19.7
@@ -2893,40 +2893,40 @@ packages:
   '@tailwindcss/postcss@4.1.18':
     resolution: {integrity: sha512-Ce0GFnzAOuPyfV5SxjXGn0CubwGcuDB0zcdaPuCSzAa/2vII24JTkH+I6jcbXLb1ctjZMZZI6OjDaLPJQL1S0g==}
 
-  '@temporalio/activity@1.18.1':
-    resolution: {integrity: sha512-Y24veV/dOSavnXK0YRifM/eoM+i7A814w2CMnlw8H9GYYIKMo71JMMq6CEJkhueVuMJxGb4Ajg+uvWUT/Ocebw==}
+  '@temporalio/activity@1.18.2':
+    resolution: {integrity: sha512-QzqTawPTFeZzKmC0dRXb8ZCg8eLDtxzG2hiGjbxcGVRAg2anMzGz25BaCtfHH2bJg2gd8kFudj8lyHRP/S0MDA==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/client@1.18.1':
-    resolution: {integrity: sha512-ToYL+qTCO8AE7IBsk1kmCZYh2Nu6e2W8QB+H5cKp2l8VUYWljNKXfb1aguGVN1gnCsBhbcu3s7dJmltLvlOcSw==}
+  '@temporalio/client@1.18.2':
+    resolution: {integrity: sha512-vCkGOp/fiBKlkA20bnaSDLsQd2ZuMMSiCpgbQiwJ5IP73ntZPMJRA7Bt8rX+U7Y+oQaYzDd7maHRuRaF/bGuTw==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/common@1.18.1':
-    resolution: {integrity: sha512-2hYWRKmY8WLt/8Nkrx2tziGAoNcbHDWbQR8AGvJ2xcap5E3hTIQPiNDARUm0tyCEK9umnCQztndbDxzLcxUZeA==}
+  '@temporalio/common@1.18.2':
+    resolution: {integrity: sha512-NcGDCobe8sgR+uF+S0utPI2Brf5EFp797rmr2ghKAmXqCAw8zFoxYQHrh/h2YmeLvJgFnhqQADNJhavw66f/eg==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/core-bridge@1.18.1':
-    resolution: {integrity: sha512-iMTF6piD03YyjFFDjbmY+yGYptEtNtM4QEC8/8EUR36Ze6DkyqW1gll0VUyUCLpkhHhy4+XLBtqQ0bfpen+Csw==}
+  '@temporalio/core-bridge@1.18.2':
+    resolution: {integrity: sha512-tIBuyVv3A3uV5OWMBktimW3oxFYv+yKs8Nd/B2Iyz64BYJZscroXJ1X4dEC/UX1qiXKmJUiuv47VtFLLdSArRQ==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/nexus@1.18.1':
-    resolution: {integrity: sha512-LNrB+41kTEV32fCRHboLOT3D8RRVzaI953iqiHEaz0tkVVQmYUzRVQpSID/UjWExWw1mbaIvpFmKkYvY0g2j2A==}
+  '@temporalio/nexus@1.18.2':
+    resolution: {integrity: sha512-ie/fyKuKkGRUqxQLXyMfjTsfrmz7Mi9zk12vMdQCaj9EmLMB7KWf+UI8XnCyT2+E/MMOJ2vd+d8VJ4t+w8zB7Q==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/proto@1.18.1':
-    resolution: {integrity: sha512-pLa1JkmVwGdoFPCmb9DJ4P0z2mk3Zyu1VW6pXvJiYjt6W52Vm7YYi0caqfcSs/Wb/ZamdMbGqMcezftzVdzkYg==}
+  '@temporalio/proto@1.18.2':
+    resolution: {integrity: sha512-s7VbaVhEWRPkZ2sY6ryPpvHQuRxOsw0a4rpGChl+TeJ9N5tHp76akyQX1+t+zGG9L8gmMd+IHODW9E7y7PTLMw==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/testing@1.18.1':
-    resolution: {integrity: sha512-fleEok2IWrc64lhuOMln4BhrjF5WgPYoh/t5ZH5M9nOPGgnQtD56k1KYlZ0WH8FKLJ4ZZgzo6zURHp8SovxHxw==}
+  '@temporalio/testing@1.18.2':
+    resolution: {integrity: sha512-Q8z39UcsgK4zv/BK4LRBSMl+qNr9hCZr0HNXKUyYj2BASTqyZxSHa+Bpnn28U+NslT4Ts6XNJeQ/uEgsb9Kf9g==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/worker@1.18.1':
-    resolution: {integrity: sha512-ydeTHhlZF4G9ye5YnyBNgZT8/7lpGdEaF4LwJLUsW33AtLiqUp5zkzwefktpn/vyHWmNWjDdacxZ3l8WgdN+0w==}
+  '@temporalio/worker@1.18.2':
+    resolution: {integrity: sha512-Xp/35DrU+7lYoYBQQFrwr36k4pGv32isgFKtWUEWrx4xJWeWS5thITrwBrLDADzCXAfzk1J8TYViUXLVZhQA8Q==}
     engines: {node: '>= 20.0.0'}
 
-  '@temporalio/workflow@1.18.1':
-    resolution: {integrity: sha512-UabVy4/Jbg9IiQFKfHQn4DKhnAqczo/TkzP/j8lebH+oK6Gqq/sLaFwIWEdVB0hSMO99q/A85NJvUbkr4n0DCA==}
+  '@temporalio/workflow@1.18.2':
+    resolution: {integrity: sha512-Ha7WzOqGkelBqUIsHqtNXUpeLGPtuEaP3Z8L3w2HdPimJPlsbGnfXUv4GlAH1jnPfL8mv+2LWROIVGarmDYFjg==}
     engines: {node: '>= 20.0.0'}
 
   '@testing-library/dom@10.4.1':
@@ -3078,9 +3078,6 @@ packages:
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
-
-  '@types/estree@1.0.8':
-    resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
@@ -8561,56 +8558,56 @@ snapshots:
       postcss: 8.5.33
       tailwindcss: 4.1.18
 
-  '@temporalio/activity@1.18.1':
+  '@temporalio/activity@1.18.2':
     dependencies:
-      '@temporalio/client': 1.18.1
-      '@temporalio/common': 1.18.1
+      '@temporalio/client': 1.18.2
+      '@temporalio/common': 1.18.2
 
-  '@temporalio/client@1.18.1':
+  '@temporalio/client@1.18.2':
     dependencies:
       '@grpc/grpc-js': 1.14.7
-      '@temporalio/common': 1.18.1
-      '@temporalio/proto': 1.18.1
+      '@temporalio/common': 1.18.2
+      '@temporalio/proto': 1.18.2
       abort-controller: 3.0.0
       long: 5.3.2
       nexus-rpc: 0.0.2
       uuid: 11.1.1
 
-  '@temporalio/common@1.18.1':
+  '@temporalio/common@1.18.2':
     dependencies:
-      '@temporalio/proto': 1.18.1
+      '@temporalio/proto': 1.18.2
       long: 5.3.2
       ms: 3.0.0-canary.1
       nexus-rpc: 0.0.2
       proto3-json-serializer: 2.0.2
 
-  '@temporalio/core-bridge@1.18.1':
+  '@temporalio/core-bridge@1.18.2':
     dependencies:
       '@grpc/grpc-js': 1.14.7
-      '@temporalio/common': 1.18.1
+      '@temporalio/common': 1.18.2
 
-  '@temporalio/nexus@1.18.1':
+  '@temporalio/nexus@1.18.2':
     dependencies:
-      '@temporalio/client': 1.18.1
-      '@temporalio/common': 1.18.1
-      '@temporalio/proto': 1.18.1
+      '@temporalio/client': 1.18.2
+      '@temporalio/common': 1.18.2
+      '@temporalio/proto': 1.18.2
       long: 5.3.2
       nexus-rpc: 0.0.2
 
-  '@temporalio/proto@1.18.1':
+  '@temporalio/proto@1.18.2':
     dependencies:
       long: 5.3.2
       protobufjs: 7.6.6
 
-  '@temporalio/testing@1.18.1(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)':
+  '@temporalio/testing@1.18.2(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)':
     dependencies:
-      '@temporalio/activity': 1.18.1
-      '@temporalio/client': 1.18.1
-      '@temporalio/common': 1.18.1
-      '@temporalio/core-bridge': 1.18.1
-      '@temporalio/proto': 1.18.1
-      '@temporalio/worker': 1.18.1(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
-      '@temporalio/workflow': 1.18.1
+      '@temporalio/activity': 1.18.2
+      '@temporalio/client': 1.18.2
+      '@temporalio/common': 1.18.2
+      '@temporalio/core-bridge': 1.18.2
+      '@temporalio/proto': 1.18.2
+      '@temporalio/worker': 1.18.2(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)
+      '@temporalio/workflow': 1.18.2
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/css'
@@ -8626,17 +8623,17 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@temporalio/worker@1.18.1(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)':
+  '@temporalio/worker@1.18.2(@swc/helpers@0.5.23)(lightningcss@1.30.2)(postcss@8.5.33)':
     dependencies:
       '@grpc/grpc-js': 1.14.7
       '@swc/core': 1.15.8(@swc/helpers@0.5.23)
-      '@temporalio/activity': 1.18.1
-      '@temporalio/client': 1.18.1
-      '@temporalio/common': 1.18.1
-      '@temporalio/core-bridge': 1.18.1
-      '@temporalio/nexus': 1.18.1
-      '@temporalio/proto': 1.18.1
-      '@temporalio/workflow': 1.18.1
+      '@temporalio/activity': 1.18.2
+      '@temporalio/client': 1.18.2
+      '@temporalio/common': 1.18.2
+      '@temporalio/core-bridge': 1.18.2
+      '@temporalio/nexus': 1.18.2
+      '@temporalio/proto': 1.18.2
+      '@temporalio/workflow': 1.18.2
       heap-js: 2.7.1
       memfs: 4.52.0
       nexus-rpc: 0.0.2
@@ -8663,10 +8660,10 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@temporalio/workflow@1.18.1':
+  '@temporalio/workflow@1.18.2':
     dependencies:
-      '@temporalio/common': 1.18.1
-      '@temporalio/proto': 1.18.1
+      '@temporalio/common': 1.18.2
+      '@temporalio/proto': 1.18.2
       nexus-rpc: 0.0.2
 
   '@testing-library/dom@10.4.1':
@@ -8837,8 +8834,6 @@ snapshots:
       '@types/node': 25.0.9
 
   '@types/deep-eql@4.0.2': {}
-
-  '@types/estree@1.0.8': {}
 
   '@types/estree@1.0.9': {}
 
@@ -9820,8 +9815,8 @@ snapshots:
       '@next/eslint-plugin-next': 16.4.6(eslint@9.39.5(jiti@2.6.1))
       eslint: 9.39.5(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.6.1))
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.6.1))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1))
       eslint-plugin-jsx-a11y: 6.10.2(eslint@9.39.5(jiti@2.6.1))
       eslint-plugin-react: 7.37.5(eslint@9.39.5(jiti@2.6.1))
       eslint-plugin-react-hooks: 7.1.1(eslint@9.39.5(jiti@2.6.1))
@@ -9844,7 +9839,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.6.1)):
+  eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)):
     dependencies:
       '@nolyfill/is-core-module': 1.0.39
       debug: 4.4.3
@@ -9855,22 +9850,22 @@ snapshots:
       tinyglobby: 0.2.15
       unrs-resolver: 1.11.1
     optionalDependencies:
-      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.6.1))
+      eslint-plugin-import: 2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
-  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.6.1)):
+  eslint-module-utils@2.12.1(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)):
     dependencies:
       debug: 3.2.7
     optionalDependencies:
       '@typescript-eslint/parser': 8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3)
       eslint: 9.39.5(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
-      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0)(eslint@9.39.5(jiti@2.6.1))
+      eslint-import-resolver-typescript: 3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1))
     transitivePeerDependencies:
       - supports-color
 
-  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.6.1)):
+  eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)):
     dependencies:
       '@rtsao/scc': 1.1.0
       array-includes: 3.1.9
@@ -9881,7 +9876,7 @@ snapshots:
       doctrine: 2.1.0
       eslint: 9.39.5(jiti@2.6.1)
       eslint-import-resolver-node: 0.3.9
-      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1)(eslint@9.39.5(jiti@2.6.1))
+      eslint-module-utils: 2.12.1(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint-import-resolver-node@0.3.9)(eslint-import-resolver-typescript@3.10.1(eslint-plugin-import@2.32.0(@typescript-eslint/parser@8.73.0(eslint@9.39.5(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1)))(eslint@9.39.5(jiti@2.6.1))
       hasown: 2.0.2
       is-core-module: 2.16.1
       is-glob: 4.0.3
@@ -11891,7 +11886,7 @@ snapshots:
 
   webpack@5.107.2(@swc/core@1.15.8(@swc/helpers@0.5.23))(lightningcss@1.30.2)(postcss@8.5.33):
     dependencies:
-      '@types/estree': 1.0.8
+      '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
       '@webassemblyjs/ast': 1.14.1
       '@webassemblyjs/wasm-edit': 1.14.1
@@ -11910,7 +11905,7 @@ snapshots:
       mime-db: 1.54.0
       neo-async: 2.6.2
       schema-utils: 4.3.3
-      tapable: 2.3.0
+      tapable: 2.3.3
       terser-webpack-plugin: 5.6.1(@swc/core@1.15.8(@swc/helpers@0.5.23))(lightningcss@1.30.2)(postcss@8.5.33)(webpack@5.107.2(@swc/core@1.15.8(@swc/helpers@0.5.23))(lightningcss@1.30.2)(postcss@8.5.33))
       watchpack: 2.5.1
       webpack-sources: 3.5.0
