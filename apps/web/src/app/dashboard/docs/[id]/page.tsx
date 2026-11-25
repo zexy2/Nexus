@@ -17,8 +17,8 @@ import {
   MoreHorizontal,
   Sparkles,
   Clock,
-  Share2,
-  Trash2,
+  Link2,
+  Archive,
   Copy,
   Star,
   FileText,
@@ -34,6 +34,8 @@ import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { useZero } from "@/lib/sync/zero";
 import { setDocFavorite } from "@/lib/sync/doc-favorite";
+import { copyText } from "@/lib/clipboard";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 
 // BlockNote content type alias
 type BlockNoteContent = PartialBlock[];
@@ -111,6 +113,7 @@ export default function DocDetailPage() {
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const editorContentRef = useRef<BlockNoteContent>([]);
   const materializeTimerRef = useRef<number | null>(null);
   const titleTimerRef = useRef<number | null>(null);
@@ -133,7 +136,8 @@ export default function DocDetailPage() {
       try {
         const res = await fetch(`/api/docs/${params.id}`);
         if (!res.ok) {
-          throw new Error("Document not found");
+          // Only a 404 is "not found"; anything else is a load failure.
+          throw new Error(res.status === 404 ? "Document not found" : t("docs.detail.loadFailed"));
         }
         const data = await res.json();
         setDoc(data);
@@ -288,7 +292,7 @@ export default function DocDetailPage() {
     const textContent = extractTextFromContent(currentContent);
     
     if (!textContent.trim()) {
-      alert(t("docs.detail.emptyContent"));
+      showToast.warning(t("docs.detail.emptyContent"));
       return;
     }
 
@@ -421,7 +425,7 @@ export default function DocDetailPage() {
       }
     } catch (err) {
       console.error("AI action failed:", err);
-      alert(t("docs.detail.aiActionFailed"));
+      showToast.error(t("docs.detail.aiActionFailed"));
       if (action === "tasks") {
         setTaskWorkflow(null);
       }
@@ -491,24 +495,48 @@ export default function DocDetailPage() {
     titleTimerRef.current = window.setTimeout(flushTitleSave, 600);
   };
 
-  const handleDelete = async () => {
-    if (!confirm(t("docs.detail.deleteConfirm"))) return;
-    
+  // "Delete" here has always been a soft delete; call it Archive, confirm it,
+  // check the response, and offer Undo from the docs list.
+  const setArchived = async (isArchived: boolean) => {
+    const res = await fetch(`/api/docs/${documentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived }),
+    });
+    if (!res.ok) throw new Error(`Archive update failed: ${res.status}`);
+  };
+
+  const handleArchive = async () => {
     try {
-      await fetch(`/api/docs/${params.id}`, { method: "DELETE" });
+      flushTitleSave();
+      await setArchived(true);
+      showToast.success(t("docs.toastArchived"), {
+        duration: 6000,
+        action: {
+          label: t("feedback.undo"),
+          onClick: () => {
+            void setArchived(false)
+              .then(() => {
+                showToast.success(t("feedback.docRestored"));
+                router.push(`/dashboard/docs/${documentId}`);
+              })
+              .catch(() => showToast.error(t("feedback.docRestoreFailed")));
+          },
+        },
+      });
       router.push("/dashboard/docs");
     } catch (err) {
-      console.error("Failed to delete:", err);
+      console.error("Failed to archive:", err);
+      showToast.error(t("feedback.docArchiveFailed"));
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      alert(t("docs.detail.shareCopied"));
-    } catch (err) {
-      console.error("Failed to copy:", err);
-    }
+  // There is no sharing/membership model yet: the link only opens for the
+  // owner (and workspace members), so this is "Copy link", not "Share".
+  const handleCopyLink = async () => {
+    const copied = await copyText(window.location.href);
+    if (copied) showToast.success(t("feedback.linkCopied"), { description: t("feedback.linkCopiedHint") });
+    else showToast.error(t("feedback.copyFailed"), { description: window.location.href });
   };
 
   const handleFavorite = async () => {
@@ -533,18 +561,18 @@ export default function DocDetailPage() {
       const res = await fetch("/api/docs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           title: `${displayTitle} (Kopya)`,
           content: doc.content || []
         }),
       });
-      
-      if (res.ok) {
-        const newDoc = await res.json();
-        router.push(`/dashboard/docs/${newDoc.id}`);
-      }
+      if (!res.ok) throw new Error(`Duplicate failed: ${res.status}`);
+      const newDoc = await res.json();
+      showToast.success(t("docs.toastDuplicated"));
+      router.push(`/dashboard/docs/${newDoc.id}`);
     } catch (err) {
       console.error("Failed to duplicate:", err);
+      showToast.error(t("feedback.docDuplicateFailed"));
     }
   };
 
@@ -627,9 +655,16 @@ export default function DocDetailPage() {
             </div>
           )}
 
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleShare}>
-            <Share2 className="size-3" />
-            {t("docs.detail.share")}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => void handleCopyLink()}
+            title={t("feedback.copyLinkHint")}
+            data-testid="doc-copy-link"
+          >
+            <Link2 className="size-3" />
+            {t("feedback.copyLink")}
           </Button>
 
           <DropdownMenu>
@@ -648,9 +683,9 @@ export default function DocDetailPage() {
                 {t("docs.detail.duplicate")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                <Trash2 className="size-4 mr-2" />
-                {t("docs.detail.delete")}
+              <DropdownMenuItem className="text-destructive" onSelect={() => setArchiveConfirmOpen(true)}>
+                <Archive className="size-4 mr-2" />
+                {t("common.archive")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -682,6 +717,15 @@ export default function DocDetailPage() {
           <LivingPlanInspector docId={doc.id} savePending={isSaving} />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={archiveConfirmOpen}
+        onOpenChange={setArchiveConfirmOpen}
+        title={t("feedback.archiveDocTitle")}
+        description={t("feedback.archiveDocDesc")}
+        confirmLabel={t("common.archive")}
+        onConfirm={handleArchive}
+      />
 
       {/* AI Assistant Bar */}
       <div className="shrink-0 border-t px-6 py-3 bg-muted/30">

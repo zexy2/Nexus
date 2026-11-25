@@ -15,8 +15,10 @@ vi.mock("@/lib/auth", () => ({
 }));
 
 const enforceMutationBudget = vi.fn();
+const writeAuditLog = vi.fn();
 vi.mock("@/lib/production-guardrails", () => ({
   enforceMutationBudget: (...a: unknown[]) => enforceMutationBudget(...a),
+  writeAuditLog: (...a: unknown[]) => writeAuditLog(...a),
 }));
 
 // db mock: select chain feeds `findAuthorizedDoc`; update chain serves PATCH
@@ -25,6 +27,27 @@ let selectResults: unknown[] = [];
 let selectIndex = 0;
 let updateReturning: unknown[] = [];
 const updateWhere = vi.fn();
+// Permanent delete runs inside db.transaction(); record every tx write.
+const txOps: Array<{ op: "delete" | "update"; table: unknown }> = [];
+const transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+  const tx = {
+    delete: (table: unknown) => ({
+      where: () => {
+        txOps.push({ op: "delete", table });
+        return Promise.resolve(undefined);
+      },
+    }),
+    update: (table: unknown) => ({
+      set: () => ({
+        where: () => {
+          txOps.push({ op: "update", table });
+          return Promise.resolve(undefined);
+        },
+      }),
+    }),
+  };
+  return fn(tx);
+});
 
 function selectChain() {
   const b: Record<string, unknown> = {};
@@ -36,6 +59,7 @@ function selectChain() {
 
 vi.mock("@/lib/db", () => ({
   db: {
+    transaction: (fn: (tx: unknown) => Promise<unknown>) => transaction(fn),
     select: () => selectChain(),
     update: () => ({
       set: () => ({
@@ -52,6 +76,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { GET, PATCH, DELETE } from "@/app/api/docs/[id]/route";
+import { docs as docsTable, vectors as vectorsTable } from "@nexus/database/schema";
 
 const VALID_ID = "11111111-1111-1111-1111-111111111111";
 // The route authenticates via verifySession(), which requires both a user and
@@ -62,8 +87,8 @@ const authed = {
 };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-function req(method: string, body?: unknown) {
-  return new Request(`http://localhost:3000/api/docs/${VALID_ID}`, {
+function req(method: string, body?: unknown, query = "") {
+  return new Request(`http://localhost:3000/api/docs/${VALID_ID}${query}`, {
     method,
     headers: { "content-type": "application/json", cookie: "session=abc" },
     body: body ? JSON.stringify(body) : undefined,
@@ -85,6 +110,7 @@ beforeEach(() => {
   selectResults = [];
   selectIndex = 0;
   updateReturning = [];
+  txOps.length = 0;
   enforceMutationBudget.mockResolvedValue(null);
   delete process.env.OPENAI_API_KEY; // keep background-embedding fetch off by default
 });
@@ -148,5 +174,55 @@ describe("DELETE /api/docs/[id] (real handler)", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true });
     expect(updateWhere).toHaveBeenCalled(); // archive write happened
+  });
+});
+
+describe("DELETE /api/docs/[id]?permanent=1 (real handler)", () => {
+  const permanent = () => req("DELETE", undefined, "?permanent=1");
+
+  it("refuses to hard-delete a doc that is not archived (409) and writes nothing", async () => {
+    getSession.mockResolvedValue(authed);
+    selectResults = [[{ doc: { ...docRow, isArchived: 0 }, workspaceOwnerId: "user-1" }]];
+    const res = await DELETE(permanent(), params(VALID_ID));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe("DOC_NOT_ARCHIVED");
+    expect(transaction).not.toHaveBeenCalled();
+    expect(updateWhere).not.toHaveBeenCalled();
+  });
+
+  it("refuses a workspace member who is not the owner (403)", async () => {
+    getSession.mockResolvedValue(authed);
+    selectResults = [[{ doc: { ...docRow, isArchived: 1 }, workspaceOwnerId: "someone-else" }]];
+    const res = await DELETE(permanent(), params(VALID_ID));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("WORKSPACE_OWNER_REQUIRED");
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the doc is not accessible", async () => {
+    getSession.mockResolvedValue(authed);
+    selectResults = [[]];
+    const res = await DELETE(permanent(), params(VALID_ID));
+    expect(res.status).toBe(404);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it("hard-deletes an archived doc for the owner: vectors, child links, then the row", async () => {
+    getSession.mockResolvedValue(authed);
+    selectResults = [[{ doc: { ...docRow, isArchived: 1 }, workspaceOwnerId: "user-1" }]];
+    const res = await DELETE(permanent(), params(VALID_ID));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, deleted: true });
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(txOps).toEqual([
+      { op: "delete", table: vectorsTable },
+      { op: "update", table: docsTable },
+      { op: "delete", table: docsTable },
+    ]);
+    // The soft-delete path did not run.
+    expect(updateWhere).not.toHaveBeenCalled();
+    expect(writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "doc.delete_permanent", workspaceId: "ws-1" })
+    );
   });
 });

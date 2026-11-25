@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
-import { agentJobs, tasks, workspaceMembers, workspaces } from "@nexus/database/schema";
+import { agentJobs, tasks, workspaceMembers, workspaceRepositories, workspaces } from "@nexus/database/schema";
 import { and, eq, inArray, or } from "drizzle-orm";
 import {
   parseOptionalDueDate,
@@ -66,10 +66,18 @@ export async function GET(
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const latestAgentJob = await db.query.agentJobs.findFirst({
-      where: eq(agentJobs.taskId, id),
-      orderBy: (rows, { desc }) => [desc(rows.createdAt)],
-    });
+    const [latestAgentJob, repository] = await Promise.all([
+      db.query.agentJobs.findFirst({
+        where: eq(agentJobs.taskId, id),
+        orderBy: (rows, { desc }) => [desc(rows.createdAt)],
+      }),
+      // Agent handoff needs a repository (createAgentJob throws
+      // REPOSITORY_NOT_CONFIGURED otherwise); the UI disables it up front.
+      db.query.workspaceRepositories.findFirst({
+        where: eq(workspaceRepositories.workspaceId, task.workspaceId),
+        columns: { id: true },
+      }),
+    ]);
 
     return Response.json({
       id: task.id,
@@ -88,6 +96,7 @@ export async function GET(
       updatedAt: task.updatedAt.toISOString(),
       agentJob: latestAgentJob || null,
       agentHandoffWritable: !isDemoEmail(session.user.email),
+      agentRepositoryConfigured: Boolean(repository),
     });
   } catch (error) {
     console.error("Failed to fetch task:", error);
@@ -200,6 +209,17 @@ export async function PATCH(
         );
       }
       updates.priority = priority;
+    }
+
+    if ("isArchived" in body) {
+      if (typeof body.isArchived !== "boolean") {
+        return Response.json(
+          { error: "Bad Request", message: "isArchived must be a boolean" },
+          { status: 400 }
+        );
+      }
+      // Restore from (or move to) the archive; DELETE remains the archive path.
+      updates.isArchived = body.isArchived ? 1 : 0;
     }
 
     if ("dueDate" in body) {

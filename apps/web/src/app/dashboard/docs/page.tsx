@@ -13,8 +13,8 @@ import {
   MoreHorizontal,
   Copy,
   Archive,
-  Trash2,
   Sparkles,
+  AlertCircle,
   Clock,
   Star,
   StarOff,
@@ -59,6 +59,7 @@ import { cleanDocTitle } from "@/lib/text";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { setDocFavorite } from "@/lib/sync/doc-favorite";
+import { plural } from "@/lib/i18n/plural";
 import Link from "next/link";
 
 // Document type
@@ -70,6 +71,8 @@ interface Document {
   updatedAt: Date;
   createdAt: Date;
   createdBy: string;
+  /** Display name resolved by GET /api/docs; null for local-only rows. */
+  createdByName?: string | null;
   isAI: boolean;
   isFavorite: boolean;
   tags?: string[];
@@ -84,7 +87,7 @@ function fromSyncDoc(d: SyncDoc): Document {
     iconEmoji: d.iconEmoji || "📄",
     updatedAt: new Date(d.updatedAt),
     createdAt: new Date(d.createdAt ?? d.updatedAt),
-    createdBy: d.createdBy || "User",
+    createdBy: d.createdBy || "",
     isAI: false,
     isFavorite: Boolean(d.isFavorite),
   };
@@ -99,15 +102,15 @@ function DocumentCard({
   viewMode,
   onDuplicate,
   onArchive,
-  onDelete,
   onToggleFavorite,
+  ownerLabel,
 }: {
   doc: Document;
   viewMode: "grid" | "list";
   onDuplicate: (id: string) => void;
   onArchive: (id: string) => void;
-  onDelete: (id: string) => void;
   onToggleFavorite: (id: string) => void;
+  ownerLabel: string;
 }) {
   const [isHovered, setIsHovered] = useState(false);
   const t = useT();
@@ -157,7 +160,7 @@ function DocumentCard({
             </span>
             <span className="flex items-center gap-1">
               <User className="w-3 h-3" />
-              {doc.createdBy}
+              {ownerLabel}
             </span>
             {doc.tags && doc.tags.length > 0 && (
               <div className="flex items-center gap-1">
@@ -244,14 +247,6 @@ function DocumentCard({
                   >
                     <Archive className="w-4 h-4" />
                     {t('common.archive')}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => onDelete(doc.id)}
-                    className="flex items-center gap-2 text-red-600 focus:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    {t('common.delete')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -402,14 +397,6 @@ function DocumentCard({
                     <Archive className="w-4 h-4" />
                     {t('common.archive')}
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => onDelete(doc.id)}
-                    className="flex items-center gap-2 text-red-600 focus:text-red-600"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    {t('common.delete')}
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -428,12 +415,19 @@ export default function DocsPage() {
   const { engine, userId, workspaceId } = useLocalFirstContext();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
 
   const { documentsView, setDocumentsView } = useUIStore();
   const t = useT();
+  const [ownerNames, setOwnerNames] = useState<Map<string, string>>(new Map());
+
+  const ownerLabel = useCallback((doc: Document) => {
+    if (doc.createdBy && doc.createdBy === userId) return t('feedback.ownerYou');
+    return (doc.createdBy && ownerNames.get(doc.createdBy)) || doc.createdByName || t('feedback.ownerUnknown');
+  }, [ownerNames, t, userId]);
 
   // Fetch documents: local-first (instant cache + offline), then refresh online.
   const fetchDocuments = useCallback(async () => {
@@ -456,23 +450,33 @@ export default function DocsPage() {
 
     try {
       const res = await fetch("/api/docs");
-      if (res.ok) {
-        const data = await res.json();
-        setDocuments(
-          data.map((d: { id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null; isAiGenerated?: boolean; isFavorite?: boolean }) => ({
-            id: d.id,
-            title: d.title,
-            iconEmoji: d.iconEmoji || "📄",
-            updatedAt: new Date(d.updatedAt),
-            createdAt: new Date(d.updatedAt),
-            createdBy: d.createdBy || "User",
-            isAI: d.isAiGenerated === true,
-            isFavorite: d.isFavorite === true,
-          }))
-        );
-      }
+      if (!res.ok) throw new Error(`Failed to fetch documents: ${res.status}`);
+      const data = await res.json();
+      const rows = data as Array<{ id: string; title: string; iconEmoji: string | null; updatedAt: string; createdBy: string | null; createdByName?: string | null; isAiGenerated?: boolean; isFavorite?: boolean }>;
+      setOwnerNames((current) => {
+        const next = new Map(current);
+        for (const d of rows) if (d.createdBy && d.createdByName) next.set(d.createdBy, d.createdByName);
+        return next;
+      });
+      setDocuments(
+        rows.map((d) => ({
+          id: d.id,
+          title: d.title,
+          iconEmoji: d.iconEmoji || "📄",
+          updatedAt: new Date(d.updatedAt),
+          createdAt: new Date(d.updatedAt),
+          createdBy: d.createdBy || "",
+          createdByName: d.createdByName ?? null,
+          isAI: d.isAiGenerated === true,
+          isFavorite: d.isFavorite === true,
+        }))
+      );
+      setLoadFailed(false);
     } catch (error) {
       console.error("Failed to fetch documents:", error);
+      // Cached rows still render; with nothing cached show an error, never a
+      // fake "no plans yet" empty state.
+      if (!renderedFromCache) setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -615,31 +619,54 @@ export default function DocsPage() {
     showToast.success(t('docs.toastDuplicated'));
   }, [engine, workspaceId, userId, t]);
 
-  // Soft-delete/archive: mark the doc archived locally and queue the sync. This
-  // also fixes a prior bug where delete/archive only updated React state and
-  // never persisted (docs reappeared on reload).
-  const archiveDoc = useCallback(async (id: string) => {
-    setDocuments((prev) => prev.filter((d) => d.id !== id));
-    if (!engine) return;
-    const existing = await engine.get<SyncDoc>("docs", id);
-    if (existing) {
-      await engine.mutate<SyncDoc>("docs", "update", {
-        ...existing,
-        isArchived: true,
-        updatedAt: Date.now(),
-      });
+  // Soft-delete/archive: mark the doc archived locally and queue the sync.
+  // There is a single "Archive" action (the old "Delete" archived too); the
+  // toast offers Undo, and the archive page restores or deletes permanently.
+  const setArchived = useCallback(async (id: string, isArchived: boolean) => {
+    if (engine) {
+      const existing = await engine.get<SyncDoc>("docs", id);
+      if (existing) {
+        await engine.mutate<SyncDoc>("docs", "update", {
+          ...existing,
+          isArchived,
+          updatedAt: Date.now(),
+        });
+        return;
+      }
     }
+    const res = await fetch(`/api/docs/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived }),
+    });
+    if (!res.ok) throw new Error(`Failed to update document: ${res.status}`);
   }, [engine]);
 
   const handleArchive = useCallback(async (id: string) => {
-    await archiveDoc(id);
-    showToast.info(t('docs.toastArchived'));
-  }, [archiveDoc, t]);
-
-  const handleDelete = useCallback(async (id: string) => {
-    await archiveDoc(id);
-    showToast.success(t('docs.toastDeleted'));
-  }, [archiveDoc, t]);
+    const previous = documents;
+    setDocuments((prev) => prev.filter((d) => d.id !== id));
+    try {
+      await setArchived(id, true);
+      showToast.success(t('docs.toastArchived'), {
+        duration: 6000,
+        action: {
+          label: t('feedback.undo'),
+          onClick: () => {
+            void setArchived(id, false)
+              .then(() => {
+                showToast.success(t('feedback.docRestored'));
+                return fetchDocuments();
+              })
+              .catch(() => showToast.error(t('feedback.docRestoreFailed')));
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to archive document:", error);
+      setDocuments(previous);
+      showToast.error(t('feedback.docArchiveFailed'));
+    }
+  }, [documents, fetchDocuments, setArchived, t]);
 
   // Persisted through the sync engine (docs.is_favorite), so the star survives
   // reloads and the next background sync instead of living only in React state.
@@ -680,10 +707,18 @@ export default function DocsPage() {
           </p>
         </div>
 
-        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" />
-          {t('docs.newDoc')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" className="gap-2">
+            <Link href="/dashboard/docs/archive" data-testid="docs-archive-link">
+              <Archive className="w-4 h-4" />
+              {t('archive.title')}
+            </Link>
+          </Button>
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
+            {t('docs.newDoc')}
+          </Button>
+        </div>
       </header>
 
       <section className="mb-8 grid grid-cols-1 gap-px border-y border-border bg-foreground/10 sm:grid-cols-3">
@@ -826,6 +861,18 @@ export default function DocsPage() {
       <section>
         {isLoading ? (
           <SkeletonDocumentList count={6} />
+        ) : loadFailed && documents.length === 0 ? (
+          <div
+            role="alert"
+            data-testid="docs-load-error"
+            className="flex flex-col items-center gap-3 border-y border-border py-16 text-center"
+          >
+            <AlertCircle className="size-8 text-destructive" />
+            <p className="text-sm text-foreground">{t('feedback.docsLoadFailed')}</p>
+            <Button variant="outline" size="sm" onClick={() => void fetchDocuments()}>
+              {t('ux.retry')}
+            </Button>
+          </div>
         ) : filteredDocuments.length === 0 ? (
           searchQuery ? (
             <EmptyState
@@ -865,8 +912,8 @@ export default function DocsPage() {
                       viewMode="grid"
                       onDuplicate={handleDuplicate}
                       onArchive={handleArchive}
-                      onDelete={handleDelete}
                       onToggleFavorite={handleToggleFavorite}
+                      ownerLabel={ownerLabel(doc)}
                     />
                   ))}
                 </AnimatePresence>
@@ -881,8 +928,8 @@ export default function DocsPage() {
                       viewMode="list"
                       onDuplicate={handleDuplicate}
                       onArchive={handleArchive}
-                      onDelete={handleDelete}
                       onToggleFavorite={handleToggleFavorite}
+                      ownerLabel={ownerLabel(doc)}
                     />
                   ))}
                 </AnimatePresence>
@@ -890,7 +937,7 @@ export default function DocsPage() {
             )}
 
             <div className="mt-6 text-center text-sm text-foreground-faint">
-              {filteredDocuments.length} {t('docs.shown')}
+              {plural(t, 'feedback.plansShown', filteredDocuments.length)}
               {showFavoritesOnly && ` ${t('docs.onlyFavoritesSuffix')}`}
             </div>
           </motion.div>

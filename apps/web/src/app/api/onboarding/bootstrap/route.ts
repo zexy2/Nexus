@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { db } from "@/lib/db";
 import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
-import { docs, tasks } from "@nexus/database/schema";
+import { docs, tasks, workspaces } from "@nexus/database/schema";
+import { isDemoEmail } from "@/lib/production-guardrails";
 import { and, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
@@ -41,13 +42,30 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const workspaceName =
+    const requestedName =
       typeof body.workspaceName === "string" && body.workspaceName.trim()
         ? body.workspaceName.trim().slice(0, 255)
-        : "My Workspace";
+        : null;
     const includeStarterData = body.includeStarterData !== false;
 
-    const workspace = await ensureDefaultWorkspace(userId, workspaceName);
+    let workspace = await ensureDefaultWorkspace(userId, requestedName ?? "My Workspace");
+
+    // The default workspace usually exists before onboarding runs (sign-up /
+    // first sync create it), so an explicit name from the onboarding modal
+    // renames it. Demo workspaces keep their seeded name.
+    if (
+      requestedName &&
+      workspace.ownerId === userId &&
+      workspace.name !== requestedName &&
+      !isDemoEmail(protection.user.email)
+    ) {
+      const [renamed] = await db
+        .update(workspaces)
+        .set({ name: requestedName, updatedAt: new Date() })
+        .where(and(eq(workspaces.id, workspace.id), eq(workspaces.ownerId, userId)))
+        .returning();
+      if (renamed) workspace = renamed;
+    }
 
     let starterDocId: string | null = null;
     let starterTaskIds: string[] = [];

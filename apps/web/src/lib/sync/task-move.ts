@@ -13,6 +13,13 @@ import type { Task as SyncTask } from "./zero";
 
 export type TaskMoveResult = "queued" | "saved";
 
+/** A rejected PATCH; `body` is the route's JSON error (e.g. AGENT_REVIEW_REQUIRED). */
+export class TaskMoveError extends Error {
+  constructor(message: string, readonly status: number, readonly body: unknown) {
+    super(message);
+  }
+}
+
 export async function persistTaskMove(options: {
   engine: Pick<SyncEngine, "get" | "mutate" | "applyServerRow"> | null;
   taskId: string;
@@ -36,7 +43,10 @@ export async function persistTaskMove(options: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
-  if (!response.ok) throw new Error(`Failed to move task: ${response.status}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new TaskMoveError(`Failed to move task: ${response.status}`, response.status, body);
+  }
 
   if (engine) {
     const cached = await engine.get<SyncTask>("tasks", taskId);
