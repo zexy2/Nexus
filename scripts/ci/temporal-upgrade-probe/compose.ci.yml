@@ -1,0 +1,12 @@
+# CI overlay for docker-compose.prod.yml in the "Docker images (linux/arm64)"
+# job: the Temporal services join the job's service-container network and use
+# its Postgres (reachable as `postgres`, the same database the old auto-setup
+# container wrote to) instead of starting the compose `postgres` service.
+networks:
+  default:
+    name: ${CI_SERVICE_NETWORK:?CI_SERVICE_NETWORK is required}
+    external: true
+
+services:
+  temporal-schema:
+    depends_on: !reset {}
