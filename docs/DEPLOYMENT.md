@@ -22,6 +22,7 @@ ADMIN_EMAILS=your-email@example.com
 DEMO_ACCESS_CODE=
 DEMO_SESSION_TTL_MINUTES=60
 DEMO_MAX_ACTIVE_SESSIONS=25
+DEMO_SESSION_RATE_LIMIT_PER_MINUTE=10
 NEXT_PUBLIC_DEMO_MODE=true
 NEXT_PUBLIC_PUBLIC_SIGNUP_ENABLED=false
 NEXT_PUBLIC_DEMO_ACCESS_CODE_REQUIRED=false
@@ -61,6 +62,7 @@ Operational settings (all optional; defaults shown in `.env.production.example`)
 | `HEALTH_CHECK_TOKEN` | web, scripts | Unlocks detailed `/api/health` output via `x-health-token` or `Authorization: Bearer`. Anonymous callers get only per-service `status`; the HTTP status code (200 / 503 when unhealthy) is what container health checks rely on. The smoke and maintenance scripts read it from `.env.production`. |
 | `WORKER_SHUTDOWN_GRACE_TIME` | worker | How long in-flight activities may run after SIGTERM before the worker exits (e.g. `45 seconds`, `1m`; invalid values fall back to `45 seconds`). Must stay below the worker's `stop_grace_period` (60s) in `docker-compose.prod.yml`. |
 | `ONBOARDING_LAUNCH_AT` | web | ISO 8601 instant (e.g. `2026-11-23T00:00:00Z`). Accounts created before it count as existing users and never see the first-run onboarding modal. Empty or invalid = built-in default `2026-11-23T00:00:00Z`. |
+| `DEMO_SESSION_RATE_LIMIT_PER_MINUTE` | web | Demo logins allowed per minute per client IP. Raise it for visitors behind a shared office NAT; `DEMO_MAX_ACTIVE_SESSIONS` and the `AI_DEMO_*` limits remain the real cost guard. Empty/unset/invalid = `10`. |
 | `CSP_ENFORCE` | web | `true` enforces the Content-Security-Policy, `false` sends report-only. Empty/unset = enforce in production, report-only otherwise. |
 | `REQUIRE_INTEGRATION_PROVIDERS` | web | Comma list (`github`, `linear`) of providers whose missing credentials fail `/api/health`. Empty/unset = none required (unless legacy `REQUIRE_INTEGRATIONS_HEALTH=true`, which implies `github`). |
 | `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_PER_MINUTE_LIMIT` | web | Cost-runaway safety cap across ALL users. Defaults 5000/day, 120/min. |
@@ -132,7 +134,7 @@ read from the container environment at runtime.
 export APP_COMMIT_SHA="$(git rev-parse HEAD)"
 COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
 $COMPOSE build
-$COMPOSE up -d postgres temporal
+$COMPOSE up -d postgres temporal   # also runs the one-shot temporal-schema job first
 $COMPOSE run --rm migrate
 $COMPOSE up -d
 SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod
@@ -270,6 +272,187 @@ Use migrations in production. `db:push` is local-development only and should not
 existing schema created before migration history was enabled. It refuses to
 baseline incomplete schemas.
 
+## Temporal
+
+Temporal runs as three compose services that share one pinned version,
+`TEMPORAL_SERVER_VERSION` (default in `docker-compose.prod.yml`, now `1.31.5`):
+
+| Service | Image | Job |
+| --- | --- | --- |
+| `temporal-schema` | `temporalio/admin-tools` | One-shot, before the server. `scripts/temporal/schema.sh` creates the `temporal` and `temporal_visibility` databases if missing, runs `setup-schema -v 0.0` (skipped when a version is already recorded) and `update-schema` to the versions that image ships. Idempotent. |
+| `temporal` | `temporalio/server` | Starts only after `temporal-schema` exited 0 (`service_completed_successfully`). Postgres for persistence and visibility (`DB=postgres12`), `BIND_ON_IP=0.0.0.0` inside the container, dynamic config from `scripts/temporal/dynamicconfig/docker.yaml` (empty, like auto-setup's). `7233` is not published. |
+| `temporal-namespace` | `temporalio/admin-tools` | One-shot, after the server is healthy. Creates namespace `default` if missing with `TEMPORAL_NAMESPACE_RETENTION` (default `24h`, the auto-setup default). An existing namespace is not modified. |
+
+`temporalio/auto-setup` (deprecated, last image 1.29.7) used to do the schema
+and namespace work inside the server container on every start.
+
+`scripts/deploy.sh` never pulls, starts or recreates any Temporal service: it
+pulls only the app images, runs `migrate` (depends on `postgres` only) and
+restarts `worker`, `web` and `collaboration` with `--no-deps`. Temporal
+changes are always the manual procedure below.
+
+### Upgrade rules
+
+- **One minor version per hop.** 1.29 -> 1.30 -> 1.31, never 1.29 -> 1.31.
+  For each hop, run the schema job with that hop's admin-tools image, then
+  start the server of the same version, and let it come up healthy before the
+  next hop.
+- **Schema upgrades are one-way.** An older server must not run against a
+  newer schema. Rollback means restoring the database dumps taken before the
+  upgrade and starting the old image again.
+- **SDK floor.** Server 1.32 requires TypeScript SDK `>= 1.20.2`;
+  `packages/workflows` is on `@temporalio/*` 1.18, so bump the SDK first and
+  deploy that worker before moving to 1.32 (1.31 -> 1.32 has no schema change).
+
+| Server | `temporal` schema | `temporal_visibility` schema |
+| --- | --- | --- |
+| 1.29.7 (auto-setup) | 1.18 | 1.9 |
+| 1.30.9 | 1.18 | 1.13 |
+| 1.31.5 | 1.19 | 1.14 |
+
+CI (`Docker images (linux/arm64)` job) runs this whole path on every PR:
+it starts `temporalio/auto-setup:1.29.7`, seeds a completed and an open
+workflow, applies each hop through `docker-compose.prod.yml` on the same
+database, checks schema versions, namespace retention and server version,
+replays the open workflow's pre-upgrade history, completes it on the new
+server, then runs the worker and web smoke tests against the new server.
+
+### Cutover runbook: auto-setup 1.29.7 -> server 1.31.5
+
+Downtime: Temporal is unavailable from step 3 until step 5 finishes
+(usually a few minutes). Web and collaboration stay up. Starting AI
+workflows fails during that window. The worker's Temporal connection retries
+and resumes.
+
+Running workflows do not need to be drained. Their state is in the
+`temporal` database. Timers that come due during the downtime fire when the
+server is back, and activities that fail mid-cutover are retried by their
+retry policies. CI shows an open workflow surviving both hops and completing.
+To keep the window quiet, avoid starting new AI work during it.
+
+Run on the VPS, from the checkout (`~/Nexus`), after this change is on `main`
+and pulled (`git pull --ff-only`, or any `scripts/deploy.sh` run, which
+leaves Temporal alone):
+
+```bash
+cd ~/Nexus
+COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
+PGU=nexus   # POSTGRES_USER from .env.production
+pg() { $COMPOSE exec -T postgres psql -U "$PGU" -d "$1" -Atc "$2"; }
+tctl() { $COMPOSE run --rm --no-deps -T --entrypoint temporal temporal-namespace "$@" --address temporal:7233; }
+```
+
+**1. Pull every image first** (keeps the downtime short; the helpers above use admin-tools):
+
+```bash
+for v in 1.30.9 1.31.5; do
+  docker pull temporalio/admin-tools:$v && docker pull temporalio/server:$v
+done
+```
+
+**2. Record the current state.**
+
+```bash
+$COMPOSE ps temporal                               # temporalio/auto-setup:1.29.7, running
+pg temporal 'select curr_version from schema_version'             # 1.18
+pg temporal_visibility 'select curr_version from schema_version'  # 1.9
+tctl operator namespace describe -n default         # note WorkflowExecutionRetentionTtl (auto-setup: 24h = 86400s)
+tctl workflow count -n default --query 'ExecutionStatus="Running"'   # note the number
+# Keep the old service definition for rollback (.deploy/ is git-ignored).
+# ad4c88f = main before this change (temporal on auto-setup:1.29.7).
+mkdir -p .deploy && git show ad4c88f:docker-compose.prod.yml > .deploy/compose.auto-setup.yml
+```
+
+**3. Stop Temporal and back up both Temporal databases.** Stopping first
+makes the two dumps consistent with each other.
+
+```bash
+B=~/Avenox-Backups/temporal-cutover-$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p "$B" && chmod 700 "$B"
+$COMPOSE stop temporal
+for db in temporal temporal_visibility; do
+  $COMPOSE exec -T postgres pg_dump -U "$PGU" -Fc "$db" > "$B/$db.dump"
+  test -s "$B/$db.dump" || echo "EMPTY DUMP: $db (stop here)"
+done
+ls -l "$B"
+```
+
+Do not continue unless both dumps exist and are not empty.
+
+**4. Hop 1: 1.30.9** (visibility schema 1.9 -> 1.13):
+
+```bash
+export TEMPORAL_SERVER_VERSION=1.30.9
+$COMPOSE up -d temporal          # runs temporal-schema, then recreates temporal on server:1.30.9
+$COMPOSE logs --no-color temporal-schema | tail -n 20
+until [ "$(docker inspect -f '{{.State.Health.Status}}' "$($COMPOSE ps -q temporal)")" = healthy ]; do sleep 3; done
+$COMPOSE run --rm --no-deps -T temporal-namespace     # "namespace 'default' present"
+tctl operator cluster system                          # ServerVersion 1.30.9
+pg temporal_visibility 'select curr_version from schema_version'   # 1.13
+$COMPOSE logs --no-color --tail 200 temporal | grep -i -E '"level":"(error|fatal)"' || echo "no errors"
+```
+
+Let 1.30.9 run for a few minutes before the next hop.
+
+**5. Hop 2: 1.31.5, the compose pin** (temporal 1.18 -> 1.19, visibility
+1.13 -> 1.14):
+
+```bash
+unset TEMPORAL_SERVER_VERSION
+$COMPOSE stop temporal
+$COMPOSE up -d temporal
+$COMPOSE logs --no-color temporal-schema | tail -n 20
+until [ "$(docker inspect -f '{{.State.Health.Status}}' "$($COMPOSE ps -q temporal)")" = healthy ]; do sleep 3; done
+$COMPOSE run --rm --no-deps -T temporal-namespace
+```
+
+**6. Verify.**
+
+```bash
+tctl operator cluster system                                        # ServerVersion 1.31.5
+pg temporal 'select curr_version from schema_version'               # 1.19
+pg temporal_visibility 'select curr_version from schema_version'    # 1.14
+tctl operator namespace describe -n default                         # retention unchanged from step 1
+tctl workflow count -n default --query 'ExecutionStatus="Running"'  # same as step 1, or fewer if some finished
+$COMPOSE logs --no-color --tail 50 worker      # no connection errors after the cutover
+# If the worker did not reconnect: $COMPOSE up -d --no-deps --force-recreate worker
+SMOKE_BASE_URL=https://your-domain.com pnpm smoke:prod   # /api/health temporal+worker healthy, real workflows complete
+```
+
+Keep `$B` until the new version has run cleanly for a few days. After this,
+a plain `$COMPOSE up -d` is safe because every Temporal service is idempotent.
+
+### Rollback
+
+**Before any schema job ran** (failure in steps 1-3): start the old
+container again. Nothing in the database changed.
+
+```bash
+docker compose --project-directory . --env-file .env.production \
+  -f .deploy/compose.auto-setup.yml up -d --no-deps temporal
+```
+
+**After a schema job ran** (step 4 or later): the schema cannot be
+downgraded. Restore the step-3 dumps, then start the old image:
+
+```bash
+$COMPOSE stop temporal
+for db in temporal temporal_visibility; do
+  $COMPOSE exec -T postgres dropdb -U "$PGU" --if-exists "$db"
+  $COMPOSE exec -T postgres createdb -U "$PGU" "$db"
+  $COMPOSE exec -T postgres pg_restore -U "$PGU" -d "$db" --no-owner < "$B/$db.dump"
+done
+pg temporal 'select curr_version from schema_version'              # 1.18
+pg temporal_visibility 'select curr_version from schema_version'   # 1.9
+docker compose --project-directory . --env-file .env.production \
+  -f .deploy/compose.auto-setup.yml up -d --no-deps temporal
+```
+
+Then revert this change on `main` so `docker-compose.prod.yml` matches what
+is running. A restore returns Temporal to the step-3 snapshot, so workflow
+progress made on the new server is lost: workflows started after the cutover
+no longer exist, although rows in the app database may still reference them.
+
 ## Reverse Proxy
 
 Terminate HTTPS at Caddy, Nginx, or Traefik. Forward normal HTTP traffic to `web:3000` and websocket collaboration traffic to `collaboration:1234`.
@@ -360,6 +543,12 @@ This installs four systemd timers:
 
 Already-installed VPSes pick up a new timer by re-running
 `pnpm maintenance:install-vps`; it is idempotent.
+
+`pnpm backup:postgres` and the pre-deploy dumps cover the app database
+(`POSTGRES_DB`) only. Temporal's `temporal` and `temporal_visibility`
+databases are backed up as part of every Temporal upgrade (see
+"Cutover runbook" above); dump them the same way (`pg_dump -Fc`) before any
+other manual Temporal work.
 
 Verify restore periodically on a staging database and confirm `CREATE EXTENSION vector` exists.
 

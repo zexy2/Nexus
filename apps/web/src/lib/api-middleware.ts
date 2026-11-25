@@ -99,6 +99,11 @@ async function requireAuth(): Promise<
 // ===========================================
 
 // Default rate limit configs
+export function demoLoginRateLimitPerMinute(env: Record<string, string | undefined> = process.env): number {
+  const parsed = Number.parseInt(env.DEMO_SESSION_RATE_LIMIT_PER_MINUTE ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+}
+
 export const RATE_LIMITS = {
   // Chat/writer streaming - 20 requests per minute, with AI budget enforced separately
   chat: {
@@ -112,11 +117,15 @@ export const RATE_LIMITS = {
     maxRequests: 10,
     keyPrefix: "commands",
   },
-  // Public demo login - deliberately low to protect demo accounts from abuse
-  demoLogin: {
-    windowMs: 60 * 1000,
-    maxRequests: 5,
-    keyPrefix: "demo-login",
+  // Public demo login - per IP, so shared office NATs need headroom. Configurable via
+  // DEMO_SESSION_RATE_LIMIT_PER_MINUTE (default 10); DEMO_MAX_ACTIVE_SESSIONS and the
+  // AI demo limits remain the real cost guard. Read lazily so env changes apply.
+  get demoLogin() {
+    return {
+      windowMs: 60 * 1000,
+      maxRequests: demoLoginRateLimitPerMinute(),
+      keyPrefix: "demo-login",
+    };
   },
   // Research API - 10 requests per minute (paid external API)
   research: {
