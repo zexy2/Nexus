@@ -89,7 +89,7 @@ test.describe("workspace search", () => {
 
     // A query with no workspace match shows the empty state, navigation stays available.
     await page.getByPlaceholder("Type a command or search...").fill(`nomatch${stamp}xx`);
-    await expect(palette(page).getByTestId("palette-search-status")).toHaveText("No matching plans or work");
+    await expect(palette(page).getByTestId("palette-search-status")).toHaveText("No matching plans or tasks");
 
     // Keyboard: plans come before tasks; move down to the task and back up, then open the plan.
     await page.getByPlaceholder("Type a command or search...").fill(`zq${stamp}`);
