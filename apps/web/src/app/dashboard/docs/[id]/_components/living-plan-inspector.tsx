@@ -10,6 +10,7 @@ import {
   ExternalLink,
   GitBranch,
   GitPullRequestArrow,
+  History,
   ListChecks,
   Loader2,
   RefreshCw,
@@ -23,6 +24,7 @@ import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { aiErrorFromBody, formatAiError, isAiQuotaError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
 import { friendlyError } from "@/lib/friendly-error";
+import { PlanHistoryDialog } from "@/components/plan-history/plan-history-dialog";
 import {
   LIVING_PLAN_ANALYSIS_STARTED_EVENT,
   type LivingPlanAnalysisStartedDetail,
@@ -176,6 +178,7 @@ export function LivingPlanInspector({
   const [loadFailed, setLoadFailed] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [slow, setSlow] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const readableError = useCallback((error?: unknown) => {
     const message = typeof error === "string" ? error : "";
@@ -488,12 +491,36 @@ export function LivingPlanInspector({
             {t('docs.livingPlan.title')}
           </h2>
         </div>
-        {plan?.currentVersion && (
-          <Badge variant="outline" className="border-border bg-foreground/5 font-mono text-foreground-subtle">
-            v{plan.currentVersion.versionNumber}
-          </Badge>
+        {(plan?.currentVersion || plan?.pendingChangeSet) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {plan.currentVersion && (
+              <Badge variant="outline" className="border-border bg-foreground/5 font-mono text-foreground-subtle">
+                v{plan.currentVersion.versionNumber}
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setHistoryOpen(true)}
+              aria-label={t('planHistory.openAria')}
+              data-testid="plan-history-open"
+            >
+              <History className="mr-1 size-3.5" />
+              {t('planHistory.open')}
+            </Button>
+          </div>
         )}
       </div>
+      <PlanHistoryDialog
+        docId={docId}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onUndone={() => {
+          void fetchPlan().catch(() => undefined);
+          void fetchImpactGraph();
+        }}
+      />
 
       <div className="mt-6 border-y border-border py-5">
         <div className="flex items-end justify-between">

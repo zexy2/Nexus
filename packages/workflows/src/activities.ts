@@ -1665,6 +1665,16 @@ type ApplyPlanChangeSetResult = {
   externalOperationIds: string[];
 };
 
+/** Task fields captured before a plan proposal changes them (undo support). */
+type PlanTaskUndoSnapshot = {
+  title: string;
+  description: string | null;
+  priority: string;
+  is_archived: number;
+  doc_id: string | null;
+  alignment_status: string;
+};
+
 export async function applyPlanChangeSet(
   changeSetId: string,
   selectedProposalIds: string[],
@@ -1934,6 +1944,21 @@ export async function applyPlanChangeSet(
         const priority = normalizePriority(proposal.priority);
         const hasPriority = typeof proposal.priority === "string" && proposal.priority.trim().length > 0;
 
+        // Snapshot the fields this proposal may overwrite so the change set can
+        // later be undone by a reverting change (see the web app's plan undo).
+        let undoBefore: PlanTaskUndoSnapshot | null = null;
+        if (proposal.action !== "create_task" && taskId) {
+          const beforeRows = await tx<Array<PlanTaskUndoSnapshot>>`
+            SELECT title, description, priority::text AS priority, is_archived,
+                   doc_id, alignment_status
+            FROM tasks
+            WHERE id = ${taskId}::uuid
+              AND workspace_id = ${changeSet.workspace_id}::uuid
+            FOR UPDATE
+          `;
+          undoBefore = beforeRows[0] ?? null;
+        }
+
         if (proposal.action === "create_task") {
           const rows = await tx<Array<{ id: string }>>`
             INSERT INTO tasks (
@@ -2041,11 +2066,22 @@ export async function applyPlanChangeSet(
           `;
         }
 
-        await tx`
-          UPDATE change_proposals
-          SET status = 'applied', applied_at = now(), task_id = ${taskId}::uuid
-          WHERE id = ${proposal.id}
-        `;
+        if (undoBefore) {
+          await tx`
+            UPDATE change_proposals
+            SET status = 'applied',
+                applied_at = now(),
+                task_id = ${taskId}::uuid,
+                metadata = COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({ undoBefore })}::jsonb
+            WHERE id = ${proposal.id}
+          `;
+        } else {
+          await tx`
+            UPDATE change_proposals
+            SET status = 'applied', applied_at = now(), task_id = ${taskId}::uuid
+            WHERE id = ${proposal.id}
+          `;
+        }
         await tx`
           INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
           VALUES (
