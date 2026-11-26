@@ -39,6 +39,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { showToast } from "@/components/shared/toast-provider";
+import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
+import { aiErrorFromBody, formatAiError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
@@ -218,7 +220,14 @@ export default function WorkflowCenterPage() {
           closeDialog();
           return;
         }
-        throw new Error(body?.message || body?.error || t("agents.center.workflowStartError"));
+        throw new Error(
+          formatAiError(
+            aiErrorFromBody(response.status, body, response.headers),
+            t,
+            locale,
+            t("agents.center.workflowStartError")
+          )
+        );
       }
 
       showToast.success(t("agents.center.workflowStarted"));
@@ -228,6 +237,7 @@ export default function WorkflowCenterPage() {
       showToast.error(error instanceof Error ? error.message : t("agents.center.workflowStartError"));
     } finally {
       setSubmitting(false);
+      notifyAiQuotaChanged();
     }
   };
 
@@ -510,7 +520,8 @@ export default function WorkflowCenterPage() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="items-center">
+            <AiQuotaBadge kind="workflow" className="mr-auto" />
             <Button variant="outline" onClick={closeDialog}>
               {t("agents.center.cancel")}
             </Button>

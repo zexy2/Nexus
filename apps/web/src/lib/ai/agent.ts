@@ -18,10 +18,21 @@ import { getRAGContext } from "@/lib/ai/chat-rag";
 import { createDocument, createTask } from "@/lib/ai/chat-actions";
 import { isLocalOnly } from "@/lib/ai/providers";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
+import {
+  TASK_ALIGNMENTS,
+  TASK_STATUSES,
+  loadTaskInsightRows,
+  summarizeTasks,
+} from "@/lib/ai/task-insights";
 
 interface AgentRunContext {
   userId: string;
   workspaceId: string;
+  /**
+   * Every workspace the user can read (what the Work board lists). Defaults
+   * to [workspaceId].
+   */
+  readableWorkspaceIds?: string[];
 }
 
 interface AgentRunResult {
@@ -37,6 +48,7 @@ const SUPERVISOR_SYSTEM = `Sen Nexus AI'sın — araçları olan otonom bir asis
 Kullanıcının isteğini yerine getirmek için araçlarını kullan:
 - searchWorkspace: kullanıcının kendi dokümanlarında/görevlerinde ara. Soru kullanıcının içeriğiyle ilgili olabilirse ÖNCE bunu çağır.
 - webSearch: güncel/harici bilgi gerektiğinde web'de ara.
+- queryTasks: görevlerin canlı verisi (durum, öncelik, plan gereksinimi bağlantısı, Aligned/Needs review/Orphaned rozeti). Görev sayısı, durum, "bağlı değil"/"orphaned"/"yetim" gibi sorularda MUTLAKA bunu kullan; searchWorkspace bu sorulara cevap veremez.
 - createDocument: kullanıcı bir doküman/rapor yazmanı VEYA kaydetmeni istediğinde kaydet.
 - createTask: kullanıcı görev/yapılacak oluşturmanı istediğinde oluştur.
 
@@ -74,6 +86,35 @@ export async function runAgent(opts: {
         toolsUsed.push("searchWorkspace");
         const ctx = await getRAGContext(query, context.workspaceId);
         return ctx || "No relevant workspace content was found.";
+      },
+    }),
+
+    queryTasks: tool({
+      description:
+        "Read live task rows from the user's Work board: status, priority, alignment badge (aligned | needs_review | orphaned) and linked accepted plan requirements, plus totals. Use for any question about which/how many tasks are orphaned, unlinked, linked to a requirement, or in a given status.",
+      inputSchema: z.object({
+        alignment: z
+          .enum(TASK_ALIGNMENTS)
+          .optional()
+          .describe("Filter by board badge; 'orphaned' is shown as Orphaned (not linked to the plan)."),
+        linked: z
+          .boolean()
+          .optional()
+          .describe("true: linked to at least one accepted plan requirement; false: linked to none."),
+        status: z.enum(TASK_STATUSES).optional().describe("Filter by board column"),
+        query: z.string().optional().describe("Case-insensitive title substring"),
+      }),
+      execute: async (filter: {
+        alignment?: (typeof TASK_ALIGNMENTS)[number];
+        linked?: boolean;
+        status?: (typeof TASK_STATUSES)[number];
+        query?: string;
+      }) => {
+        toolsUsed.push("queryTasks");
+        const rows = await loadTaskInsightRows(
+          context.readableWorkspaceIds?.length ? context.readableWorkspaceIds : [context.workspaceId]
+        );
+        return summarizeTasks(rows, filter);
       },
     }),
 
@@ -145,7 +186,12 @@ export async function runAgent(opts: {
   // In privacy mode, drop web search — it would send the query to an external
   // service. Everything else (workspace, doc/task) stays local.
   const activeTools = isLocalOnly()
-    ? { searchWorkspace: tools.searchWorkspace, createDocument: tools.createDocument, createTask: tools.createTask }
+    ? {
+        searchWorkspace: tools.searchWorkspace,
+        queryTasks: tools.queryTasks,
+        createDocument: tools.createDocument,
+        createTask: tools.createTask,
+      }
     : tools;
 
   const result = await generateTextTraced(

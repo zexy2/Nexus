@@ -20,6 +20,8 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { aiErrorFromBody, formatAiError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
+import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
 
 type RequirementTask = {
   taskId: string;
@@ -356,10 +358,11 @@ export function LivingPlanInspector({
         return;
       }
       if (!response.ok) {
+        const info = aiErrorFromBody(response.status, body, response.headers);
         throw new Error(
-          body?.error === "AI_PROVIDER_UNAVAILABLE"
+          info.code === "AI_PROVIDER_UNAVAILABLE"
             ? t('docs.livingPlan.aiUnavailable')
-            : body?.message || body?.error || t('docs.livingPlan.failedStart')
+            : formatAiError(info, t, locale, t('docs.livingPlan.failedStart'))
         );
       }
       setAnalysis({
@@ -373,6 +376,8 @@ export function LivingPlanInspector({
         status: "failed",
         message: error instanceof Error ? error.message : t('docs.livingPlan.failedStart'),
       });
+    } finally {
+      notifyAiQuotaChanged();
     }
   };
 
@@ -453,6 +458,9 @@ export function LivingPlanInspector({
           <p className="mt-2 text-center text-[11px] leading-4 text-foreground-faint">
             {t('docs.livingPlan.analysisHelp')}
           </p>
+          <div className="mt-1 flex justify-center">
+            <AiQuotaBadge kind="workflow" />
+          </div>
         </div>
       )}
 

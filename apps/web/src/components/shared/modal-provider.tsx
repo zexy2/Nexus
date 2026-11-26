@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { FileText, ListTodo, Sparkles, Loader2 } from 'lucide-react';
 import { showToast } from '@/components/shared/toast-provider';
+import { AiQuotaBadge } from '@/components/shared/ai-quota-badge';
 import { useT } from '@/lib/i18n/provider';
 
 // Create Document Modal
@@ -277,12 +278,19 @@ function AIAssistantModal() {
             onChange={(e) => setQuery(e.target.value)}
             rows={4}
             autoFocus
+            data-testid="ask-nexus-input"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              // Same as the chat composer: Enter sends, Shift+Enter is a newline.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
                 handleSubmit();
               }
             }}
           />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{t('chatUx.sendHint')}</span>
+            <AiQuotaBadge kind="chat" />
+          </div>
         </div>
 
         <DialogFooter>

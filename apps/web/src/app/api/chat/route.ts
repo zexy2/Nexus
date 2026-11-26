@@ -14,11 +14,11 @@ import { isAiQuotaError, aiQuotaResponse } from "@/lib/ai/quota";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { getRAGContext } from "@/lib/ai/chat-rag";
 import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
-import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
-import { ensureDefaultWorkspace } from "@/lib/workspace-auth";
+import { ensureDefaultWorkspace, getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 import { logInternalError } from "@/lib/api-response";
+import { AGENT_META_HEADER, encodeAgentMeta } from "@/lib/ai/agent-meta";
 
 // Allow streaming responses up to 60 seconds for agent operations
 export const maxDuration = 60;
@@ -65,7 +65,6 @@ export async function POST(req: Request) {
 
   const chatMessages = messages as any[];
   const userMessage: string = lastMessage.content;
-  const userMessageLower = userMessage.toLowerCase();
 
   let modelConfig: Awaited<ReturnType<typeof getUserModelConfig>>;
   try {
@@ -95,52 +94,9 @@ export async function POST(req: Request) {
 
   const { model, modelName, provider } = modelConfig;
 
-  // ==========================================
-  // EXPLICIT SAVE DETECTION
-  // ==========================================
-  const saveKeywords = ['kaydet', 'save it', 'save this', 'bunu kaydet', 'çalışmayı kaydet', 'calismayı kaydet'];
-  const wantsSave = saveKeywords.some(k => userMessageLower.includes(k));
-
-  if (wantsSave) {
-    const conversationHistory = chatMessages
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
-
-    let docJson = "";
-    try {
-      const result = await generateTextTraced({
-        model,
-        prompt: `Extract the content to save as a document from this conversation.
-
-CONVERSATION:
-${conversationHistory}
-
-Create a JSON response with title and content. Content should include the main information from the assistant's responses.
-Respond ONLY with JSON: {"title": "...", "content": "..."}`,
-      }, { name: "chat.save", agentType: "chat", userId, modelName, provider, input: userMessage });
-      docJson = result.text;
-    } catch (error) {
-      if (isAiQuotaError(error)) return aiQuotaResponse();
-      throw error;
-    }
-
-    try {
-      const match = docJson.match(/\{[\s\S]*\}/);
-      if (match) {
-        const { title, content } = JSON.parse(match[0]);
-        if (title && content) {
-          const result = await createDocument(userId, title, content);
-          if (result.success) {
-            return new Response(`✅ **Document Saved!**\n\n📄 **${result.title}**\n\nYou can find it in the Documents section.`);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Save error:", e);
-    }
-
-    return new Response("❌ Could not save the document. Please try again.");
-  }
+  // Saving to a document is the agent's createDocument tool (only when the
+  // user asks) or the explicit "Save as plan" action on a reply. Messages
+  // are never hijacked by keywords such as "save this".
 
   // ==========================================
   // FOCUSED CAPABILITY MODE (legacy wire value)
@@ -205,13 +161,16 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
   // call, chains them across steps, and synthesizes the answer — no regex
   // orchestration. Tools are bound to this user's verified workspace.
   const workspaceId = (await ensureDefaultWorkspace(userId)).id;
+  // Task questions read every workspace the Work board shows, not just the
+  // default one.
+  const readableWorkspaceIds = await getAccessibleWorkspaceIds(userId);
 
   let agentResult: Awaited<ReturnType<typeof runAgent>>;
   try {
     agentResult = await runAgent({
       model,
       messages: chatMessages,
-      context: { userId, workspaceId },
+      context: { userId, workspaceId, readableWorkspaceIds },
       maxSteps: 6,
       trace: { name: "chat.agent", modelName, provider },
     });
@@ -240,18 +199,18 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
     },
   });
 
-  // The agent already performed any saves via its tools; surface what it did.
-  let finalResponse = agentResult.text;
-  if (agentResult.createdDocs.length > 0) {
-    finalResponse +=
-      `\n\n📄 **Kaydedilen dokümanlar:**\n` +
-      agentResult.createdDocs.map((d) => `- ${d.title}`).join("\n");
-  }
-  if (agentResult.createdTasks.length > 0) {
-    finalResponse +=
-      `\n\n✅ **Oluşturulan görevler:**\n` +
-      agentResult.createdTasks.map((t) => `- ${t.title}`).join("\n");
-  }
-
-  return new Response(finalResponse);
+  // The agent already performed any saves via its tools. What it did (tools,
+  // steps, created docs/tasks with ids) travels in a header so the chat can
+  // render it as links next to the reply; the body stays the plain answer.
+  return new Response(agentResult.text, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      [AGENT_META_HEADER]: encodeAgentMeta({
+        toolsUsed: agentResult.toolsUsed,
+        steps: agentResult.steps,
+        createdDocs: agentResult.createdDocs,
+        createdTasks: agentResult.createdTasks,
+      }),
+    },
+  });
 }

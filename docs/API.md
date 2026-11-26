@@ -6,7 +6,7 @@ Base path: `/api`. Protected routes require a Better Auth session cookie. Every 
 
 - `401`: no valid session.
 - `403` or `404`: the user cannot access the requested workspace resource.
-- `429`: `{ "error": "RATE_LIMIT_EXCEEDED", "limit": 4, "remaining": 0, "resetAt": 0 }`.
+- `429`: `{ "error": "RATE_LIMIT_EXCEEDED", "message": "...", "scope": "chat", "limit": 4, "remaining": 0, "resetAt": 0 }` (`resetAt` is epoch ms; `scope` is `chat`, `workflow`, `research`, `user`, `user_minute`, `global` or `global_minute` for AI budgets). Upstream provider throttling returns `429` with `AI_PROVIDER_RATE_LIMITED`.
 - `503`: provider or infrastructure unavailable; no mock success is returned.
 - Explicit web research without Tavily returns `TAVILY_NOT_CONFIGURED`.
 
@@ -77,7 +77,8 @@ Status response:
 
 ## AI and research
 
-- `POST /api/chat` - authenticated AI SDK tool-calling assistant.
+- `POST /api/chat` - authenticated AI SDK tool-calling assistant. Body `{ messages: [{ role, content }], agentMode?: "auto" }`; returns the answer as `text/plain` plus an `X-Nexus-Agent` header (URI-encoded JSON: `toolsUsed`, `steps`, `createdDocs`, `createdTasks` with ids). Tools: `searchWorkspace`, `queryTasks` (live task rows: status, alignment badge, linked accepted requirements), `webSearch`, `createDocument`, `createTask`. Documents are saved only through the `createDocument` tool or an explicit client action, never by keyword.
+- `GET /api/ai/quota` - today's AI quota for the signed-in user, read-only: `{ calls, chat, workflow }`, each `{ limit, used, remaining, resetAt }` (`resetAt` epoch ms or null).
 - `POST /api/commands/process` and `GET /api/commands/status?id=...` - offline command queue bridge using the same AI SDK agent.
 - `POST /api/research` - optional workspace retrieval plus optional sourced Tavily search.
 - `GET /api/research?q=...` - direct Tavily search; requires `TAVILY_API_KEY`.

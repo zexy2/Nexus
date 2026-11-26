@@ -30,6 +30,8 @@ import dynamic from "next/dynamic";
 import type { PartialBlock } from "@blocknote/core";
 import { LivingPlanInspector } from "./_components/living-plan-inspector";
 import { showToast } from "@/components/shared/toast-provider";
+import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
+import { aiErrorMessage, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { useZero } from "@/lib/sync/zero";
@@ -342,8 +344,9 @@ export default function DocDetailPage() {
           });
 
           if (!workflowResponse.ok) {
-            const errorBody = await workflowResponse.json().catch(() => null);
-            throw new Error(errorBody?.message || errorBody?.error || t("docs.detail.taskWorkflowStartFailed"));
+            throw new Error(
+              await aiErrorMessage(workflowResponse, t, locale, t("docs.detail.taskWorkflowStartFailed"))
+            );
           }
 
           const workflow = await workflowResponse.json();
@@ -364,7 +367,10 @@ export default function DocDetailPage() {
         }),
       });
 
-      if (!response.ok) throw new Error(t("docs.detail.aiRequestFailed"));
+      if (!response.ok) {
+        // Quota hits become "…resets at 14:05", never a raw error code.
+        throw new Error(await aiErrorMessage(response, t, locale, t("docs.detail.aiRequestFailed")));
+      }
 
       const rawResult = await response.text();
 
@@ -421,14 +427,16 @@ export default function DocDetailPage() {
       }
     } catch (err) {
       console.error("AI action failed:", err);
-      alert(t("docs.detail.aiActionFailed"));
+      showToast.error(err instanceof Error && err.message ? err.message : t("docs.detail.aiActionFailed"));
       if (action === "tasks") {
         setTaskWorkflow(null);
+        setAiLoading(null);
       }
     } finally {
       if (action !== "tasks") {
         setAiLoading(null);
       }
+      notifyAiQuotaChanged();
     }
   };
 
@@ -734,6 +742,7 @@ export default function DocDetailPage() {
               )}
             </Button>
           </div>
+          <AiQuotaBadge kind="chat" className="hidden sm:inline-flex shrink-0" />
         </div>
       </div>
     </div>
