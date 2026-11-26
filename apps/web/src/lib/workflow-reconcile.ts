@@ -1,10 +1,19 @@
 import { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
-import { agentExecutions } from "@nexus/database/schema";
+import { and, desc, eq } from "drizzle-orm";
+import { agentExecutions, changeSets } from "@nexus/database/schema";
 import { db } from "@/lib/db";
 import { writeAuditLog } from "@/lib/production-guardrails";
+import { resolveOrphanedChangeSet } from "@/lib/change-set-recovery";
+import {
+  createNotification,
+  resolveExecutionOwner,
+  workflowTypeOf,
+  type NotificationType,
+} from "@/lib/notifications";
 
 type AgentExecutionRow = typeof agentExecutions.$inferSelect;
+
+type PendingActivity = { activityType: string; attempt: number };
 
 type TemporalStatusResult = {
   workflowId: string;
@@ -12,6 +21,7 @@ type TemporalStatusResult = {
   status: string;
   result?: unknown;
   error?: string;
+  pendingActivities?: PendingActivity[];
 };
 
 type TemporalResult = {
@@ -28,12 +38,12 @@ type WorkflowClient = {
   getWorkflowResult: <TOutput = unknown>(workflowId: string) => Promise<TemporalResult & { result?: TOutput }>;
 };
 
-type ExecutionStatus = "running" | "completed" | "failed";
+type ExecutionStatus = "running" | "completed" | "failed" | "cancelled";
 
 /**
  * Temporal `WorkflowExecutionStatusName` -> agent_executions.status.
- * agent_executions only models running/completed/failed, so every closed
- * non-success state maps to "failed" (with a descriptive error message).
+ * A user cancel closes as CANCELLED and is shown as such; the other closed
+ * non-success states map to "failed" (with a descriptive error message).
  * CONTINUED_AS_NEW is not terminal: the handle follows the new run.
  */
 const TEMPORAL_STATUS_MAP: Record<string, ExecutionStatus> = {
@@ -44,8 +54,8 @@ const TEMPORAL_STATUS_MAP: Record<string, ExecutionStatus> = {
   UNKNOWN: "running",
   COMPLETED: "completed",
   FAILED: "failed",
-  CANCELLED: "failed",
-  CANCELED: "failed",
+  CANCELLED: "cancelled",
+  CANCELED: "cancelled",
   TERMINATED: "failed",
   TIMED_OUT: "failed",
 };
@@ -87,13 +97,157 @@ export function extractWorkflowSteps(output: unknown): unknown[] {
   return [];
 }
 
+/**
+ * Live phase of a running workflow. Derived only from real signals: the
+ * activity Temporal reports in flight, or a pending plan review. There is no
+ * percentage because the workflows do not report one.
+ */
+export type WorkflowPhase =
+  | "searching"
+  | "researching"
+  | "writing"
+  | "planning"
+  | "coding"
+  | "analyzing"
+  | "saving"
+  | "applying"
+  | "externalWrites"
+  | "awaitingReview"
+  | "cancelling";
+
+export type WorkflowProgress = {
+  phase: WorkflowPhase | null;
+  /** Retry attempt of the in-flight activity (1 = first try). */
+  attempt: number;
+  changeSetId?: string;
+};
+
+export type ReconciledExecution = AgentExecutionRow & { progress?: WorkflowProgress };
+
+const PHASE_BY_ACTIVITY: Record<string, WorkflowPhase> = {
+  searchDocuments: "searching",
+  callResearchAgent: "researching",
+  callWriterAgent: "writing",
+  callTaskAgent: "planning",
+  callCoderAgent: "coding",
+  analyzePlanImpact: "analyzing",
+  persistPlanImpact: "saving",
+  saveDocument: "saving",
+  saveTasks: "saving",
+  applyPlanChangeSet: "applying",
+  executeExternalWriteOperation: "externalWrites",
+  syncGitHubIntegrationAfterExternalWrite: "externalWrites",
+  finalizeExternalWriteOperations: "externalWrites",
+  listRunnableExternalWriteOperationIds: "externalWrites",
+  cancelPlanImpactRun: "cancelling",
+};
+
+export function phaseFromPendingActivities(
+  pending: PendingActivity[] = []
+): { phase: WorkflowPhase | null; attempt: number } {
+  // sendNotification is bookkeeping, not a phase.
+  for (const activity of pending) {
+    const phase = PHASE_BY_ACTIVITY[activity.activityType];
+    if (phase) return { phase, attempt: activity.attempt || 1 };
+  }
+  return { phase: null, attempt: 1 };
+}
+
+async function pendingChangeSetForWorkflow(workflowId: string) {
+  return db.query.changeSets.findFirst({
+    where: and(eq(changeSets.temporalWorkflowId, workflowId), eq(changeSets.status, "pending")),
+    orderBy: [desc(changeSets.createdAt)],
+  });
+}
+
+const NOTIFICATION_BY_STATUS: Record<Exclude<ExecutionStatus, "running">, NotificationType> = {
+  completed: "workflow_completed",
+  failed: "workflow_failed",
+  cancelled: "workflow_cancelled",
+};
+
+function notificationData(execution: AgentExecutionRow) {
+  return {
+    executionId: execution.id,
+    workflowId: execution.temporalWorkflowId,
+    workflowType: workflowTypeOf(execution),
+    docId: typeof execution.input?.docId === "string" ? execution.input.docId : null,
+    title: typeof execution.input?.title === "string" ? execution.input.title.slice(0, 120) : null,
+  };
+}
+
+async function notifyTerminalTransition(execution: AgentExecutionRow) {
+  const type = NOTIFICATION_BY_STATUS[execution.status as Exclude<ExecutionStatus, "running">];
+  if (!type) return;
+  const ownerId = await resolveExecutionOwner(execution);
+  if (!ownerId) return;
+  await createNotification({
+    userId: ownerId,
+    workspaceId: execution.workspaceId,
+    type,
+    dedupeKey: `workflow:${execution.id}:${execution.status}`,
+    data: notificationData(execution),
+  });
+}
+
+async function notifyReviewPending(execution: AgentExecutionRow, changeSetId: string) {
+  const ownerId = await resolveExecutionOwner(execution);
+  if (!ownerId) return;
+  await createNotification({
+    userId: ownerId,
+    workspaceId: execution.workspaceId,
+    type: "plan_review_pending",
+    dedupeKey: `plan_review:${changeSetId}`,
+    data: { ...notificationData(execution), changeSetId },
+  });
+}
+
+/**
+ * A cancelled plan-impact run must not leave its review pending. The workflow
+ * cleans up itself (cancelPlanImpactRun); this covers a persist activity that
+ * committed after that cleanup, and runs cancelled by older worker code.
+ */
+async function releaseCancelledPlanReview(execution: AgentExecutionRow, userId: string | null) {
+  if (!execution.temporalWorkflowId || workflowTypeOf(execution) !== "plan_impact") return;
+  try {
+    const pending = await pendingChangeSetForWorkflow(execution.temporalWorkflowId);
+    if (pending) {
+      await resolveOrphanedChangeSet(pending.id, "cancelled", userId, "workflow_cancelled");
+    }
+  } catch (error) {
+    console.error("[Workflows] Cancelled plan review cleanup failed:", error);
+  }
+}
+
+async function attachProgress(
+  execution: AgentExecutionRow,
+  temporalStatus: TemporalStatusResult
+): Promise<ReconciledExecution> {
+  const { phase, attempt } = phaseFromPendingActivities(temporalStatus.pendingActivities);
+  if (phase || workflowTypeOf(execution) !== "plan_impact" || !execution.temporalWorkflowId) {
+    return { ...execution, progress: { phase, attempt } };
+  }
+
+  // No activity in flight: a plan-impact run is then parked on its review.
+  try {
+    const pending = await pendingChangeSetForWorkflow(execution.temporalWorkflowId);
+    if (pending) {
+      await notifyReviewPending(execution, pending.id);
+      return { ...execution, progress: { phase: "awaitingReview", attempt: 1, changeSetId: pending.id } };
+    }
+  } catch (error) {
+    console.error("[Workflows] Review lookup failed:", error);
+  }
+  return { ...execution, progress: { phase: null, attempt: 1 } };
+}
+
 export async function reconcileWorkflowExecution(
   execution: AgentExecutionRow,
   options: {
     userId?: string | null;
     request?: NextRequest;
   } = {}
-): Promise<AgentExecutionRow> {
+): Promise<ReconciledExecution> {
   if (!execution.temporalWorkflowId || execution.status !== "running") {
     return execution;
   }
@@ -116,11 +270,17 @@ export async function reconcileWorkflowExecution(
         status === "failed" && temporalStatus.error
           ? temporalStatus
           : await temporalClient.getWorkflowResult(execution.temporalWorkflowId);
-      const terminalStatus = normalizeTemporalStatus(terminalResult.status);
+      // handle.result() of a cancelled run rejects, which getWorkflowResult
+      // reports as FAILED; the described CANCELLED status is authoritative.
+      const terminalStatus =
+        status === "cancelled" ? "cancelled" : normalizeTemporalStatus(terminalResult.status);
       const terminalOutput = resultToOutput(terminalResult.result);
 
       output = terminalOutput ?? output;
-      errorMessage = terminalResult.error || errorMessage;
+      errorMessage =
+        terminalStatus === "cancelled"
+          ? temporalClosedStatusMessage(temporalStatus.status) ?? null
+          : terminalResult.error || errorMessage;
 
       const [updated] = await db
         .update(agentExecutions)
@@ -137,8 +297,13 @@ export async function reconcileWorkflowExecution(
         await writeAuditLog({
           userId: options.userId || null,
           workspaceId: execution.workspaceId,
-          event: terminalStatus === "completed" ? "workflow.complete" : "workflow.failed",
-          status: terminalStatus === "completed" ? "success" : "failed",
+          event:
+            terminalStatus === "completed"
+              ? "workflow.complete"
+              : terminalStatus === "cancelled"
+                ? "workflow.cancelled"
+                : "workflow.failed",
+          status: terminalStatus === "failed" ? "failed" : "success",
           metadata: {
             workflowId: execution.temporalWorkflowId,
             executionId: execution.id,
@@ -146,6 +311,12 @@ export async function reconcileWorkflowExecution(
           },
           request: options.request,
         });
+
+        if (terminalStatus === "cancelled") {
+          await releaseCancelledPlanReview(updated, options.userId ?? null);
+        }
+        // Only the request that won the guarded UPDATE notifies.
+        await notifyTerminalTransition(updated);
 
         return updated;
       }
@@ -173,10 +344,10 @@ export async function reconcileWorkflowExecution(
         .where(eq(agentExecutions.id, execution.id))
         .returning();
 
-      return updated || { ...execution, status, errorMessage };
+      return attachProgress(updated || { ...execution, status, errorMessage }, temporalStatus);
     }
 
-    return execution;
+    return attachProgress(execution, temporalStatus);
   } catch (error) {
     console.error("[Workflows] Reconcile failed:", error);
     return execution;

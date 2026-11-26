@@ -6,8 +6,11 @@
  * `Messages` type below). Add strings here, never hard-code them in JSX.
  */
 
+import { runMessages } from "./messages-runs";
+
 export const messages = {
   tr: {
+    ...runMessages.tr,
     common: {
       cancel: "İptal",
       save: "Kaydet",
@@ -1116,6 +1119,7 @@ export const messages = {
     },
   },
   en: {
+    ...runMessages.en,
     common: {
       cancel: "Cancel",
       save: "Save",

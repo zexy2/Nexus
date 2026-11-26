@@ -266,6 +266,7 @@ export async function POST(request: NextRequest) {
         workflowType: workflow.publicType,
       },
       temporalWorkflowId: workflowId,
+      createdBy: userId,
       startedAt: new Date(),
     })
     .returning();
@@ -390,5 +391,7 @@ export async function GET(request: NextRequest) {
     steps: extractWorkflowSteps(reconciledExecution.output),
     result: reconciledExecution.output ?? null,
     error: reconciledExecution.errorMessage ?? null,
+    progress: reconciledExecution.progress ?? null,
+    cancelRequestedAt: reconciledExecution.cancelRequestedAt ?? null,
   });
 }

@@ -113,6 +113,7 @@ const statusStyles: Record<string, string> = {
   external_failed: "border-red-400/30 bg-red-400/10 text-red-800 dark:text-red-200",
   rejected: "border-border bg-foreground/5 text-foreground-subtle",
   expired: "border-border bg-foreground/5 text-foreground-faint",
+  cancelled: "border-border bg-foreground/5 text-foreground-faint",
 };
 
 export default function ChangesPage() {
@@ -143,6 +144,7 @@ export default function ChangesPage() {
   }, [locale]);
 
   const statusLabel = useCallback((status: string) => {
+    if (status === "cancelled") return t("runs.changeSet.status");
     if (
       status === "pending" ||
       status === "applying" ||
@@ -338,6 +340,13 @@ export default function ChangesPage() {
 
   const resolutionCopy = useMemo(() => {
     if (!detail || detail.status === "pending") return null;
+    if (detail.status === "cancelled") {
+      return {
+        title: t("runs.changeSet.resolvedTitle"),
+        description: t("runs.changeSet.resolvedDesc"),
+        className: "border-border bg-foreground/[0.04] text-foreground-secondary",
+      };
+    }
     // A selected external write failed: say which one and why instead of
     // blaming unselected proposals (the status alone cannot tell them apart).
     if (

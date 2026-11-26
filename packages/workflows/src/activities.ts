@@ -4047,6 +4047,109 @@ export async function expirePlanChangeSet(
 }
 
 /**
+ * Cleanup for a cancelled planImpactWorkflow. Runs in a non-cancellable scope
+ * after the workflow observed the cancellation, so it must be idempotent and
+ * keyed by the workflow id: the change set may not exist yet (cancelled during
+ * analysis), may already be resolved (apply/reject won the race), or may be
+ * pending (the doc is blocked from new analyses until it is resolved).
+ *
+ * Pending change sets for the run move to `cancelled`, their proposals to
+ * `rejected`, and the proposed plan version to `cancelled`; task alignment is
+ * recomputed exactly as on reject/expire. It takes the same advisory lock as
+ * persistPlanImpact, so an in-flight persist attempt commits first and is then
+ * cancelled here rather than slipping in afterwards.
+ */
+export async function cancelPlanImpactRun(
+  temporalWorkflowId: string,
+  userId: string
+): Promise<{ cancelledChangeSetIds: string[] }> {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) throw new Error("DATABASE_URL is not set");
+
+  const postgres = (await import("postgres")).default;
+  const sql = postgres(databaseUrl);
+
+  try {
+    const cancelledChangeSetIds = await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof sql;
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`persistPlanImpact:${temporalWorkflowId}`}))`;
+      const rows = await tx<Array<{
+        id: string;
+        workspace_id: string;
+        proposed_version_id: string;
+      }>>`
+        SELECT id, workspace_id, proposed_version_id
+        FROM change_sets
+        WHERE temporal_workflow_id = ${temporalWorkflowId}
+          AND status = 'pending'
+        FOR UPDATE
+      `;
+
+      for (const changeSet of rows) {
+        await tx`
+          UPDATE tasks
+          SET alignment_status = CASE
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM requirement_task_links rtl
+                  INNER JOIN requirements r ON r.id = rtl.requirement_id
+                  INNER JOIN plan_versions pv ON pv.id = r.plan_version_id
+                  WHERE rtl.task_id = tasks.id
+                    AND pv.status = 'accepted'
+                ) THEN 'aligned'
+                ELSE 'orphaned'
+              END,
+              alignment_updated_at = now(),
+              updated_at = now()
+          WHERE id IN (
+            SELECT task_id
+            FROM change_proposals
+            WHERE change_set_id = ${changeSet.id}
+              AND task_id IS NOT NULL
+          )
+        `;
+        await tx`
+          UPDATE change_proposals
+          SET status = 'rejected'
+          WHERE change_set_id = ${changeSet.id}
+            AND status = 'pending'
+        `;
+        await tx`
+          UPDATE plan_versions
+          SET status = 'cancelled'
+          WHERE id = ${changeSet.proposed_version_id}
+            AND status = 'proposed'
+        `;
+        await tx`
+          UPDATE change_sets
+          SET status = 'cancelled',
+              resolved_by = ${userId},
+              resolved_at = now(),
+              updated_at = now()
+          WHERE id = ${changeSet.id}
+        `;
+        await tx`
+          INSERT INTO audit_logs (user_id, workspace_id, event, status, metadata)
+          VALUES (
+            ${userId},
+            ${changeSet.workspace_id},
+            ${"plan.change_cancelled"},
+            ${"success"},
+            ${JSON.stringify({ changeSetId: changeSet.id, workflowId: temporalWorkflowId })}::jsonb
+          )
+        `;
+      }
+
+      return rows.map((row) => row.id);
+    });
+
+    return { cancelledChangeSetIds };
+  } finally {
+    await sql.end();
+  }
+}
+
+/**
  * Send a notification to the user
  */
 export async function sendNotification(

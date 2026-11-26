@@ -16,6 +16,7 @@ const TERMINAL_CHANGE_SET_STATUSES = new Set([
   "external_failed",
   "rejected",
   "expired",
+  "cancelled",
 ]);
 
 function isClosedWorkflowError(message: string) {
