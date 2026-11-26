@@ -40,6 +40,29 @@ json_pending_proposal_ids() {
     '[.proposals[]? | select(.status == "pending") | .id | select(. != null)][: $limit] | select(length > 0)'
 }
 
+# POST a workflow-starting request. Prints the response body to stdout and
+# returns 0 on 2xx. Returns 2 when the per-visitor demo limit
+# (RATE_LIMIT_EXCEEDED, scope workflow/user) is hit, so callers can skip
+# instead of failing; any other non-2xx response exits 1.
+post_ai() {
+  local url="$1" data="$2" body_file code
+  body_file="$(mktemp)"
+  code="$(curl -sS -o "$body_file" -w '%{http_code}' \
+    -X POST -H "Content-Type: application/json" -b "$COOKIE_JAR" \
+    "$url" --data "$data")"
+  if [[ "$code" == 2* ]]; then
+    cat "$body_file"; rm -f "$body_file"; return 0
+  fi
+  if [[ "$code" == "429" ]] \
+    && [[ "$(jq -r '.error // ""' < "$body_file" 2>/dev/null)" == "RATE_LIMIT_EXCEEDED" ]] \
+    && [[ "$(jq -r '.scope // ""' < "$body_file" 2>/dev/null)" =~ ^(workflow|user)$ ]]; then
+    cat "$body_file" >&2; rm -f "$body_file"; return 2
+  fi
+  echo "POST $url returned HTTP $code:" >&2
+  cat "$body_file" >&2; rm -f "$body_file"
+  exit 1
+}
+
 poll_workflow() {
   local workflow_id="$1"
   local label="$2"
@@ -221,14 +244,7 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
   workspace_id="$(printf '%s' "$bootstrap_body" | json_get workspace.id)"
 
   echo "==> AI document workflow"
-  document_body="$(
-    curl -fsS \
-      -X POST \
-      -H "Content-Type: application/json" \
-      -b "$COOKIE_JAR" \
-      "$BASE_URL/api/workflows" \
-      --data "{\"workflowType\":\"document\",\"workspaceId\":\"$workspace_id\",\"input\":{\"title\":\"Nexus Production Smoke Brief\",\"prompt\":\"Write a short portfolio demo brief for Nexus covering AI document generation, task extraction, Kanban, and workflow history.\"}}"
-  )"
+  document_body="$(post_ai "$BASE_URL/api/workflows" "{\"workflowType\":\"document\",\"workspaceId\":\"$workspace_id\",\"input\":{\"title\":\"Nexus Production Smoke Brief\",\"prompt\":\"Write a short portfolio demo brief for Nexus covering AI document generation, task extraction, Kanban, and workflow history.\"}}")"
   document_workflow_id="$(printf '%s' "$document_body" | json_get workflowId)"
   poll_workflow "$document_workflow_id" "Document" "$WORKFLOW_STATUS_FILE"
   document_id="$(json_get result.documentId < "$WORKFLOW_STATUS_FILE")"
@@ -238,59 +254,57 @@ if [[ "${SMOKE_RUN_AI_WORKFLOWS:-true}" == "true" ]]; then
     exit 1
   fi
 
+  # The demo visitor allows AI_DEMO_WORKFLOW_DAILY_LIMIT workflows per day
+  # (default 2). Hitting that limit (HTTP 429) skips the step, not fails it.
   echo "==> AI task breakdown workflow"
-  tasks_body="$(
-    curl -fsS \
-      -X POST \
-      -H "Content-Type: application/json" \
-      -b "$COOKIE_JAR" \
-      "$BASE_URL/api/workflows" \
-      --data "{\"workflowType\":\"tasks\",\"workspaceId\":\"$workspace_id\",\"input\":{\"docId\":\"$document_id\",\"projectDescription\":\"Create 3 Kanban-ready implementation tasks from the Nexus production smoke brief. Return actionable task titles, descriptions, and priorities.\"}}"
-  )"
-  tasks_workflow_id="$(printf '%s' "$tasks_body" | json_get workflowId)"
-  poll_workflow "$tasks_workflow_id" "Task breakdown" "$WORKFLOW_STATUS_FILE"
-  task_count="$(json_task_count < "$WORKFLOW_STATUS_FILE")"
-  if (( task_count < 1 )); then
-    echo "Task breakdown completed but returned no tasks." >&2
-    cat "$WORKFLOW_STATUS_FILE" >&2
-    exit 1
+  rc=0
+  tasks_body="$(post_ai "$BASE_URL/api/workflows" "{\"workflowType\":\"tasks\",\"workspaceId\":\"$workspace_id\",\"input\":{\"docId\":\"$document_id\",\"projectDescription\":\"Create 3 Kanban-ready implementation tasks from the Nexus production smoke brief. Return actionable task titles, descriptions, and priorities.\"}}")" || rc=$?
+  if (( rc == 2 )); then
+    echo "SKIPPED (demo workflow limit reached): AI task breakdown workflow"
+  else
+    tasks_workflow_id="$(printf '%s' "$tasks_body" | json_get workflowId)"
+    poll_workflow "$tasks_workflow_id" "Task breakdown" "$WORKFLOW_STATUS_FILE"
+    task_count="$(json_task_count < "$WORKFLOW_STATUS_FILE")"
+    if (( task_count < 1 )); then
+      echo "Task breakdown completed but returned no tasks." >&2
+      cat "$WORKFLOW_STATUS_FILE" >&2
+      exit 1
+    fi
+    echo "Task breakdown created $task_count tasks."
   fi
-  echo "Task breakdown created $task_count tasks."
 
   echo "==> Living plan impact workflow"
-  impact_body="$(
+  rc=0
+  impact_body="$(post_ai "$BASE_URL/api/plans/$document_id/analyze-change" '{}')" || rc=$?
+  if (( rc == 2 )); then
+    echo "SKIPPED (demo workflow limit reached): Living plan impact workflow"
+  else
+    plan_workflow_id="$(printf '%s' "$impact_body" | json_get workflowId)"
+    change_set_id="$(poll_pending_change_set "$document_id" "$plan_workflow_id" "$CHANGE_SET_STATUS_FILE")"
+    echo "Plan impact created change set $change_set_id."
+
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
+    proposal_ids_json="$(json_pending_proposal_ids < "$CHANGE_SET_STATUS_FILE")"
+
     curl -fsS \
       -X POST \
       -H "Content-Type: application/json" \
       -b "$COOKIE_JAR" \
-      "$BASE_URL/api/plans/$document_id/analyze-change" \
-      --data '{}'
-  )"
-  plan_workflow_id="$(printf '%s' "$impact_body" | json_get workflowId)"
-  change_set_id="$(poll_pending_change_set "$document_id" "$plan_workflow_id" "$CHANGE_SET_STATUS_FILE")"
-  echo "Plan impact created change set $change_set_id."
+      "$BASE_URL/api/change-sets/$change_set_id/apply" \
+      --data "{\"selectedProposalIds\":$proposal_ids_json}" > "$APPLY_RESPONSE_FILE"
 
-  curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
-  proposal_ids_json="$(json_pending_proposal_ids < "$CHANGE_SET_STATUS_FILE")"
+    echo "Apply response: $(cat "$APPLY_RESPONSE_FILE")"
 
-  curl -fsS \
-    -X POST \
-    -H "Content-Type: application/json" \
-    -b "$COOKIE_JAR" \
-    "$BASE_URL/api/change-sets/$change_set_id/apply" \
-    --data "{\"selectedProposalIds\":$proposal_ids_json}" > "$APPLY_RESPONSE_FILE"
-
-  echo "Apply response: $(cat \"$APPLY_RESPONSE_FILE\")"
-
-  poll_change_set_terminal "$change_set_id" "$CHANGE_SET_STATUS_FILE"
-  curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
-  change_set_status="$(json_get status < "$CHANGE_SET_STATUS_FILE")"
-  if [[ "$change_set_status" != "applied" && "$change_set_status" != "partially_applied" ]]; then
-    echo "Plan impact completed but change set was not applied." >&2
-    cat "$CHANGE_SET_STATUS_FILE" >&2
-    exit 1
+    poll_change_set_terminal "$change_set_id" "$CHANGE_SET_STATUS_FILE"
+    curl -fsS -b "$COOKIE_JAR" "$BASE_URL/api/change-sets/$change_set_id" > "$CHANGE_SET_STATUS_FILE"
+    change_set_status="$(json_get status < "$CHANGE_SET_STATUS_FILE")"
+    if [[ "$change_set_status" != "applied" && "$change_set_status" != "partially_applied" ]]; then
+      echo "Plan impact completed but change set was not applied." >&2
+      cat "$CHANGE_SET_STATUS_FILE" >&2
+      exit 1
+    fi
+    echo "Plan impact resolved with status $change_set_status."
   fi
-  echo "Plan impact resolved with status $change_set_status."
 fi
 
 if [[ "${SMOKE_CHECK_RATE_LIMIT:-false}" == "true" ]]; then
