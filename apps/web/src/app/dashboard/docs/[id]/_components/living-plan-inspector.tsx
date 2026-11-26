@@ -20,6 +20,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { localeHeaders } from "@/lib/i18n/locale";
 
 type RequirementTask = {
   taskId: string;
@@ -348,6 +349,7 @@ export function LivingPlanInspector({
     try {
       const response = await fetch(`/api/plans/${docId}/analyze-change`, {
         method: "POST",
+        headers: localeHeaders(locale),
       });
       const body = await response.json().catch(() => null);
       if (response.status === 409 && body?.changeSetId) {
@@ -473,12 +475,10 @@ export function LivingPlanInspector({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-medium text-foreground">
-              {locale === "tr" ? "Etki grafiği" : "Impact graph"}
+              {t("livingPlan.impactGraph")}
             </h3>
             <p className="mt-1 text-xs leading-5 text-foreground-faint">
-              {locale === "tr"
-                ? "Plan, iş, PR, test ve agent kanıtlarını aynı bağlamda gösterir."
-                : "Shows plan, work, PR, test, and agent evidence in one context."}
+              {t("livingPlan.showsPlanWorkPrTest")}
             </p>
           </div>
           <GitBranch className="mt-0.5 size-4 text-cyan-700 dark:text-cyan-300" />
@@ -487,7 +487,7 @@ export function LivingPlanInspector({
         <div className="grid grid-cols-3 divide-x divide-border border-y border-border">
           {[
             {
-              label: locale === "tr" ? "Issue" : "Issues",
+              label: t("livingPlan.issues"),
               value: impactGraph?.summary.externalIssues ?? 0,
             },
             {
@@ -495,7 +495,7 @@ export function LivingPlanInspector({
               value: impactGraph?.summary.pullRequests ?? 0,
             },
             {
-              label: locale === "tr" ? "Test" : "Checks",
+              label: t("livingPlan.checks"),
               value: impactGraph?.summary.checkRuns ?? 0,
             },
           ].map((item) => (
@@ -512,7 +512,7 @@ export function LivingPlanInspector({
           <div className="mt-4 flex flex-wrap gap-2">
             {impactGraph.integrations.length === 0 ? (
               <Badge variant="outline" className="border-border text-foreground-subtle">
-                {locale === "tr" ? "Entegrasyon yok" : "No integrations"}
+                {t("livingPlan.noIntegrations")}
               </Badge>
             ) : (
               impactGraph.integrations.map((integration) => (
@@ -527,9 +527,9 @@ export function LivingPlanInspector({
                   {integration.provider}
                   <span className="ml-1 text-foreground-faint">
                     {integration.seeded
-                      ? locale === "tr" ? "örnek veri" : "sample data"
+                      ? t("livingPlan.sampleData")
                       : integration.status === "connected"
-                        ? locale === "tr" ? "bağlı" : "connected"
+                        ? t("livingPlan.connected")
                         : integration.status}
                   </span>
                 </Badge>
@@ -541,9 +541,7 @@ export function LivingPlanInspector({
         {impactGraph?.summary.outdatedAgentJobs ? (
           <div className="mt-4 flex items-start gap-2 border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            {locale === "tr"
-              ? `${impactGraph.summary.outdatedAgentJobs} agent işi eski bağlamla kalmış.`
-              : `${impactGraph.summary.outdatedAgentJobs} agent job is running on outdated context.`}
+            {t("livingPlan.outdatedAgentJobs").replace("{n}", String(impactGraph.summary.outdatedAgentJobs))}
           </div>
         ) : null}
 
@@ -609,14 +607,12 @@ export function LivingPlanInspector({
                 </ul>
               </div>
             ) : (
-              locale === "tr"
-                ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
-                : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist."
+              t("livingPlan.affectedIssuesPrsAndTest")
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href="/dashboard/settings?tab=integrations">
-                  {locale === "tr" ? "Bağlantıları aç" : "Open integrations"}
+                  {t("livingPlan.openIntegrations")}
                 </Link>
               </Button>
               {impactGraph?.integrations.find((item) => item.provider === "github")?.config?.selectedRepository && (
@@ -626,7 +622,7 @@ export function LivingPlanInspector({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {locale === "tr" ? "GitHub issue'larını aç" : "Open GitHub issues"}
+                    {t("livingPlan.openGithubIssues")}
                     <ExternalLink className="ml-2 size-3.5" />
                   </a>
                 </Button>

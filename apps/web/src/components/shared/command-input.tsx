@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useLocale } from '@/lib/i18n/provider';
+import { intlLocale } from '@/lib/i18n/locale';
 
 interface CommandInputProps {
   workspaceId: string;
@@ -71,7 +72,7 @@ export function CommandInput({
   onCommandCreated,
 }: CommandInputProps) {
   const { t, locale } = useLocale();
-  const dateLocale = locale === 'tr' ? 'tr-TR' : 'en-US';
+  const dateLocale = intlLocale(locale);
   const [input, setInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isOnline = useSyncExternalStore(subscribeOnline, readOnline, readServerOnline);

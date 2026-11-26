@@ -8,7 +8,8 @@ import { logInternalError } from "@/lib/api-response";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
+import { capabilitySystemPrompt, type ChatCapability } from "@/lib/ai/chat-agents";
+import { resolveRequestLocale, type AppLocale } from "@/lib/i18n/locale";
 import { runAgent } from "@/lib/ai/agent";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { getRAGContext } from "@/lib/ai/chat-rag";
@@ -27,6 +28,8 @@ interface CompatibilityRequest {
   message?: string;
   context?: { workspaceId?: string };
   mode?: CompatibilityMode;
+  /** UI locale ("tr" | "en"); when absent the answer follows the message language. */
+  locale?: string;
 }
 
 interface AuthorizedRequest {
@@ -38,6 +41,7 @@ interface PreparedRequest extends AuthorizedRequest {
   message: string;
   mode: CompatibilityMode;
   workspaceId: string;
+  locale: AppLocale | undefined;
   modelConfig: Awaited<ReturnType<typeof getUserModelConfig>>;
 }
 
@@ -119,6 +123,7 @@ async function prepareRequest(request: NextRequest): Promise<
         message,
         mode: normalizeMode(body.mode),
         workspaceId: access.workspaceId,
+        locale: resolveRequestLocale(request, body.locale),
         modelConfig,
       },
     };
@@ -175,17 +180,17 @@ async function executeRequest(input: PreparedRequest) {
       messages: [{ role: "user", content: input.message }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      locale: input.locale,
       trace: { name: "agents.auto", modelName, provider },
     });
     message = result.text;
     toolsUsed = result.toolsUsed;
   } else {
-    const capability = CHAT_CAPABILITIES[input.mode];
     const context = await buildCapabilityContext(input);
     const result = await generateTextTraced(
       {
         model,
-        instructions: `${capability.systemPrompt}${context ? `\n\n---\n${context}` : ""}`,
+        instructions: `${capabilitySystemPrompt(input.mode, input.locale)}${context ? `\n\n---\n${context}` : ""}`,
         prompt: input.message,
       },
       {

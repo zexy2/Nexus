@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useChatStore, AGENT_DEFINITIONS, type AgentMode, type Message } from '@/lib/stores/chat-store';
 import { showToast } from '@/components/shared/toast-provider';
-import { useT } from '@/lib/i18n/provider';
+import { useT, useLocale } from '@/lib/i18n/provider';
+import { formatDateTime } from '@/lib/format';
+import { localeHeaders } from '@/lib/i18n/locale';
 import { readTextStream } from '@/lib/stream-text';
 import { isNewChatShortcut } from '@/lib/shortcuts';
 import { 
@@ -45,7 +47,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
   const [copied, setCopied] = useState(false);
   const isUser = message.role === 'user';
 
-  const t = useT();
+  const { t, locale } = useLocale();
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(message.content);
     setCopied(true);
@@ -122,7 +124,7 @@ function MessageCard({ message, index, isLatest, onRetry }: MessageCardProps) {
           'text-[10px] text-foreground-faint mt-1',
           isUser ? 'text-right' : 'text-left'
         )}>
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {formatDateTime(message.timestamp, locale, { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
     </motion.div>
@@ -186,7 +188,7 @@ function ThinkingCard({ agentMode }: { agentMode?: AgentMode }) {
             />
           ))}
         </div>
-        <span className="text-sm text-muted-foreground">{agent.label} {t('chat.isThinking')}</span>
+        <span className="text-sm text-muted-foreground">{t(agent.labelKey)} {t('chat.isThinking')}</span>
       </div>
     </motion.div>
   );
@@ -270,7 +272,7 @@ function ChatInput({ onSend }: ChatInputProps) {
           {activeAgent && (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-foreground/10 text-foreground-secondary text-xs">
               <div className="w-1.5 h-1.5 rounded-full bg-foreground/60 animate-pulse" />
-              <span>{AGENT_DEFINITIONS[activeAgent.mode].label} {t('chat.working')}</span>
+              <span>{t(AGENT_DEFINITIONS[activeAgent.mode].labelKey)} {t('chat.working')}</span>
             </div>
           )}
 
@@ -495,7 +497,7 @@ export default function ChatPage() {
       const currentMessages = useChatStore.getState().messages;
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...localeHeaders() },
         body: JSON.stringify({
           messages: currentMessages.map((m) => ({ role: m.role, content: m.content })),
           agentMode,

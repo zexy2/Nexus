@@ -151,6 +151,8 @@ type PlanAnalysis = {
   requirements: PlanRequirementAnalysis[];
   proposals: PlanProposalAnalysis[];
   steps: AgentStepResult[];
+  /** Language used for user-facing output (absent in analyses recorded before it existed). */
+  outputLanguage?: PlanOutputLanguage;
 };
 
 type PlanOutputLanguage = "tr" | "en";
@@ -214,6 +216,25 @@ function detectPlanOutputLanguage(text: string): PlanOutputLanguage {
 
 function planLanguageName(language: PlanOutputLanguage) {
   return language === "tr" ? "Turkish" : "English";
+}
+
+function isOutputLocale(value: unknown): value is PlanOutputLanguage {
+  return value === "tr" || value === "en";
+}
+
+/**
+ * Language of user-facing plan output: the caller's UI locale when it was
+ * sent, otherwise the language the plan itself is written in.
+ */
+export function resolvePlanOutputLanguage(locale: unknown, planText: string): PlanOutputLanguage {
+  return isOutputLocale(locale) ? locale : detectPlanOutputLanguage(planText);
+}
+
+/** System-prompt line for free-form agent output (research, writer, tasks). */
+export function outputLanguageInstruction(locale: unknown): string {
+  return isOutputLocale(locale)
+    ? `Write all user-facing text in ${planLanguageName(locale)}, regardless of the language of the input or sources. Keep JSON keys and enum values in English.`
+    : "Write all user-facing text in the same language as the user's input. Keep JSON keys and enum values in English.";
 }
 
 function planCopy(language: PlanOutputLanguage) {
@@ -478,7 +499,8 @@ export async function indexDocument(
 export async function callResearchAgent(
   query: string,
   sources: string[],
-  suppliedContext = ""
+  suppliedContext = "",
+  locale?: PlanOutputLanguage
 ): Promise<AgentStepResult & { sources: Array<{ title: string; url?: string; snippet: string; relevance: number }> }> {
   const startTime = Date.now();
   const wantsWeb = sources.some((source) => source === "web" || source === "both");
@@ -501,7 +523,7 @@ export async function callResearchAgent(
     ? `You are a research synthesizer. Use only the supplied material for factual claims. Distinguish facts from inference, state uncertainty, and cite supplied URLs. Never invent a source.`
     : `You are an analysis assistant. No external or workspace sources were supplied. Provide a planning analysis, explicitly disclose that it is model-generated, and do not describe it as verified research.`;
   const output = await callGemini(
-    systemPrompt,
+    `${systemPrompt}\n${outputLanguageInstruction(locale)}`,
     `${query}\n\n${sourceContext ? `SUPPLIED MATERIAL:\n${sourceContext}` : "No source material is available."}`
   );
   
@@ -521,12 +543,14 @@ export async function callResearchAgent(
  */
 export async function callWriterAgent(
   prompt: string,
-  context?: string
+  context?: string,
+  locale?: PlanOutputLanguage
 ): Promise<AgentStepResult> {
   const startTime = Date.now();
   
   const systemPrompt = `You are a Writer Agent. Create well-structured, professional content.
-Format output in Markdown. Be clear and engaging.`;
+Format output in Markdown. Be clear and engaging.
+${outputLanguageInstruction(locale)}`;
 
   const fullPrompt = context ? `Context:\n${context}\n\n---\n\nTask: ${prompt}` : prompt;
   const output = await callGemini(systemPrompt, fullPrompt);
@@ -569,12 +593,14 @@ Follow best practices, add comments, and handle edge cases.`;
  * Call the task agent to break down a project
  */
 export async function callTaskAgent(
-  projectDescription: string
+  projectDescription: string,
+  locale?: PlanOutputLanguage
 ): Promise<AgentStepResult> {
   const startTime = Date.now();
   
   const systemPrompt = `You are a Task Agent. Break down projects into actionable tasks.
-Format as JSON array: [{"title": "Task name", "description": "...", "priority": "high|medium|low"}]`;
+Format as JSON array: [{"title": "Task name", "description": "...", "priority": "high|medium|low"}]
+${outputLanguageInstruction(locale)}`;
 
   const output = await callGemini(systemPrompt, projectDescription);
   
@@ -860,6 +886,7 @@ export async function analyzePlanImpact(input: {
   workspaceId: string;
   userId: string;
   docId: string;
+  locale?: PlanOutputLanguage;
 }): Promise<PlanAnalysis> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is not set");
@@ -943,7 +970,7 @@ export async function analyzePlanImpact(input: {
     const contentText = textFromDocumentContent(doc.content);
     if (!contentText) throw new Error("Plan document has no analyzable content");
 
-    const outputLanguage = detectPlanOutputLanguage(`${doc.title}\n${contentText}`);
+    const outputLanguage = resolvePlanOutputLanguage(input.locale, `${doc.title}\n${contentText}`);
     const outputLanguageName = planLanguageName(outputLanguage);
     const copy = planCopy(outputLanguage);
 
@@ -1193,6 +1220,7 @@ Return:
       summary,
       requirements: normalizedRequirements,
       proposals: normalizedProposals,
+      outputLanguage,
       steps: [{
         agentName: "plan_impact",
         input: copy.stepInput(doc.title),
@@ -1400,7 +1428,8 @@ export async function persistPlanImpact(
         ORDER BY updated_at DESC
       `;
 
-      const localizedForTurkish = detectPlanOutputLanguage(`${analysis.title}\n${analysis.contentText}`) === "tr";
+      const localizedForTurkish =
+        (analysis.outputLanguage ?? detectPlanOutputLanguage(`${analysis.title}\n${analysis.contentText}`)) === "tr";
       const externalProposals: PlanProposalAnalysis[] = [];
       for (const link of externalIssueLinks) {
         const operationTitle = localizedForTurkish

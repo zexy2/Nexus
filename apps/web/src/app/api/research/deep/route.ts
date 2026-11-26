@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { protectRoute, RATE_LIMITS } from "@/lib/api-middleware";
 import { enforceAiBudget } from "@/lib/production-guardrails";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
+import { buildPlanPrompt, buildReportPrompt } from "@/lib/ai/research-prompts";
 
 /**
  * Deep Research API
@@ -116,8 +118,9 @@ export async function POST(request: NextRequest) {
   }
 
   let rawQuery: unknown;
+  let rawLocale: unknown;
   try {
-    ({ query: rawQuery } = await request.json());
+    ({ query: rawQuery, locale: rawLocale } = await request.json());
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -125,6 +128,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Query is required" }, { status: 400 });
   }
   const query: string = rawQuery;
+  const locale = resolveRequestLocale(request, rawLocale);
 
   // Budget is consumed only after the request is validated.
   const aiBudget = await enforceAiBudget({
@@ -149,11 +153,7 @@ export async function POST(request: NextRequest) {
         sendEvent("phase", { phase: "planning", status: "running", message: "Initializing research plan..." });
         
         // Generate sub-queries for comprehensive research
-        const planPrompt = `You are a research planning assistant. Break down this research topic into 4-6 specific search queries that will help gather comprehensive information.
-
-Topic: "${query}"
-
-Return ONLY a JSON array of search queries in Turkish. Example: ["query 1", "query 2", "query 3"]`;
+        const planPrompt = buildPlanPrompt(query, locale);
 
         const planResponse = await generateWithAI(planPrompt);
         let searchQueries: string[] = [query]; // Default to original query
@@ -244,36 +244,7 @@ Return ONLY a JSON array of search queries in Turkish. Example: ["query 1", "que
         sendEvent("phase", { phase: "generating", status: "running", message: "Generating comprehensive report..." });
 
         // Build report directly from Tavily data - cleaner and more direct
-        const reportPrompt = `Sen bir araştırma analistisin. Aşağıdaki web araştırma sonuçlarını kullanarak kısa ve öz bir rapor oluştur.
-
-**ARAŞTIRMA KONUSU:** "${query}"
-
-**TAVILY ARAŞTIRMA CEVAPLARI:**
-${answerSummaries}
-
-**KAYNAK ÖZETLERİ:**
-${sourceSummaries}
-
-**TALİMATLAR:**
-- Türkçe yaz
-- KISA ve ÖZEL ol - maksimum 400 kelime
-- Doğrudan bilgi ver, gereksiz giriş yapma
-- Markdown formatı kullan (## başlıklar, - maddeler)
-- Kaynak numaralarını [1], [2] şeklinde belirt
-- "Bu rapor..." veya "Araştırmamız..." gibi kalıplar KULLANMA
-- Direkt bulguları yaz
-
-**FORMAT:**
-## 🎯 Özet
-(2-3 cümle ana bulgular)
-
-## 📊 Temel Bulgular
-- Bulgu 1 [kaynak]
-- Bulgu 2 [kaynak]
-- Bulgu 3 [kaynak]
-
-## 💡 Sonuç
-(1-2 cümle çıkarım)`;
+        const reportPrompt = buildReportPrompt({ query, answerSummaries, sourceSummaries, locale });
 
         const report = await generateWithAI(reportPrompt);
 

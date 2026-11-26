@@ -10,10 +10,14 @@ import {
   FooterMinimal,
   Preloader,
 } from "@/components/landing";
+import { ForceDocumentLang } from "@/lib/i18n/provider";
 
 export default function LandingPage() {
+  // The landing copy is English-only: pin `lang` so CSS uppercase does not use
+  // Turkish casing ("PUBLİC") for visitors whose UI locale is Turkish.
   return (
-    <>
+    <div lang="en">
+      <ForceDocumentLang lang="en" />
       <Preloader />
       <div className="min-h-screen bg-[#0a0a0a]">
           <Navigation />
@@ -51,6 +55,6 @@ export default function LandingPage() {
 
           <FooterMinimal />
       </div>
-    </>
+    </div>
   );
 }

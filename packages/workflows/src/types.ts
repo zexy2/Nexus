@@ -1,6 +1,13 @@
 import { z } from "zod";
 
 /**
+ * Optional UI locale for user-facing AI output. Absent (older callers and runs
+ * started before this field existed) → output follows the plan/input language.
+ */
+export const OutputLocaleSchema = z.enum(["tr", "en"]).optional();
+export type OutputLocale = "tr" | "en";
+
+/**
  * Input for document generation workflow
  */
 export const DocumentGenerationInputSchema = z.object({
@@ -10,6 +17,7 @@ export const DocumentGenerationInputSchema = z.object({
   prompt: z.string(),
   style: z.enum(["formal", "casual", "technical"]).optional(),
   maxLength: z.number().optional(),
+  locale: OutputLocaleSchema,
 });
 
 export type DocumentGenerationInput = z.infer<typeof DocumentGenerationInputSchema>;
@@ -23,6 +31,7 @@ export const ResearchWorkflowInputSchema = z.object({
   query: z.string(),
   sources: z.array(z.enum(["web", "documents", "both"])).optional(),
   depth: z.enum(["shallow", "medium", "deep"]).optional(),
+  locale: OutputLocaleSchema,
 });
 
 export type ResearchWorkflowInput = z.infer<typeof ResearchWorkflowInputSchema>;
@@ -37,6 +46,7 @@ export const TaskBreakdownInputSchema = z.object({
   projectDescription: z.string(),
   deadline: z.number().optional(),
   teamSize: z.number().optional(),
+  locale: OutputLocaleSchema,
 });
 
 export type TaskBreakdownInput = z.infer<typeof TaskBreakdownInputSchema>;
@@ -59,6 +69,7 @@ export const PlanImpactInputSchema = z.object({
   workspaceId: z.string(),
   userId: z.string(),
   docId: z.string(),
+  locale: OutputLocaleSchema,
 });
 
 export type PlanImpactInput = z.infer<typeof PlanImpactInputSchema>;

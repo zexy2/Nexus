@@ -18,6 +18,8 @@ import { getRAGContext } from "@/lib/ai/chat-rag";
 import { createDocument, createTask } from "@/lib/ai/chat-actions";
 import { isLocalOnly } from "@/lib/ai/providers";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
+import { responseLanguageInstruction } from "@/lib/ai/response-language";
+import type { AppLocale } from "@/lib/i18n/locale";
 
 interface AgentRunContext {
   userId: string;
@@ -32,18 +34,23 @@ interface AgentRunResult {
   steps: number;
 }
 
-const SUPERVISOR_SYSTEM = `Sen Nexus AI'sın — araçları olan otonom bir asistan.
+const SUPERVISOR_SYSTEM = `You are Nexus AI, an autonomous assistant with tools.
 
-Kullanıcının isteğini yerine getirmek için araçlarını kullan:
-- searchWorkspace: kullanıcının kendi dokümanlarında/görevlerinde ara. Soru kullanıcının içeriğiyle ilgili olabilirse ÖNCE bunu çağır.
-- webSearch: güncel/harici bilgi gerektiğinde web'de ara.
-- createDocument: kullanıcı bir doküman/rapor yazmanı VEYA kaydetmeni istediğinde kaydet.
-- createTask: kullanıcı görev/yapılacak oluşturmanı istediğinde oluştur.
+Use your tools to fulfil the user's request:
+- searchWorkspace: search the user's own plans and tasks. Call it FIRST when the question may relate to the user's content.
+- webSearch: search the web when current or external information is needed.
+- createDocument: save a plan/document when the user asks you to write or save one.
+- createTask: create a task when the user asks you to create tasks or to-dos.
 
-KURALLAR:
-- Araçları gerektiğinde, sırayla zincirleyerek kullan (örn. önce araştır, sonra yaz, sonra kaydet).
-- createDocument/createTask'ı SADECE kullanıcı gerçekten bir şey kaydetmek/oluşturmak istediğinde çağır; bilgi sorusuna doğrudan yanıt ver.
-- Sonunda doğal, akıcı Türkçe bir yanıt ver. Gereksiz emoji/aşırı formatlama yapma.`;
+RULES:
+- Use tools when needed and chain them in order (e.g. research, then write, then save).
+- Call createDocument/createTask ONLY when the user really wants something saved or created; answer information questions directly.
+- Finish with a natural, fluent answer. No unnecessary emoji or heavy formatting.`;
+
+/** Supervisor prompt plus the response-language rule for this request. */
+export function supervisorSystemPrompt(locale: AppLocale | undefined): string {
+  return `${SUPERVISOR_SYSTEM}\n- ${responseLanguageInstruction(locale)}`;
+}
 
 /**
  * Run the autonomous agent for one user turn. Returns the synthesized text plus
@@ -54,10 +61,12 @@ export async function runAgent(opts: {
   messages: Array<{ role: string; content: string }>;
   context: AgentRunContext;
   maxSteps?: number;
+  /** UI locale of the caller; when absent the answer follows the user's language. */
+  locale?: AppLocale;
   /** Trace labels for the admin traces page (defaults to "agent.run"). */
   trace?: { name?: string; modelName?: string; provider?: string };
 }): Promise<AgentRunResult> {
-  const { model, messages, context, maxSteps = 6, trace } = opts;
+  const { model, messages, context, maxSteps = 6, trace, locale } = opts;
 
   const toolsUsed: string[] = [];
   const createdDocs: { id: string; title: string }[] = [];
@@ -151,7 +160,7 @@ export async function runAgent(opts: {
   const result = await generateTextTraced(
     {
       model,
-      instructions: SUPERVISOR_SYSTEM,
+      instructions: supervisorSystemPrompt(locale),
       messages: messages as any,
       tools: activeTools,
       stopWhen: isStepCount(maxSteps),

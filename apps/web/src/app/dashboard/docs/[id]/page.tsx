@@ -31,6 +31,8 @@ import type { PartialBlock } from "@blocknote/core";
 import { LivingPlanInspector } from "./_components/living-plan-inspector";
 import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
+import { intlLocale, LOCALE_HEADER } from "@/lib/i18n/locale";
+import { AI_PREAMBLE_PATTERN, buildDocActionPrompt } from "@/lib/ai/doc-action-prompts";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { useZero } from "@/lib/sync/zero";
 import { setDocFavorite } from "@/lib/sync/doc-favorite";
@@ -122,7 +124,7 @@ export default function DocDetailPage() {
     title === "Generated Document" ? t("docs.detail.generatedTitle") : title,
     locale
   );
-  const savedTime = lastSaved?.toLocaleTimeString(locale === "tr" ? "tr-TR" : "en-US", {
+  const savedTime = lastSaved?.toLocaleTimeString(intlLocale(locale), {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -299,24 +301,17 @@ export default function DocDetailPage() {
       let prompt = "";
       let agentMode = "writer";
 
-      // These actions paste the result straight into a document, so the model
-      // must return ONLY the transformed text — no conversational preamble
-      // ("Elbette...", "İşte..."), no trailing commentary, no code fences.
-      const ONLY_RESULT =
-        `\n\nÖNEMLİ: Yalnızca sonuç metnini döndür. "Elbette", "İşte", "Tabii" gibi giriş cümleleri, ` +
-        `sonunda açıklama/yorum veya "---" ayraçları EKLEME. Çıktın doğrudan dokümana yapıştırılacak.`;
-
       switch (action) {
         case "summarize":
-          prompt = `Aşağıdaki metni Türkçe özetle.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
+          prompt = buildDocActionPrompt("summarize", textContent, locale);
           agentMode = "research";
           break;
         case "expand":
-          prompt = `Aşağıdaki metni genişlet ve daha detaylı hale getir.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
+          prompt = buildDocActionPrompt("expand", textContent, locale);
           agentMode = "writer";
           break;
         case "improve":
-          prompt = `Aşağıdaki metnin yazımını iyileştir; daha akıcı ve profesyonel yap.${ONLY_RESULT}\n\nMETİN:\n${textContent}`;
+          prompt = buildDocActionPrompt("improve", textContent, locale);
           agentMode = "writer";
           break;
         case "tasks":
@@ -326,10 +321,11 @@ export default function DocDetailPage() {
 
           const workflowResponse = await fetch("/api/workflows", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", [LOCALE_HEADER]: locale },
             body: JSON.stringify({
               workflowType: "tasks",
               workspaceId: doc.workspaceId,
+              locale,
               input: {
                 workspaceId: doc.workspaceId,
                 docId: doc.id,
@@ -357,10 +353,11 @@ export default function DocDetailPage() {
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", [LOCALE_HEADER]: locale },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],
           agentMode,
+          locale,
         }),
       });
 
@@ -373,7 +370,7 @@ export default function DocDetailPage() {
       const cleanAiText = (raw: string): string => {
         const lines = raw.trim().split("\n");
         const first = (lines[0] || "").trim();
-        if (lines.length > 1 && /^(elbette|i̇şte|işte|tabii?|harika|peki)\b/i.test(first) && first.endsWith(":")) {
+        if (lines.length > 1 && AI_PREAMBLE_PATTERN.test(first) && first.endsWith(":")) {
           lines.shift();
         }
         return lines
@@ -384,7 +381,7 @@ export default function DocDetailPage() {
       };
       const result = cleanAiText(rawResult);
 
-      // Metni BlockNote formatına dönüştür
+      // Convert the text to BlockNote blocks
       const textToBlockNoteContent = (text: string) => {
         const paragraphs = text.split("\n\n").filter(p => p.trim());
         return paragraphs.map(paragraph => ({
@@ -393,14 +390,13 @@ export default function DocDetailPage() {
         }));
       };
 
-      // Yeni doküman oluştur
+      // Create a new plan with the result
       const actionNames = {
-        summarize: "Özet",
-        expand: "Genişletilmiş",
-        improve: "İyileştirilmiş",
+        summarize: t("docs.detail.aiTitleSummary"),
+        expand: t("docs.detail.aiTitleExpanded"),
+        improve: t("docs.detail.aiTitleImproved"),
       };
-      
-      // AI sonucunu BlockNote formatına çevir
+
       const blockNoteContent = textToBlockNoteContent(result);
       
       const newDocRes = await fetch("/api/docs", {
@@ -534,7 +530,7 @@ export default function DocDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          title: `${displayTitle} (Kopya)`,
+          title: `${displayTitle} (${t("docs.detail.copySuffix")})`,
           content: doc.content || []
         }),
       });

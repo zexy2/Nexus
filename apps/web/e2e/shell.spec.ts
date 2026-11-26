@@ -29,7 +29,7 @@ test.describe("command palette", () => {
     await expect(page).toHaveURL(/\/dashboard\/settings$/);
 
     await openPalette(page);
-    await palette(page).getByRole("button", { name: /^Work\b/ }).click();
+    await palette(page).getByRole("button", { name: /^Tasks\b/ }).click();
     await expect(palette(page)).toBeHidden();
     await expect(page).toHaveURL(/\/dashboard\/tasks$/);
 

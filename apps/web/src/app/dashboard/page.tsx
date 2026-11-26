@@ -24,6 +24,7 @@ import { SkeletonDashboard } from '@/components/shared';
 import { formatRelativeDate } from '@/lib/format';
 import { cleanDocTitle } from '@/lib/text';
 import { useT, useLocale } from '@/lib/i18n/provider';
+import { intlLocale, type AppLocale } from '@/lib/i18n/locale';
 import { useUIStore } from '@/lib/store';
 
 // Types
@@ -65,10 +66,9 @@ interface TaskStats {
 }
 
 // Format relative time — delegates to the shared, locale-aware formatter so the
-// dashboard reads the same as the rest of the app (no more English "6d ago"
-// mixed into a Turkish UI).
-function formatRelativeTime(timestamp: string | number) {
-  return formatRelativeDate(timestamp, 'tr');
+// dashboard reads the same as the rest of the app in the active UI language.
+function formatRelativeTime(timestamp: string | number, locale: AppLocale) {
+  return formatRelativeDate(timestamp, locale);
 }
 
 // Get greeting based on time
@@ -147,6 +147,7 @@ function AgentCard({ agent, index }: { agent: Agent; index: number }) {
 
 // Document card
 function DocumentCard({ doc, index }: { doc: Document; index: number }) {
+  const { locale } = useLocale();
   return (
     <Link href={`/dashboard/docs/${doc.id}`}>
       <motion.div
@@ -161,7 +162,7 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium truncate group-hover:text-foreground transition-colors">{cleanDocTitle(doc.title)}</p>
-          <p className="text-xs text-muted-foreground">{formatRelativeTime(doc.updatedAt)}</p>
+          <p className="text-xs text-muted-foreground">{formatRelativeTime(doc.updatedAt, locale)}</p>
         </div>
         <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
       </motion.div>
@@ -289,7 +290,7 @@ export default function DashboardPage() {
                 icon: meta.icon,
                 status,
                 description: execution
-                  ? `${t(`dashboard.exec${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)} • ${formatRelativeTime(execution.createdAt)}`
+                  ? `${t(`dashboard.exec${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)} • ${formatRelativeTime(execution.createdAt, locale)}`
                   : t('dashboard.noRecentExecutions'),
               };
             });
@@ -303,7 +304,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, [t]);
+  }, [t, locale]);
 
   if (isLoading) {
     return (
@@ -319,7 +320,7 @@ export default function DashboardPage() {
         <div>
           <div className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-foreground-faint">
             <CheckCircle2 className="size-4" />
-            {new Date().toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            {new Date().toLocaleDateString(intlLocale(locale), { weekday: 'long', month: 'long', day: 'numeric' })}
           </div>
           <h1 className="text-3xl font-semibold text-foreground md:text-4xl">
             {t(`dashboard.greeting${getGreeting()}`)}

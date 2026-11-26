@@ -352,7 +352,7 @@ function SortableTaskCard({
                     <TooltipTrigger asChild>
                       <span className="flex items-center gap-1 px-2 py-0.5 bg-foreground/10 text-foreground-secondary text-[10px] rounded-full font-medium">
                         <Sparkles className="w-3 h-3" />
-                        Agent
+                        {t('tasks.agentBadge')}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{t('tasks.aiAssigned')}</TooltipContent>

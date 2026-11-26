@@ -2,6 +2,8 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { currentUiLocale, FALLBACK_LOCALE, localeHeaders } from '@/lib/i18n/locale';
+import { translate } from '@/lib/i18n/provider';
 import { 
   Sparkles, 
   Search, 
@@ -53,8 +55,11 @@ interface ActiveAgent {
 
 interface AgentDefinition {
   id: string;
+  /** English fallback; UI renders `t(labelKey)`. */
   label: string;
   description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: LucideIcon;
   color: string;
   gradient: string;
@@ -69,6 +74,8 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     id: 'auto',
     label: 'Nexus',
     description: 'Chooses the required workspace tools automatically',
+    labelKey: 'chat.modes.auto.label',
+    descriptionKey: 'chat.modes.auto.description',
     icon: Sparkles,
     color: 'text-violet-700 dark:text-violet-400',
     gradient: 'from-violet-500 to-purple-600',
@@ -77,6 +84,8 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     id: 'research',
     label: 'Research',
     description: 'Workspace analysis and optional web search',
+    labelKey: 'chat.modes.research.label',
+    descriptionKey: 'chat.modes.research.description',
     icon: Search,
     color: 'text-blue-700 dark:text-blue-400',
     gradient: 'from-blue-500 to-cyan-500',
@@ -85,6 +94,8 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     id: 'writer',
     label: 'Drafting',
     description: 'Structured document drafting and editing',
+    labelKey: 'chat.modes.writer.label',
+    descriptionKey: 'chat.modes.writer.description',
     icon: FileText,
     color: 'text-emerald-700 dark:text-emerald-400',
     gradient: 'from-emerald-500 to-teal-500',
@@ -93,14 +104,18 @@ export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
     id: 'coder',
     label: 'Technical help',
     description: 'Code explanation and technical problem solving',
+    labelKey: 'chat.modes.coder.label',
+    descriptionKey: 'chat.modes.coder.description',
     icon: Code,
     color: 'text-orange-700 dark:text-orange-400',
     gradient: 'from-orange-500 to-amber-500',
   },
   task: {
     id: 'task',
-    label: 'Work breakdown',
+    label: 'Task breakdown',
     description: 'Turns scope into structured delivery tasks',
+    labelKey: 'chat.modes.task.label',
+    descriptionKey: 'chat.modes.task.description',
     icon: ListTodo,
     color: 'text-rose-700 dark:text-rose-400',
     gradient: 'from-rose-500 to-pink-500',
@@ -346,7 +361,7 @@ export const useChatStore = create<ChatStore>()(
         const agentDef = AGENT_DEFINITIONS[agentMode];
         addActiveAgent({
           id: agentMode,
-          name: agentDef.label,
+          name: translate(currentUiLocale() ?? FALLBACK_LOCALE, agentDef.labelKey),
           mode: agentMode,
           status: 'thinking',
           startedAt: Date.now(),
@@ -355,7 +370,7 @@ export const useChatStore = create<ChatStore>()(
         try {
           const response = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...localeHeaders() },
             body: JSON.stringify({
               messages: [...get().messages],
               agentMode,
@@ -367,7 +382,7 @@ export const useChatStore = create<ChatStore>()(
           }
           
           // Update agent status to working
-          setAgentStatus(agentMode, 'working', 'Generating response...');
+          setAgentStatus(agentMode, 'working', translate(currentUiLocale() ?? FALLBACK_LOCALE, 'chat.generatingResponse'));
           
           // Handle streaming response
           const reader = response.body?.getReader();

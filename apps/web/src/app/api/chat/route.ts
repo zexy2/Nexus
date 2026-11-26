@@ -13,7 +13,9 @@ import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { isAiQuotaError, aiQuotaResponse } from "@/lib/ai/quota";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { getRAGContext } from "@/lib/ai/chat-rag";
-import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
+import { CHAT_CAPABILITIES, capabilitySystemPrompt, type ChatCapability } from "@/lib/ai/chat-agents";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
+import { responseLanguageInstruction, serverCopyLocale } from "@/lib/ai/response-language";
 import { createDocument } from "@/lib/ai/chat-actions";
 import { runAgent } from "@/lib/ai/agent";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
   // `messages` stays loosely typed: the AI SDK's ModelMessage union is stricter
   // than the wire format the existing clients send, and we validate the parts
   // we rely on below.
-  let body: { messages?: any[]; agentMode?: string };
+  let body: { messages?: any[]; agentMode?: string; locale?: string };
   try {
     body = await req.json();
   } catch {
@@ -65,6 +67,9 @@ export async function POST(req: Request) {
 
   const chatMessages = messages as any[];
   const userMessage: string = lastMessage.content;
+  // UI locale (body -> x-nexus-locale header -> cookie); absent -> mirror the user.
+  const locale = resolveRequestLocale(req, body.locale);
+  const copyLocale = serverCopyLocale(locale, userMessage);
   const userMessageLower = userMessage.toLowerCase();
 
   let modelConfig: Awaited<ReturnType<typeof getUserModelConfig>>;
@@ -116,6 +121,7 @@ CONVERSATION:
 ${conversationHistory}
 
 Create a JSON response with title and content. Content should include the main information from the assistant's responses.
+${responseLanguageInstruction(locale)}
 Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       }, { name: "chat.save", agentType: "chat", userId, modelName, provider, input: userMessage });
       docJson = result.text;
@@ -131,7 +137,11 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
         if (title && content) {
           const result = await createDocument(userId, title, content);
           if (result.success) {
-            return new Response(`✅ **Document Saved!**\n\n📄 **${result.title}**\n\nYou can find it in the Documents section.`);
+            return new Response(
+              copyLocale === "tr"
+                ? `✅ **Plan kaydedildi!**\n\n📄 **${result.title}**\n\nPlanlar bölümünde bulabilirsiniz.`
+                : `✅ **Plan saved!**\n\n📄 **${result.title}**\n\nYou can find it in the Plans section.`
+            );
           }
         }
       }
@@ -139,7 +149,11 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       console.error("Save error:", e);
     }
 
-    return new Response("❌ Could not save the document. Please try again.");
+    return new Response(
+      copyLocale === "tr"
+        ? "❌ Plan kaydedilemedi. Lütfen tekrar deneyin."
+        : "❌ Could not save the plan. Please try again."
+    );
   }
 
   // ==========================================
@@ -153,7 +167,6 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
     agentMode !== "auto" &&
     CHAT_CAPABILITIES[agentMode as ChatCapability]
   ) {
-    const capability = CHAT_CAPABILITIES[agentMode as ChatCapability];
 
     const workspaceId = (await ensureDefaultWorkspace(userId)).id;
     const agentRagContext = await getRAGContext(userMessage, workspaceId);
@@ -168,7 +181,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
             .slice(0, 5)
             .map(r => `- [${r.title}](${r.url})`)
             .join("\n");
-          webContext = `**Web Search Results (${new Date().toLocaleDateString()}):**\n${webResults.answer}\n\n**Sources:**\n${sources}`;
+          webContext = `**Web Search Results (${new Date().toISOString().slice(0, 10)}):**\n${webResults.answer}\n\n**Sources:**\n${sources}`;
         }
       } catch (e) {
         console.error("Tavily error:", e);
@@ -177,13 +190,13 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
 
     const contextParts: string[] = [];
     if (agentRagContext) {
-      contextParts.push(`📚 WORKSPACE BAĞLAMI:\n${agentRagContext}`);
+      contextParts.push(`📚 WORKSPACE CONTEXT:\n${agentRagContext}`);
     }
     if (webContext) {
-      contextParts.push(`🌐 GÜNCEL WEB BİLGİSİ:\n${webContext}`);
+      contextParts.push(`🌐 CURRENT WEB INFORMATION:\n${webContext}`);
     }
 
-    const enhancedSystem = capability.systemPrompt + (contextParts.length > 0
+    const enhancedSystem = capabilitySystemPrompt(agentMode as ChatCapability, locale) + (contextParts.length > 0
       ? `\n\n---\n${contextParts.join("\n\n---\n")}`
       : "");
 
@@ -213,6 +226,7 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
       messages: chatMessages,
       context: { userId, workspaceId },
       maxSteps: 6,
+      locale,
       trace: { name: "chat.agent", modelName, provider },
     });
   } catch (error) {
@@ -244,12 +258,12 @@ Respond ONLY with JSON: {"title": "...", "content": "..."}`,
   let finalResponse = agentResult.text;
   if (agentResult.createdDocs.length > 0) {
     finalResponse +=
-      `\n\n📄 **Kaydedilen dokümanlar:**\n` +
+      `\n\n📄 **${copyLocale === "tr" ? "Kaydedilen planlar" : "Saved plans"}:**\n` +
       agentResult.createdDocs.map((d) => `- ${d.title}`).join("\n");
   }
   if (agentResult.createdTasks.length > 0) {
     finalResponse +=
-      `\n\n✅ **Oluşturulan görevler:**\n` +
+      `\n\n✅ **${copyLocale === "tr" ? "Oluşturulan görevler" : "Created tasks"}:**\n` +
       agentResult.createdTasks.map((t) => `- ${t.title}`).join("\n");
   }
 

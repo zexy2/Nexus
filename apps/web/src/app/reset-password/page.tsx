@@ -1,5 +1,6 @@
 "use client";
 
+import { LocaleToggle } from "@/components/shared/locale-toggle";
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,9 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+      <div className="fixed right-4 top-4 z-50">
+        <LocaleToggle />
+      </div>
       <div className="w-full max-w-md">
         <div className="mb-8 flex items-center justify-center gap-2">
           <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/80">

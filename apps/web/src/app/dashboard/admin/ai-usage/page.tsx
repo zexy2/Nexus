@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useLocale } from "@/lib/i18n/provider";
+import { intlLocale, type AppLocale } from "@/lib/i18n/locale";
 import type { AiUsageReport } from "@/lib/ai/usage-report";
 
 type WindowReport = AiUsageReport["today"];
@@ -30,8 +31,8 @@ async function fetchReport(): Promise<LoadState> {
   }
 }
 
-function useFormatters(locale: string) {
-  const intl = locale === "tr" ? "tr-TR" : "en-US";
+function useFormatters(locale: AppLocale) {
+  const intl = intlLocale(locale);
   const number = new Intl.NumberFormat(intl);
   const percent = new Intl.NumberFormat(intl, { style: "percent", maximumFractionDigits: 1 });
   const usd = new Intl.NumberFormat(intl, { style: "currency", currency: "USD", maximumFractionDigits: 4 });
