@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles,
@@ -12,16 +13,16 @@ import {
   ArrowLeft,
   Check,
   X,
-  Palette,
-  Bell,
   Shield,
   Rocket,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useUserPreferences } from "@/lib/store";
+import { showToast } from "@/components/shared/toast-provider";
+import { friendlyError } from "@/lib/friendly-error";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
 
@@ -48,11 +49,6 @@ const steps: OnboardingStep[] = [
     id: "flow",
     icon: Zap,
     color: "emerald",
-  },
-  {
-    id: "preferences",
-    icon: Palette,
-    color: "amber",
   },
   {
     id: "ready",
@@ -112,34 +108,51 @@ interface OnboardingModalProps {
 
 export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
   const t = useT();
+  const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
   const [workspaceName, setWorkspaceName] = useState("");
-  const [selectedControlPoints, setSelectedControlPoints] = useState<string[]>([
-    "version",
-    "impact",
-  ]);
-  
-  const {
-    setHasCompletedOnboarding,
-    setAutoSave,
-    setNotificationsEnabled,
-    autoSave,
-    notificationsEnabled,
-  } = useUserPreferences();
-  
-  // Local state for AI suggestions since it's not in store
-  const [aiSuggestionsEnabled, setAiSuggestionsEnabled] = useState(true);
+  const [finishing, setFinishing] = useState(false);
+
+  const setHasCompletedOnboarding = useUserPreferences((state) => state.setHasCompletedOnboarding);
 
   const step = steps[currentStep];
+
+  // The last step persists what the user entered: the workspace name and the
+  // starter plan + task (POST /api/onboarding/bootstrap, idempotent).
+  const finish = useCallback(async () => {
+    if (finishing) return;
+    setFinishing(true);
+    try {
+      const response = await fetch("/api/onboarding/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceName: workspaceName.trim() || undefined,
+          includeStarterData: true,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        showToast.error(friendlyError(body, t, t("feedback.onboardingFailed")));
+        return;
+      }
+      setHasCompletedOnboarding(true);
+      onComplete();
+      router.refresh();
+    } catch {
+      showToast.error(t("feedback.onboardingFailed"));
+    } finally {
+      setFinishing(false);
+    }
+  }, [finishing, workspaceName, t, setHasCompletedOnboarding, onComplete, router]);
 
   const handleNext = useCallback(() => {
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
-      setHasCompletedOnboarding(true);
-      onComplete();
+      void finish();
     }
-  }, [currentStep, setHasCompletedOnboarding, onComplete]);
+  }, [currentStep, finish]);
 
   const handleBack = useCallback(() => {
     if (currentStep > 0) {
@@ -151,14 +164,6 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
     setHasCompletedOnboarding(true);
     onSkip();
   }, [setHasCompletedOnboarding, onSkip]);
-
-  const toggleControlPoint = useCallback((pointId: string) => {
-    setSelectedControlPoints((prev) =>
-      prev.includes(pointId)
-        ? prev.filter((id) => id !== pointId)
-        : [...prev, pointId]
-    );
-  }, []);
 
   // Animation variants
   const slideVariants = {
@@ -348,17 +353,9 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
               {step.id === "flow" && (
                 <div className="grid grid-cols-2 gap-3">
                   {controlPoints.map((point) => (
-                    <motion.button
+                    <div
                       key={point.id}
-                      onClick={() => toggleControlPoint(point.id)}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={cn(
-                        "p-4 rounded-xl border-2 text-left transition-all",
-                        selectedControlPoints.includes(point.id)
-                          ? "border-foreground/40 bg-popover/[0.06]"
-                          : "border-border hover:border-foreground/20"
-                      )}
+                      className="p-4 rounded-xl border-2 border-border text-left"
                     >
                       <div className="flex items-start gap-3">
                         <div
@@ -370,79 +367,16 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                           {point.icon}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium text-foreground">
-                              {t(`onboarding.controlPoints.${point.id}.name`)}
-                            </h4>
-                            {selectedControlPoints.includes(point.id) && (
-                              <Check className="w-4 h-4 text-foreground" />
-                            )}
-                          </div>
+                          <h4 className="font-medium text-foreground">
+                            {t(`onboarding.controlPoints.${point.id}.name`)}
+                          </h4>
                           <p className="text-sm text-muted-foreground mt-0.5">
                             {t(`onboarding.controlPoints.${point.id}.description`)}
                           </p>
                         </div>
                       </div>
-                    </motion.button>
+                    </div>
                   ))}
-                </div>
-              )}
-
-              {step.id === "preferences" && (
-                <div className="max-w-sm mx-auto space-y-4">
-                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-foreground/10 flex items-center justify-center">
-                        <Sparkles className="w-5 h-5 text-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{t("onboarding.aiSuggestions")}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {t("onboarding.aiSuggestionsDesc")}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={aiSuggestionsEnabled}
-                      onCheckedChange={setAiSuggestionsEnabled}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-500/15 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-emerald-700 dark:text-emerald-400" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{t("onboarding.autoSave")}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {t("onboarding.autoSaveDesc")}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={autoSave}
-                      onCheckedChange={setAutoSave}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 bg-foreground/[0.04] rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-foreground/10 flex items-center justify-center">
-                        <Bell className="w-5 h-5 text-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">{t("onboarding.notifications")}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {t("onboarding.notificationsDesc")}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={notificationsEnabled}
-                      onCheckedChange={setNotificationsEnabled}
-                    />
-                  </div>
                 </div>
               )}
 
@@ -469,10 +403,7 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
                     </span>
                     <span className="flex items-center gap-1">
                       <Check className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                      {t("onboarding.controlPointsReady").replace(
-                        "{n}",
-                        String(selectedControlPoints.length)
-                      )}
+                      {t("feedback.onboardingStarterPlan")}
                     </span>
                   </div>
                 </div>
@@ -495,12 +426,13 @@ export function OnboardingModal({ onComplete, onSkip }: OnboardingModalProps) {
 
           <Button
             onClick={handleNext}
+            disabled={finishing}
             className="bg-foreground hover:bg-foreground/90 text-background gap-2"
           >
             {currentStep === steps.length - 1 ? (
               <>
                 {t("onboarding.start")}
-                <Rocket className="w-4 h-4" />
+                {finishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
               </>
             ) : (
               <>

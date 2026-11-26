@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   existingDoc: undefined as unknown,
   existingTask: undefined as unknown,
   inserted: [] as Array<{ table: unknown; values: unknown }>,
+  updated: [] as unknown[],
   getWorkflow: vi.fn(),
   traces: [] as unknown[],
 }));
@@ -26,6 +27,12 @@ vi.mock("@/lib/db", () => ({
       docs: { findFirst: async () => h.existingDoc },
       tasks: { findFirst: async () => h.existingTask },
     },
+    update: () => ({
+      set: (values: Record<string, unknown>) => {
+        h.updated.push(values);
+        return { where: () => ({ returning: async () => [{ id: "ws-1", ownerId: "user-1", ...values }] }) };
+      },
+    }),
     insert: (table: unknown) => ({
       values: (values: unknown) => {
         h.inserted.push({ table, values });
@@ -51,6 +58,7 @@ import { GET as getWorkflowById } from "@/app/api/workflows/[id]/route";
 beforeEach(() => {
   vi.clearAllMocks();
   h.inserted = [];
+  h.updated = [];
   h.existingDoc = undefined;
   h.existingTask = undefined;
   h.traces = [];
@@ -85,6 +93,29 @@ describe("POST /api/onboarding/bootstrap", () => {
       nextAction: "generate_ai_document",
     });
     expect(h.inserted).toHaveLength(2);
+  });
+
+  it("renames the existing default workspace to the name chosen in onboarding", async () => {
+    h.ensureWs.mockResolvedValue({ id: "ws-1", name: "My Workspace", ownerId: "user-1" });
+    const res = await bootstrap(bootReq({ workspaceName: "Acme Delivery", includeStarterData: false }));
+    expect(res.status).toBe(200);
+    expect(h.updated).toEqual([expect.objectContaining({ name: "Acme Delivery" })]);
+    expect((await res.json()).workspace).toEqual({ id: "ws-1", name: "Acme Delivery" });
+  });
+
+  it("does not rename without an explicit name or for demo users", async () => {
+    h.ensureWs.mockResolvedValue({ id: "ws-1", name: "My Workspace", ownerId: "user-1" });
+    await bootstrap(bootReq({ includeStarterData: false }));
+    const previous = process.env.DEMO_MODE;
+    process.env.DEMO_MODE = "true";
+    try {
+      h.protect.mockResolvedValue({ success: true, user: { id: "user-1", email: "abc@sessions.nexus.invalid", name: "D" } });
+      await bootstrap(bootReq({ workspaceName: "Renamed demo", includeStarterData: false }));
+    } finally {
+      if (previous === undefined) delete process.env.DEMO_MODE;
+      else process.env.DEMO_MODE = previous;
+    }
+    expect(h.updated).toEqual([]);
   });
 
   it("is idempotent: reuses existing starter data", async () => {

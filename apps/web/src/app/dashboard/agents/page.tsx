@@ -42,6 +42,7 @@ import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { friendlyError } from "@/lib/friendly-error";
 
 type Run = {
   id: string;
@@ -218,7 +219,7 @@ export default function WorkflowCenterPage() {
           closeDialog();
           return;
         }
-        throw new Error(body?.message || body?.error || t("agents.center.workflowStartError"));
+        throw new Error(friendlyError(body, t, t("agents.center.workflowStartError")));
       }
 
       showToast.success(t("agents.center.workflowStarted"));
@@ -331,23 +332,36 @@ export default function WorkflowCenterPage() {
           </div>
         ) : (
           <div className="divide-y divide-border border-y border-border">
-            {codingJobs.map((job) => (
-              <Link key={job.id} href={`/dashboard/tasks/${job.task?.id || ""}`} className="grid gap-3 py-4 transition-colors hover:bg-foreground/[0.02] md:grid-cols-[140px_minmax(0,1fr)_180px]">
-                <div>
-                  <Badge variant="outline" className={cn(
-                    "uppercase",
-                    job.status === "outdated" ? "border-amber-400/25 text-amber-800 dark:text-amber-200" :
-                      job.status === "submitted" ? "border-blue-400/25 text-blue-800 dark:text-blue-200" :
-                        job.status === "approved" ? "border-emerald-400/25 text-emerald-800 dark:text-emerald-200" : "border-border text-muted-foreground"
-                  )}>{job.status}</Badge>
+            {codingJobs.map((job) => {
+              const rowClassName = "grid gap-3 py-4 transition-colors md:grid-cols-[140px_minmax(0,1fr)_180px]";
+              const content = (
+                <>
+                  <div>
+                    <Badge variant="outline" className={cn(
+                      "uppercase",
+                      job.status === "outdated" ? "border-amber-400/25 text-amber-800 dark:text-amber-200" :
+                        job.status === "submitted" ? "border-blue-400/25 text-blue-800 dark:text-blue-200" :
+                          job.status === "approved" ? "border-emerald-400/25 text-emerald-800 dark:text-emerald-200" : "border-border text-muted-foreground"
+                    )}>{job.status}</Badge>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{job.task?.title || t("feedback.agentJobTaskDeleted")}</p>
+                    <p className="mt-1 text-xs text-foreground-faint">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
+                  </div>
+                  <div className="text-xs text-foreground-faint md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
+                </>
+              );
+              // A job whose task was deleted has nowhere to link to.
+              return job.task ? (
+                <Link key={job.id} href={`/dashboard/tasks/${job.task.id}`} className={cn(rowClassName, "hover:bg-foreground/[0.02]")}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={job.id} className={rowClassName} data-testid="agent-job-orphaned">
+                  {content}
                 </div>
-                <div>
-                  <p className="font-medium text-foreground">{job.task?.title || job.id}</p>
-                  <p className="mt-1 text-xs text-foreground-faint">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
-                </div>
-                <div className="text-xs text-foreground-faint md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

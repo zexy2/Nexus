@@ -10,15 +10,17 @@ vi.mock("@/lib/api-middleware", () => ({
 }));
 
 const docsFindMany = vi.fn();
-const workspacesFindFirst = vi.fn();
+const usersFindMany = vi.fn();
 const dbInsert = vi.fn();
+const dbSelect = vi.fn();
 vi.mock("@/lib/db", () => ({
   db: {
     query: {
       docs: { findMany: (...a: unknown[]) => docsFindMany(...a) },
-      workspaces: { findFirst: (...a: unknown[]) => workspacesFindFirst(...a) },
+      users: { findMany: (...a: unknown[]) => usersFindMany(...a) },
     },
     insert: (...a: unknown[]) => dbInsert(...a),
+    select: (...a: unknown[]) => dbSelect(...a),
   },
 }));
 
@@ -68,28 +70,34 @@ describe("GET /api/docs", () => {
     expect(docsFindMany).not.toHaveBeenCalled();
   });
 
-  it("lists documents in the response shape", async () => {
+  it("lists documents in the response shape with the creator's display name", async () => {
     getAccessibleWorkspaceIds.mockResolvedValue(["ws-1"]);
     docsFindMany.mockResolvedValue([
       { id: "d1", title: "A", iconEmoji: "x", updatedAt, createdBy: "user-1", isAiGenerated: 1, isFavorite: 0 },
+      { id: "d2", title: "B", iconEmoji: null, updatedAt, createdBy: null, isAiGenerated: 0, isFavorite: 1 },
     ]);
+    usersFindMany.mockResolvedValue([{ id: "user-1", name: "Ada", email: "ada@x.com" }]);
     const res = await GET();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
       {
         id: "d1", title: "A", iconEmoji: "x", updatedAt: updatedAt.toISOString(),
-        createdBy: "user-1", isAiGenerated: true, isFavorite: false,
+        createdBy: "user-1", createdByName: "Ada", isAiGenerated: true, isFavorite: false,
+      },
+      {
+        id: "d2", title: "B", iconEmoji: null, updatedAt: updatedAt.toISOString(),
+        createdBy: null, createdByName: null, isAiGenerated: false, isFavorite: true,
       },
     ]);
+    expect(usersFindMany).toHaveBeenCalledTimes(1);
   });
 
-  it("degrades to [] on a database error", async () => {
+  it("returns 500 (not a fake empty list) on a database error", async () => {
     getAccessibleWorkspaceIds.mockRejectedValue(new Error("db down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await GET();
     spy.mockRestore();
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([]);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -162,29 +170,34 @@ describe("GET /api/docs/archived", () => {
     expect((await archivedGET()).status).toBe(401);
   });
 
-  it("returns [] when the user owns no workspace", async () => {
-    workspacesFindFirst.mockResolvedValue(undefined);
+  it("returns [] when the user has no accessible workspace", async () => {
+    getAccessibleWorkspaceIds.mockResolvedValue([]);
     const res = await archivedGET();
     expect(await res.json()).toEqual([]);
+    expect(dbSelect).not.toHaveBeenCalled();
   });
 
-  it("lists archived documents", async () => {
-    workspacesFindFirst.mockResolvedValue({ id: "ws-1" });
-    docsFindMany.mockResolvedValue([
-      { id: "d9", title: "Old", iconEmoji: "x", updatedAt, createdBy: "user-1" },
-    ]);
+  it("lists archived documents across accessible workspaces with the owner-only delete flag", async () => {
+    getAccessibleWorkspaceIds.mockResolvedValue(["ws-1", "ws-2"]);
+    dbSelect.mockReturnValue(
+      chain([
+        { doc: { id: "d9", title: "Old", iconEmoji: "x", updatedAt, createdBy: "user-1" }, workspaceOwnerId: "user-1" },
+        { doc: { id: "d8", title: "Shared", iconEmoji: null, updatedAt, createdBy: "user-2" }, workspaceOwnerId: "user-2" },
+      ])
+    );
     const res = await archivedGET();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
-      { id: "d9", title: "Old", iconEmoji: "x", updatedAt: updatedAt.toISOString(), createdBy: "user-1" },
+      { id: "d9", title: "Old", iconEmoji: "x", updatedAt: updatedAt.toISOString(), createdBy: "user-1", canDeletePermanently: true },
+      { id: "d8", title: "Shared", iconEmoji: null, updatedAt: updatedAt.toISOString(), createdBy: "user-2", canDeletePermanently: false },
     ]);
   });
 
-  it("degrades to [] on a database error", async () => {
-    workspacesFindFirst.mockRejectedValue(new Error("db down"));
+  it("returns 500 (not a fake empty archive) on a database error", async () => {
+    getAccessibleWorkspaceIds.mockRejectedValue(new Error("db down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await archivedGET();
     spy.mockRestore();
-    expect(await res.json()).toEqual([]);
+    expect(res.status).toBe(500);
   });
 });

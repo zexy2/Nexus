@@ -20,6 +20,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { friendlyError } from "@/lib/friendly-error";
 import {
   LIVING_PLAN_ANALYSIS_STARTED_EVENT,
   type LivingPlanAnalysisStartedDetail,
@@ -66,6 +67,15 @@ type LivingPlan = {
     proposalCount: number;
     workflowId: string | null;
     createdAt: string;
+  } | null;
+  /** Latest plan-impact run for this doc (server state, survives reloads). */
+  latestAnalysis?: {
+    executionId: string;
+    workflowId: string | null;
+    status: string;
+    error: string | null;
+    createdAt: string;
+    completedAt: string | null;
   } | null;
 };
 
@@ -144,7 +154,10 @@ type AnalysisState =
   | { status: "running"; workflowId: string; executionId: string; startedAt: number }
   | { status: "failed"; message: string };
 
-const PLAN_ANALYSIS_TIMEOUT_MS = 120_000;
+// After this long the panel says the run is slow, but keeps following the
+// server's status: the workflow may still finish (it used to be marked failed).
+const PLAN_ANALYSIS_SLOW_MS = 120_000;
+const ACTIVE_RUN_STATUSES = new Set(["pending", "running"]);
 
 export function LivingPlanInspector({
   docId,
@@ -158,7 +171,9 @@ export function LivingPlanInspector({
   const [plan, setPlan] = useState<LivingPlan | null>(null);
   const [impactGraph, setImpactGraph] = useState<ImpactGraph | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
+  const [slow, setSlow] = useState(false);
 
   const readableError = useCallback((error?: unknown) => {
     const message = typeof error === "string" ? error : "";
@@ -189,13 +204,35 @@ export function LivingPlanInspector({
     return data;
   }, [docId]);
 
+  const loadInitial = useCallback(async () => {
+    try {
+      const data = await fetchPlan();
+      setLoadFailed(false);
+      // Resume an analysis that is still running on the server (e.g. after a
+      // reload or when another tab started it).
+      const run = data.latestAnalysis;
+      if (!data.pendingChangeSet && run?.workflowId && ACTIVE_RUN_STATUSES.has(run.status)) {
+        const startedAt = Date.parse(run.createdAt);
+        setAnalysis({
+          status: "running",
+          workflowId: run.workflowId,
+          executionId: run.executionId,
+          startedAt: Number.isFinite(startedAt) ? startedAt : Date.now(),
+        });
+      }
+      void fetchImpactGraph();
+    } catch {
+      // Never fall through to "Create baseline" on a failed load.
+      setLoadFailed(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchImpactGraph, fetchPlan]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
-    void fetchPlan()
-      .then(() => fetchImpactGraph())
-      .catch(() => setPlan(null))
-      .finally(() => setLoading(false));
-  }, [fetchImpactGraph, fetchPlan]);
+    void loadInitial();
+  }, [loadInitial]);
 
   // The demo guided tour can start the analysis from outside this panel;
   // follow that run exactly as if the panel's own button had started it.
@@ -225,17 +262,13 @@ export function LivingPlanInspector({
         if (cancelled) return;
         if (current.pendingChangeSet) {
           setAnalysis({ status: "idle" });
+          setSlow(false);
           return;
         }
 
-        if (Date.now() - analysis.startedAt > PLAN_ANALYSIS_TIMEOUT_MS) {
-          setAnalysis({
-            status: "failed",
-            message: t('docs.livingPlan.timedOut'),
-          });
-          return;
-        }
+        setSlow(Date.now() - analysis.startedAt > PLAN_ANALYSIS_SLOW_MS);
 
+        // The server reconciles the run with Temporal; trust its terminal state.
         const response = await fetch(
           `/api/workflows?workflowId=${encodeURIComponent(analysis.workflowId)}`,
           { cache: "no-store" }
@@ -243,10 +276,16 @@ export function LivingPlanInspector({
         const workflow = await response.json().catch(() => null);
         if (cancelled || !response.ok) return;
         if (workflow?.status === "failed") {
+          setSlow(false);
           setAnalysis({
             status: "failed",
             message: readableError(workflow.error),
           });
+        } else if (workflow?.status === "completed") {
+          // Finished without a review to open (e.g. no impactful changes).
+          setSlow(false);
+          setAnalysis({ status: "idle" });
+          await fetchPlan();
         }
       } catch {
         // Temporary polling failures should not discard a running analysis.
@@ -380,7 +419,7 @@ export function LivingPlanInspector({
         throw new Error(
           body?.error === "AI_PROVIDER_UNAVAILABLE"
             ? t('docs.livingPlan.aiUnavailable')
-            : body?.message || body?.error || t('docs.livingPlan.failedStart')
+            : friendlyError(body, t, t('docs.livingPlan.failedStart'))
         );
       }
       setAnalysis({
@@ -401,6 +440,32 @@ export function LivingPlanInspector({
     return (
       <aside className="border-t border-border px-5 py-8 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
         <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </aside>
+    );
+  }
+
+  if (loadFailed && !plan) {
+    return (
+      <aside
+        role="alert"
+        data-testid="living-plan-load-error"
+        className="border-t border-border px-5 py-8 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8"
+      >
+        <div className="flex items-start gap-2 text-sm text-foreground">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+          {t('docs.livingPlan.loadError')}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-4"
+          onClick={() => {
+            setLoading(true);
+            void loadInitial();
+          }}
+        >
+          {t('ux.retry')}
+        </Button>
       </aside>
     );
   }
@@ -478,9 +543,9 @@ export function LivingPlanInspector({
       )}
 
       {analysis.status === "running" && (
-        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-foreground-subtle">
+        <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-foreground-subtle" data-testid="living-plan-running">
           <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-cyan-700 dark:text-cyan-300" />
-          {t('docs.livingPlan.running')}
+          {slow ? t('feedback.analysisSlow') : t('docs.livingPlan.running')}
         </div>
       )}
       {analysis.status === "failed" && (

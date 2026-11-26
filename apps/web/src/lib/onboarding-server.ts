@@ -3,6 +3,7 @@ import { docs, tasks } from "@nexus/database/schema";
 import { inArray } from "drizzle-orm";
 import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 import { isOnboardingEligible } from "@/lib/onboarding";
+import { isDemoEmail } from "@/lib/production-guardrails";
 
 /**
  * Server-side onboarding eligibility (see lib/onboarding.ts). Fails closed:
@@ -11,8 +12,12 @@ import { isOnboardingEligible } from "@/lib/onboarding";
  */
 export async function getOnboardingEligibility(
   userId: string,
-  userCreatedAt: Date | string | null | undefined
+  userCreatedAt: Date | string | null | undefined,
+  email?: string | null
 ): Promise<boolean> {
+  // Demo sessions land on a seeded workspace; the modal would only obstruct
+  // the guided demo (and its E2E flows).
+  if (isDemoEmail(email)) return false;
   // Cheap check first: accounts older than the launch never qualify.
   if (!isOnboardingEligible({ userCreatedAt, hasWorkspaceContent: false })) return false;
   try {

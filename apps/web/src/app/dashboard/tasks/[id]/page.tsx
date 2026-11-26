@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -45,6 +45,7 @@ import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { friendlyError } from "@/lib/friendly-error";
 
 type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
 type TaskPriority = "low" | "medium" | "high" | "urgent";
@@ -66,7 +67,15 @@ type Task = {
   updatedAt: string;
   agentJob: { id: string; status: string } | null;
   agentHandoffWritable: boolean;
+  /** False when the workspace has no repository: agent handoff cannot start. */
+  agentRepositoryConfigured?: boolean;
 };
+
+/** Agent job states that can still change without the user doing anything. */
+const ACTIVE_AGENT_JOB_STATUSES = new Set(["queued", "claimed", "running"]);
+const AGENT_JOB_POLL_MS = 5000;
+
+class ActionError extends Error {}
 
 type AgentJobDetail = {
   id: string;
@@ -121,6 +130,8 @@ export default function TaskDetailPage() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<"not_found" | "failed" | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -140,11 +151,13 @@ export default function TaskDetailPage() {
       try {
         const response = await fetch(`/api/tasks/${taskId}`, { cache: "no-store" });
         if (!response.ok) {
-          router.push("/dashboard/tasks");
+          // Show why instead of silently bouncing back to the board.
+          setLoadError(response.status === 404 || response.status === 400 ? "not_found" : "failed");
           return;
         }
 
         const data = await response.json() as Task;
+        setLoadError(null);
         setTask(data);
         setTitle(data.title);
         setDescription(data.description || "");
@@ -152,24 +165,50 @@ export default function TaskDetailPage() {
         setPriority(data.priority);
         setDueDate(toDateInput(data.dueDate));
       } catch {
-        router.push("/dashboard/tasks");
+        setLoadError("failed");
       } finally {
         setLoading(false);
       }
     }
 
     if (taskId) void fetchTask();
-  }, [router, taskId]);
+  }, [taskId, reloadKey]);
+
+  const loadAgentJob = useCallback(async (jobId: string) => {
+    const response = await fetch(`/api/agent-jobs/${jobId}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    return await response.json() as AgentJobDetail;
+  }, []);
 
   useEffect(() => {
     if (!task?.agentJob?.id) return;
     let cancelled = false;
-    fetch(`/api/agent-jobs/${task.agentJob.id}`, { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : null)
+    loadAgentJob(task.agentJob.id)
       .then((data) => { if (!cancelled) setAgentJob(data); })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [task?.agentJob?.id]);
+  }, [task?.agentJob?.id, loadAgentJob]);
+
+  // An agent job advances on its own (claimed -> running -> submitted) as the
+  // external coding agent works; poll while it is active so the panel and the
+  // review buttons appear without a manual reload.
+  const activeJobId = loadedAgentJob && ACTIVE_AGENT_JOB_STATUSES.has(loadedAgentJob.status)
+    ? loadedAgentJob.id
+    : null;
+  useEffect(() => {
+    if (!activeJobId) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      loadAgentJob(activeJobId)
+        .then((data) => { if (!cancelled && data) setAgentJob(data); })
+        .catch(() => undefined);
+    }, AGENT_JOB_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeJobId, loadAgentJob]);
 
   const hasChanges = useMemo(() => {
     if (!task) return false;
@@ -213,11 +252,11 @@ export default function TaskDetailPage() {
         body: JSON.stringify(body || {}),
       });
       const result = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(result?.message || result?.error || t("taskDetail.agentActionFailed"));
+      if (!response.ok) throw new ActionError(friendlyError(result, t, t("taskDetail.agentActionFailed")));
       await refreshTaskAndJob();
       showToast.success(t("taskDetail.agentActionComplete"));
     } catch (error) {
-      showToast.error(error instanceof Error ? error.message : t("taskDetail.agentActionFailed"));
+      showToast.error(error instanceof ActionError ? error.message : t("taskDetail.agentActionFailed"));
     } finally {
       setAgentAction(false);
     }
@@ -260,7 +299,7 @@ export default function TaskDetailPage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(body?.message || body?.error || t("taskDetail.saveFailed"));
+        throw new ActionError(friendlyError(body, t, t("taskDetail.saveFailed")));
       }
 
       const updated = body as Task;
@@ -277,7 +316,7 @@ export default function TaskDetailPage() {
       setDueDate(toDateInput(updated.dueDate ?? null));
       showToast.success(t("taskDetail.saved"));
     } catch (error) {
-      showToast.error(error instanceof Error ? error.message : t("taskDetail.saveFailed"));
+      showToast.error(error instanceof ActionError ? error.message : t("taskDetail.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -290,12 +329,12 @@ export default function TaskDetailPage() {
       const response = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        throw new Error(body?.message || body?.error || t("taskDetail.archiveFailed"));
+        throw new ActionError(friendlyError(body, t, t("taskDetail.archiveFailed")));
       }
       showToast.success(t("taskDetail.archived"));
       router.push("/dashboard/tasks");
     } catch (error) {
-      showToast.error(error instanceof Error ? error.message : t("taskDetail.archiveFailed"));
+      showToast.error(error instanceof ActionError ? error.message : t("taskDetail.archiveFailed"));
       setDeleting(false);
     }
   };
@@ -308,7 +347,38 @@ export default function TaskDetailPage() {
     );
   }
 
-  if (!task) return null;
+  if (!task) {
+    const notFound = loadError === "not_found";
+    return (
+      <div role="alert" className="flex min-h-[70vh] flex-col items-center justify-center gap-3 px-6 text-center" data-testid="task-load-error">
+        <AlertTriangle className="size-8 text-muted-foreground" />
+        <h1 className="text-lg font-semibold">
+          {notFound ? t("feedback.taskNotFoundTitle") : t("feedback.taskLoadFailedTitle")}
+        </h1>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          {notFound ? t("feedback.taskNotFoundDesc") : t("feedback.taskLoadFailedDesc")}
+        </p>
+        <div className="mt-2 flex gap-2">
+          {!notFound && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLoading(true);
+                setReloadKey((key) => key + 1);
+              }}
+            >
+              {t("ux.retry")}
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/dashboard/tasks">{t("feedback.backToBoard")}</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const repositoryMissing = task.agentRepositoryConfigured === false;
 
   const StatusIcon = statusIcon[status];
 
@@ -404,11 +474,25 @@ export default function TaskDetailPage() {
             {!agentJob ? (
               <>
                 <p className="text-xs leading-5 text-foreground-subtle">{t("taskDetail.agentReadyDesc")}</p>
-                <Button className="mt-4 w-full gap-2" disabled={agentAction || !task.agentHandoffWritable} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
+                <Button
+                  className="mt-4 w-full gap-2"
+                  disabled={agentAction || !task.agentHandoffWritable || repositoryMissing}
+                  onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}
+                  data-testid="send-to-agent"
+                >
                   {agentAction ? <Loader2 className="size-4 animate-spin" /> : <Bot className="size-4" />}
                   {t("taskDetail.sendToAgent")}
                 </Button>
-                {!task.agentHandoffWritable && <p className="mt-2 text-xs text-amber-800/70 dark:text-amber-200/70">{t("taskDetail.demoAgentReadOnly")}</p>}
+                {!task.agentHandoffWritable ? (
+                  <p className="mt-2 text-xs text-amber-800/70 dark:text-amber-200/70">{t("taskDetail.demoAgentReadOnly")}</p>
+                ) : repositoryMissing ? (
+                  <p className="mt-2 text-xs text-amber-800/70 dark:text-amber-200/70" data-testid="agent-repository-missing">
+                    {t("feedback.agentRepositoryMissing")}{" "}
+                    <Link href="/dashboard/settings?tab=agents" className="underline underline-offset-2">
+                      {t("feedback.agentRepositoryMissingLink")}
+                    </Link>
+                  </p>
+                ) : null}
               </>
             ) : (
               <div className="space-y-4">
@@ -460,7 +544,7 @@ export default function TaskDetailPage() {
                   </Button>
                 )}
                 {["rejected", "failed", "cancelled"].includes(agentJob.status) && (
-                  <Button className="w-full gap-2" size="sm" disabled={agentAction} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
+                  <Button className="w-full gap-2" size="sm" disabled={agentAction || repositoryMissing || !task.agentHandoffWritable} onClick={() => runAgentAction(`/api/tasks/${taskId}/agent-jobs`)}>
                     <Bot className="size-3.5" />
                     {t("taskDetail.sendToAgentAgain")}
                   </Button>

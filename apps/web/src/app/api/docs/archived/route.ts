@@ -2,7 +2,8 @@ import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
 import { docs, workspaces } from "@nexus/database/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
+import { getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
 
 // GET - List archived documents
 export async function GET() {
@@ -13,32 +14,33 @@ export async function GET() {
     }
     const userId = session.user.id;
 
-    // Get user's workspace
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.ownerId, userId),
-    });
-
-    if (!workspace) {
+    // Same scope as the docs list and as restore (PATCH), which both accept
+    // workspace members, not only owners.
+    const workspaceIds = await getAccessibleWorkspaceIds(userId);
+    if (workspaceIds.length === 0) {
       return Response.json([], { status: 200 });
     }
 
-    // Get archived documents only
-    const documents = await db.query.docs.findMany({
-      where: and(eq(docs.workspaceId, workspace.id), eq(docs.isArchived, 1)),
-      orderBy: [desc(docs.updatedAt)],
-    });
+    const documents = await db
+      .select({ doc: docs, workspaceOwnerId: workspaces.ownerId })
+      .from(docs)
+      .innerJoin(workspaces, eq(docs.workspaceId, workspaces.id))
+      .where(and(inArray(docs.workspaceId, workspaceIds), eq(docs.isArchived, 1)))
+      .orderBy(desc(docs.updatedAt));
 
     return Response.json(
-      documents.map((d) => ({
+      documents.map(({ doc: d, workspaceOwnerId }) => ({
         id: d.id,
         title: d.title,
         iconEmoji: d.iconEmoji,
         updatedAt: d.updatedAt.toISOString(),
         createdBy: d.createdBy,
+        // Permanent delete is owner-only (see DELETE /api/docs/:id?permanent=1).
+        canDeletePermanently: workspaceOwnerId === userId,
       }))
     );
   } catch (error) {
     console.error("Failed to fetch archived docs:", error);
-    return Response.json([], { status: 200 });
+    return Response.json({ error: "Failed to fetch archived documents" }, { status: 500 });
   }
 }

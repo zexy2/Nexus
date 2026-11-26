@@ -10,6 +10,7 @@ const h = vi.hoisted(() => ({
   selectRows: [] as unknown[],
   agentJob: undefined as unknown,
   pendingReview: undefined as unknown,
+  repository: undefined as unknown,
   updated: [] as unknown[],
   updateSet: vi.fn(),
 }));
@@ -41,6 +42,9 @@ vi.mock("@/lib/db", () => {
         agentJobs: {
           // GET: latest job; PATCH -> done: job awaiting review
           findFirst: async () => h.pendingReview ?? h.agentJob,
+        },
+        workspaceRepositories: {
+          findFirst: async () => h.repository,
         },
       },
     },
@@ -82,6 +86,7 @@ beforeEach(() => {
   h.selectRows = [{ task }];
   h.agentJob = undefined;
   h.pendingReview = undefined;
+  h.repository = undefined;
   h.updated = [{ ...task, title: "New", updatedAt: now }];
 });
 
@@ -107,7 +112,12 @@ describe("GET /api/tasks/[id]", () => {
       isArchived: false,
       agentJob: { id: "job-1" },
       agentHandoffWritable: true,
+      agentRepositoryConfigured: false,
     });
+  });
+  it("reports whether the workspace has a repository for agent handoff", async () => {
+    h.repository = { id: "repo-1" };
+    expect((await (await GET(json("GET"), params())).json()).agentRepositoryConfigured).toBe(true);
   });
   it("marks agent handoff read-only for demo users", async () => {
     h.verifySession.mockResolvedValue({ user: { id: "u", email: "demo@nexus.dev" } });
@@ -155,6 +165,17 @@ describe("PATCH /api/tasks/[id]", () => {
     expect(h.updateSet).toHaveBeenCalledWith(
       expect.objectContaining({ status: "done", completedAt: expect.any(Date) })
     );
+  });
+  it("restores an archived task with isArchived: false", async () => {
+    h.updated = [{ ...task, isArchived: 0, updatedAt: now }];
+    const res = await PATCH(json("PATCH", { isArchived: false }), params());
+    expect(res.status).toBe(200);
+    expect((await res.json()).isArchived).toBe(false);
+    expect(h.updateSet).toHaveBeenCalledWith(expect.objectContaining({ isArchived: 0 }));
+  });
+  it("400 when isArchived is not a boolean", async () => {
+    expect((await PATCH(json("PATCH", { isArchived: "no" }), params())).status).toBe(400);
+    expect(h.updateSet).not.toHaveBeenCalled();
   });
   it("updates the title", async () => {
     const res = await PATCH(json("PATCH", { title: "New" }), params());

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import {
+  agentExecutions,
   changeProposals,
   changeSets,
   docs,
@@ -103,7 +104,30 @@ export async function GET(
         .then((rows) => rows.length)
     : 0;
 
+  // Latest impact-analysis run for this plan, so the inspector can resume a
+  // running analysis after a reload instead of relying on client-only state.
+  const latestRun = pendingChangeSet
+    ? undefined
+    : await db.query.agentExecutions.findFirst({
+        where: and(
+          eq(agentExecutions.workspaceId, doc.workspaceId),
+          sql`${agentExecutions.input} ->> 'docId' = ${docId}`,
+          sql`${agentExecutions.input} ->> 'workflowType' = 'plan_impact'`
+        ),
+        orderBy: [desc(agentExecutions.createdAt)],
+      });
+
   return NextResponse.json({
+    latestAnalysis: latestRun
+      ? {
+          executionId: latestRun.id,
+          workflowId: latestRun.temporalWorkflowId,
+          status: latestRun.status,
+          error: latestRun.errorMessage ?? null,
+          createdAt: latestRun.createdAt.toISOString(),
+          completedAt: latestRun.completedAt?.toISOString() ?? null,
+        }
+      : null,
     doc: {
       id: doc.id,
       title: doc.title,

@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { verifySession } from "@/lib/api-middleware";
 import { unauthorized } from "@/lib/api-response";
-import { docs } from "@nexus/database/schema";
+import { docs, users } from "@nexus/database/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { enforceMutationBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { ensureDefaultWorkspace, getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
@@ -25,6 +25,16 @@ export async function GET() {
       orderBy: [desc(docs.updatedAt)],
     });
 
+    // Resolve creator ids to a display name so the list never shows raw UUIDs.
+    const creatorIds = [...new Set(documents.map((d) => d.createdBy).filter((id): id is string => Boolean(id)))];
+    const creators = creatorIds.length > 0
+      ? await db.query.users.findMany({
+          where: inArray(users.id, creatorIds),
+          columns: { id: true, name: true, email: true },
+        })
+      : [];
+    const creatorNames = new Map(creators.map((user) => [user.id, user.name || user.email || null]));
+
     return Response.json(
       documents.map((d) => ({
         id: d.id,
@@ -32,13 +42,15 @@ export async function GET() {
         iconEmoji: d.iconEmoji,
         updatedAt: d.updatedAt.toISOString(),
         createdBy: d.createdBy,
+        createdByName: d.createdBy ? creatorNames.get(d.createdBy) ?? null : null,
         isAiGenerated: d.isAiGenerated === 1,
         isFavorite: d.isFavorite === 1,
       }))
     );
   } catch (error) {
+    // Never disguise a failure as an empty list: the UI shows an error state.
     console.error("Failed to fetch docs:", error);
-    return Response.json([], { status: 200 });
+    return Response.json({ error: "Failed to fetch documents" }, { status: 500 });
   }
 }
 
