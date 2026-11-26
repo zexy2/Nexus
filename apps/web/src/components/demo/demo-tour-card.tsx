@@ -6,6 +6,7 @@ import { ArrowRight, Check, Copy, Loader2, Sparkles, Wand2, X } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/provider";
+import { localeHeaders } from "@/lib/i18n/locale";
 import { DEMO_SAMPLE_EDIT_TEXT } from "@/lib/demo-scenario-content";
 
 export type DemoTourState = {
@@ -149,7 +150,7 @@ export function DemoTourCard({
   const startAnalysis = async () => {
     setAnalysis({ status: "starting" });
     try {
-      const response = await fetch(`/api/plans/${state.planDocId}/analyze-change`, { method: "POST" });
+      const response = await fetch(`/api/plans/${state.planDocId}/analyze-change`, { method: "POST", headers: localeHeaders() });
       const body = await response.json().catch(() => null);
       if (response.status === 409 && body?.changeSetId) {
         await refresh();

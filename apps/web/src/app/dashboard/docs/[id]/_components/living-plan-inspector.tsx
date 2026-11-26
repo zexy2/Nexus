@@ -281,89 +281,14 @@ export function LivingPlanInspector({
 
   const graphDiagnostic = useMemo(() => {
     const code = impactGraph?.diagnostics?.[0];
-    const copy: Record<
-      NonNullable<typeof code>,
-      {
-        title: [string, string];
-        body: [string, string];
-        tips: [string[], string[]];
-      }
-    > = {
-      NO_INTEGRATION: {
-        title: ["GitHub veya Linear bağlantısı yok.", "No GitHub or Linear integration is connected."],
-        body: [
-          "Etki grafiği gerçek issue, PR ve test kanıtı göstermek için önce bir dış sistem bağlantısına ihtiyaç duyar.",
-          "The impact graph needs an external system connection before it can show real issues, PRs, and test evidence.",
-        ],
-        tips: [
-          ["Ayarlar > Bağlantılar bölümünden GitHub App'i bağlayın.", "Bağlantı sonrası kaynakları getirip senkronize edin."],
-          ["Connect the GitHub App from Settings > Integrations.", "Fetch resources and sync after connecting."],
-        ],
-      },
-      NO_SYNCED_ISSUES: {
-        title: [
-          "GitHub bağlı, fakat senkronize issue yok.",
-          "GitHub is connected, but no synced issues were found.",
-        ],
-        body: [
-          "Repo seçilmiş olsa bile Nexus grafiği ancak senkronize edilmiş issue kayıtlarıyla kurabilir.",
-          "Even with a selected repository, Nexus can build the graph only after issues are synced.",
-        ],
-        tips: [
-          ["Ayarlar > Bağlantılar bölümünde Kaynakları getir ve Senkronize et adımlarını çalıştırın.", "Repo'da en az bir issue olduğundan emin olun."],
-          ["Run Fetch resources and Sync from Settings > Integrations.", "Make sure the repository has at least one issue."],
-        ],
-      },
-      NO_REQUIREMENT_MATCHES: {
-        title: [
-          "Issue var, ama bu planın gereksinimleriyle eşleşmiyor.",
-          "Issues exist, but none match this plan's requirements.",
-        ],
-        body: [
-          "Nexus güvenilir bağlantı için issue başlığı veya açıklamasında REQ-001 gibi gereksinim anahtarlarını arar.",
-          "Nexus looks for requirement keys like REQ-001 in issue titles or descriptions to create reliable links.",
-        ],
-        tips: [
-          ["Issue başlığına veya açıklamasına REQ-001 ekleyin.", "Alternatif olarak değişiklik önerilerinden GitHub issue oluşturun."],
-          ["Add REQ-001 to the issue title or description.", "Alternatively create GitHub issues from change proposals."],
-        ],
-      },
-      NO_LINKED_PRS: {
-        title: [
-          "Issue eşleşti, fakat bağlı PR yok.",
-          "Issues are matched, but no linked PR was found.",
-        ],
-        body: [
-          "PR grafiğe girmek için issue numarasına veya gereksinim anahtarına açıkça referans vermeli.",
-          "A PR must explicitly reference the issue number or requirement key before it appears in the graph.",
-        ],
-        tips: [
-          ["PR açıklamasına Fixes #123 veya Closes #123 ekleyin.", "Branch veya PR başlığında REQ-001 kullanabilirsiniz."],
-          ["Add Fixes #123 or Closes #123 to the PR body.", "You can also use REQ-001 in the branch name or PR title."],
-        ],
-      },
-      NO_CHECK_RUNS: {
-        title: ["PR bağlı, fakat check sonucu yok.", "A PR is linked, but no check result is available."],
-        body: [
-          "GitHub Actions veya başka bir check run tamamlandığında Nexus test kanıtını grafiğe ekleyebilir.",
-          "When GitHub Actions or another check run completes, Nexus can attach the test evidence to the graph.",
-        ],
-        tips: [
-          ["PR üzerinde CI çalıştırın.", "Check tamamlandıktan sonra GitHub senkronizasyonunu yenileyin."],
-          ["Run CI on the PR.", "Refresh the GitHub sync after checks complete."],
-        ],
-      },
-    } as const;
-    const item = code ? copy[code] : null;
-    const index = locale === "tr" ? 0 : 1;
-    return item
-      ? {
-          title: item.title[index],
-          body: item.body[index],
-          tips: item.tips[index],
-        }
-      : null;
-  }, [impactGraph, locale]);
+    if (!code) return null;
+    const base = `livingPlan.diagnostics.${code}`;
+    return {
+      title: t(`${base}.title`),
+      body: t(`${base}.body`),
+      tips: [t(`${base}.tip1`), t(`${base}.tip2`)],
+    };
+  }, [impactGraph, t]);
 
   const startAnalysis = async () => {
     setAnalysis({ status: "starting" });
