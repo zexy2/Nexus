@@ -360,7 +360,7 @@ export default function DashboardPage() {
                 icon: meta.icon,
                 status,
                 description: execution
-                  ? `${t(`dashboard.exec${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)} • ${formatRelativeTime(execution.createdAt)}`
+                  ? `${execution.status === 'cancelled' ? t('runs.status.cancelled') : t(`dashboard.exec${execution.status.charAt(0).toUpperCase() + execution.status.slice(1)}`)} • ${formatRelativeTime(execution.createdAt)}`
                   : t('dashboard.noRecentExecutions'),
               };
             });

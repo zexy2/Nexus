@@ -111,6 +111,13 @@ export interface WorkflowResult<T = unknown> {
   status: WorkflowStatus;
   result?: T;
   error?: string;
+  /** Activities in flight (RUNNING only); see getPendingActivities. */
+  pendingActivities?: PendingActivity[];
+}
+
+export interface PendingActivity {
+  activityType: string;
+  attempt: number;
 }
 
 /**

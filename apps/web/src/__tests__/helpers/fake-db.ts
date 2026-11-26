@@ -3,8 +3,8 @@
  * need real state transitions (guarded UPDATE ... WHERE status IN (...)).
  *
  * WHERE clauses are rendered with drizzle's PgDialect and evaluated against
- * the stored rows. Only conjunctions of `col = $n` and `col in ($n, ...)` are
- * supported; anything else throws, so a test can never pass because the fake
+ * the stored rows. Only conjunctions of `col = $n`, `col in ($n, ...)` and
+ * `col is [not] null` are supported; anything else throws, so a test can never pass because the fake
  * silently ignored a predicate. Tables listed in `uniquePartial` enforce a
  * partial unique index and throw a drizzle-shaped 23505 error on violation.
  * `transaction` snapshots state and restores it if the callback throws.
@@ -38,6 +38,12 @@ export function compileWhere(where: SQL | undefined): (row: Row) => boolean {
       const column = camel(inMatch[1]!);
       const values = inMatch[2]!.split(", ").map((ref) => params[Number(ref.slice(1)) - 1]);
       return (row: Row) => values.includes(row[column]);
+    }
+    const nullMatch = part.match(/^"\w+"\."(\w+)" is (not )?null$/);
+    if (nullMatch) {
+      const column = camel(nullMatch[1]!);
+      const wantNull = !nullMatch[2];
+      return (row: Row) => (row[column] === null || row[column] === undefined) === wantNull;
     }
     throw new Error(`fake-db: unsupported WHERE fragment: ${part} (full: ${sql})`);
   });
@@ -112,8 +118,9 @@ export function createFakeDb(options: { uniquePartial?: Record<string, UniquePar
       return {
         values(values: Row | Row[]) {
           const list = Array.isArray(values) ? values : [values];
+          let conflictColumns: string[] | null = null;
           const run = () =>
-            list.map((value) => {
+            list.flatMap((value) => {
               const row: Row = { id: randomUUID(), createdAt: new Date(), updatedAt: new Date() };
               // Apply literal column defaults from the real schema (e.g. status).
               for (const column of getTableConfig(tableRef as PgTable).columns) {
@@ -122,11 +129,22 @@ export function createFakeDb(options: { uniquePartial?: Record<string, UniquePar
                 if (fallback !== undefined && !isSql) row[camel(column.name)] = structuredClone(fallback);
               }
               Object.assign(row, value);
+              if (
+                conflictColumns &&
+                rows(table).some((existing) => conflictColumns!.every((column) => existing[column] === row[column]))
+              ) {
+                return [];
+              }
               enforceUnique(table, row);
               rows(table).push(row);
-              return row;
+              return [row];
             });
-          return {
+          const insertChain = {
+            /** ON CONFLICT (target) DO NOTHING against the given columns. */
+            onConflictDoNothing(config: { target: Array<{ name: string }> }) {
+              conflictColumns = config.target.map((column) => camel(column.name));
+              return insertChain;
+            },
             returning: async (selection?: Record<string, unknown>) => run().map((row) => project(row, selection)),
             then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) => {
               try {
@@ -137,6 +155,7 @@ export function createFakeDb(options: { uniquePartial?: Record<string, UniquePar
               }
             },
           };
+          return insertChain;
         },
       };
     },

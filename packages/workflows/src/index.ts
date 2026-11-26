@@ -6,7 +6,7 @@
  */
 
 export * from "./types";
-export { createTemporalClient, getWorkflowStatus, startWorkflow } from "./client";
+export { cancelWorkflow, createTemporalClient, getWorkflowStatus, startWorkflow } from "./client";
 
 // Activities
 export {
@@ -31,4 +31,5 @@ export {
   finalizeExternalWriteOperations,
   rejectPlanChangeSet,
   expirePlanChangeSet,
+  cancelPlanImpactRun,
 } from "./activities";

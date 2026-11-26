@@ -82,6 +82,7 @@ vi.mock("postgres", () => ({
 
 import {
   applyPlanChangeSet,
+  cancelPlanImpactRun,
   isDemoOnlyIntegration,
   externalErrorIsRetryable,
   externalWriteOperationNeedsWork,
@@ -295,5 +296,68 @@ describe("applyPlanChangeSet", () => {
     expect(isDemoOnlyIntegration({ demoOnly: true })).toBe(true);
     expect(isDemoOnlyIntegration({ seeded: true })).toBe(false);
     expect(isDemoOnlyIntegration(null)).toBe(false);
+  });
+});
+
+describe("cancelPlanImpactRun", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL = "postgres://nexus-test";
+    mockState.calls.length = 0;
+    mockState.changeSet = {
+      id: "cs-1",
+      workspace_id: "ws-1",
+      doc_id: "doc-1",
+      proposed_version_id: "pv-2",
+      status: "pending",
+    };
+    mockState.end.mockClear();
+    mockState.postgres.mockClear();
+    mockState.postgres.mockImplementation(() => makeSqlClient());
+  });
+
+  it("moves the run's pending change set to cancelled so the doc unlocks", async () => {
+    const result = await cancelPlanImpactRun("plan_impact-wf-1", "user-1");
+
+    expect(result).toEqual({ cancelledChangeSetIds: ["cs-1"] });
+    const texts = mockState.calls.map((call) => call.text);
+    // Serialized with persistPlanImpact for the same workflow id.
+    expect(texts[0]).toContain("pg_advisory_xact_lock");
+    expect(mockState.calls[0]?.values).toEqual(["persistPlanImpact:plan_impact-wf-1"]);
+    const select = mockState.calls.find((call) => call.text.includes("FROM change_sets"));
+    expect(select?.text).toContain("status = 'pending'");
+    expect(select?.text).toContain("FOR UPDATE");
+    expect(select?.values).toEqual(["plan_impact-wf-1"]);
+    expect(texts.some((text) => text.includes("UPDATE change_proposals") && text.includes("'rejected'"))).toBe(true);
+    expect(texts.some((text) => text.includes("UPDATE plan_versions") && text.includes("'cancelled'"))).toBe(true);
+    expect(texts.some((text) => text.includes("UPDATE change_sets") && text.includes("'cancelled'"))).toBe(true);
+    const audit = mockState.calls.find((call) => call.text.includes("INSERT INTO audit_logs"));
+    expect(audit?.values).toContain("plan.change_cancelled");
+    expect(mockState.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("is a no-op when nothing is pending (cancelled before persist, or already resolved)", async () => {
+    mockState.postgres.mockImplementation(() => {
+      const base = makeSqlClient();
+      const wrapped = Object.assign(
+        async <T = unknown>(strings: TemplateStringsArray, ...values: unknown[]): Promise<T> => {
+          if (strings.join("?").includes("FROM change_sets")) {
+            mockState.calls.push({ text: strings.join("?"), values });
+            return [] as T;
+          }
+          return base(strings, ...values) as Promise<T>;
+        },
+        {
+          begin: async <T>(cb: (tx: typeof wrapped) => Promise<T>): Promise<T> => cb(wrapped),
+          end: mockState.end,
+        }
+      );
+      return wrapped;
+    });
+
+    const result = await cancelPlanImpactRun("plan_impact-wf-2", "user-1");
+
+    expect(result).toEqual({ cancelledChangeSetIds: [] });
+    expect(mockState.calls.some((call) => /^\s*UPDATE/.test(call.text))).toBe(false);
+    expect(mockState.calls.some((call) => call.text.includes("INSERT INTO audit_logs"))).toBe(false);
   });
 });

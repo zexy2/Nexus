@@ -49,6 +49,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { NotificationBell } from '@/components/shared/notification-bell';
 import { CommandPalette } from '@/components/shared/command-palette';
 import { NexusMark } from '@/components/shared/nexus-mark';
 import { SyncIssuesPanel } from '@/components/shared/sync-issues-panel';
@@ -426,6 +427,9 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
             >
               <Sparkles className="h-4 w-4" />
             </motion.button>
+
+            {/* Notifications: finished runs and pending plan reviews */}
+            <NotificationBell />
 
             {/* Settings */}
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>

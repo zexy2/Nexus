@@ -134,6 +134,13 @@
       "when": 1795558840715,
       "tag": "0018_ai_traces",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795727808484,
+      "tag": "0019_workflow_cancel_notifications",
+      "breakpoints": true
     }
   ]
 }

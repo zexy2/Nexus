@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { RunCancelButton, RunPhase, type RunProgress } from "@/components/shared/run-controls";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
@@ -176,6 +177,7 @@ export function LivingPlanInspector({
   const [loadFailed, setLoadFailed] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [slow, setSlow] = useState(false);
+  const [runProgress, setRunProgress] = useState<{ workflowId: string; progress: RunProgress; cancelRequested: boolean } | null>(null);
 
   const readableError = useCallback((error?: unknown) => {
     const message = typeof error === "string" ? error : "";
@@ -277,12 +279,22 @@ export function LivingPlanInspector({
         );
         const workflow = await response.json().catch(() => null);
         if (cancelled || !response.ok) return;
+        setRunProgress({
+          workflowId: analysis.workflowId,
+          progress: workflow?.progress,
+          cancelRequested: Boolean(workflow?.cancelRequestedAt),
+        });
         if (workflow?.status === "failed") {
           setSlow(false);
           setAnalysis({
             status: "failed",
             message: readableError(workflow.error),
           });
+        } else if (workflow?.status === "cancelled") {
+          // Cancelled from here or elsewhere; the workflow released the review.
+          setSlow(false);
+          setAnalysis({ status: "idle" });
+          await fetchPlan();
         } else if (workflow?.status === "completed") {
           // Finished without a review to open (e.g. no impactful changes).
           setSlow(false);
@@ -477,6 +489,10 @@ export function LivingPlanInspector({
     );
   }
 
+  // Progress of the run currently shown (ignores a previous run's last poll).
+  const liveRun =
+    analysis.status === "running" && runProgress?.workflowId === analysis.workflowId ? runProgress : null;
+
   return (
     <aside className="min-w-0 border-t border-border px-5 py-7 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
       <div className="flex items-start justify-between gap-3">
@@ -555,7 +571,20 @@ export function LivingPlanInspector({
       {analysis.status === "running" && (
         <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-foreground-subtle" data-testid="living-plan-running">
           <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-cyan-700 dark:text-cyan-300" />
-          {slow ? t('feedback.analysisSlow') : t('docs.livingPlan.running')}
+          <div className="min-w-0 flex-1">
+            <div>{slow ? t('feedback.analysisSlow') : t('docs.livingPlan.running')}</div>
+            <RunPhase
+              progress={liveRun?.progress}
+              cancelRequested={liveRun?.cancelRequested}
+              className="mt-0.5 block text-foreground-faint"
+            />
+          </div>
+          <RunCancelButton
+            key={analysis.workflowId}
+            workflowId={analysis.workflowId}
+            cancelRequested={liveRun?.cancelRequested}
+            className="h-7 shrink-0 px-2 text-xs"
+          />
         </div>
       )}
       {analysis.status === "failed" && (
