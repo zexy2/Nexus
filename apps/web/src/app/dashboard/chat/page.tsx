@@ -13,8 +13,6 @@ import {
   Sparkles,
   MessageSquarePlus,
   Send,
-  Paperclip,
-  Mic,
   ChevronDown,
   Command,
   RotateCcw,
@@ -284,10 +282,6 @@ function ChatInput({ onSend }: ChatInputProps) {
 
         {/* Input area */}
         <div className="flex items-end gap-3 p-3">
-          <button className="flex-shrink-0 p-2 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors">
-            <Paperclip className="h-5 w-5" />
-          </button>
-
           <textarea
             ref={textareaRef}
             value={input}
@@ -301,10 +295,6 @@ function ChatInput({ onSend }: ChatInputProps) {
             className="flex-1 bg-transparent text-foreground placeholder:text-foreground-faint resize-none outline-none text-sm leading-relaxed disabled:opacity-50"
             style={{ minHeight: '24px', maxHeight: '160px' }}
           />
-
-          <button className="flex-shrink-0 p-2 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors">
-            <Mic className="h-5 w-5" />
-          </button>
 
           <motion.button
             whileHover={{ scale: 1.05 }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEventHandler } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Task as SyncTask } from "@/lib/sync/zero";
@@ -33,7 +33,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ListTodo,
-  Trash2,
   CheckCircle2,
   Circle,
   Clock,
@@ -219,7 +218,8 @@ function SortableTaskCard({
   // Mouse/touch drag starts anywhere on the card (MouseSensor needs 8px of
   // movement, TouchSensor a long press, so a plain click/tap opens the task).
   // Keyboard drag lives on the grip handle; the title link opens the detail.
-  const { onKeyDown: onDragHandleKeyDown, ...pointerListeners } = listeners ?? {};
+  const { onKeyDown, ...pointerListeners } = listeners ?? {};
+  const onDragHandleKeyDown = onKeyDown as KeyboardEventHandler<HTMLButtonElement> | undefined;
 
   const style = {
     transform: CSS.Transform.toString(transform),
