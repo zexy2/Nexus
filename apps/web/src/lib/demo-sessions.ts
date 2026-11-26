@@ -2,12 +2,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { hashPassword } from "better-auth/crypto";
 import { and, asc, count, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { seedDemoScenario } from "@/lib/demo-scenario";
 import {
   accounts,
   agentJobEvents,
   agentJobs,
   agentJobSubmissions,
-  docs,
   externalCheckRuns,
   externalIssues,
   externalPullRequests,
@@ -22,29 +22,6 @@ import {
 
 const DEMO_EMAIL_DOMAIN = "sessions.nexus.invalid";
 const CLEANUP_BATCH_SIZE = 100;
-
-const starterDocContent = [
-  {
-    id: "demo-plan-intro",
-    type: "heading",
-    props: { level: 2 },
-    content: [{ type: "text", text: "Public Demo Product Plan", styles: {} }],
-    children: [],
-  },
-  {
-    id: "demo-plan-goal",
-    type: "paragraph",
-    props: {},
-    content: [
-      {
-        type: "text",
-        text: "Show how a plan change becomes reviewed, traceable work without silently overwriting the Kanban board.",
-        styles: {},
-      },
-    ],
-    children: [],
-  },
-];
 
 function positiveIntEnv(name: string, fallback: number) {
   const value = Number(process.env[name]);
@@ -157,58 +134,20 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       throw new Error("Failed to create isolated demo workspace");
     }
 
-    const [starterDoc] = await tx
-      .insert(docs)
-      .values({
-        workspaceId: workspace.id,
-        title: "Public Demo Plan",
-        iconEmoji: "✦",
-        content: starterDocContent,
-        createdBy: userId,
-      })
-      .returning({ id: docs.id });
-
-    if (!starterDoc) {
-      throw new Error("Failed to create isolated demo document");
-    }
-
-    const seededTasks = await tx.insert(tasks).values([
-      {
-        workspaceId: workspace.id,
-        docId: starterDoc.id,
-        title: "Review the living plan",
-        description: "Open the plan and inspect its versioned requirements.",
-        priority: "high",
-        status: "todo",
-        position: 0,
-        createdBy: userId,
-        assigneeId: userId,
-      },
-      {
-        workspaceId: workspace.id,
-        docId: starterDoc.id,
-        title: "Test Kanban alignment",
-        description: "Move this task and verify the board reflects the server state.",
-        priority: "medium",
-        status: "in_progress",
-        position: 0,
-        createdBy: userId,
-        assigneeId: userId,
-      },
-      {
-        workspaceId: workspace.id,
-        docId: starterDoc.id,
-        title: "Polish the landing workflow story",
-        description: "Completed coding-agent proof backed by a real merged Nexus pull request.",
-        priority: "medium",
-        status: "done",
-        position: 0,
-        createdBy: userId,
-        assigneeId: userId,
-      },
-    ]).returning({ id: tasks.id, title: tasks.title });
-
-    const proofTask = seededTasks.find((task) => task.title === "Polish the landing workflow story");
+    // Coding-agent proof: a real merged Nexus pull request, kept apart from
+    // the order-tracking plan (it documents Nexus itself).
+    const [proofTask] = await tx.insert(tasks).values({
+      workspaceId: workspace.id,
+      docId: null,
+      title: "Polish the landing workflow story",
+      description: "Completed coding-agent proof backed by a real merged Nexus pull request.",
+      priority: "medium",
+      status: "done",
+      position: 99,
+      alignmentStatus: "aligned",
+      createdBy: userId,
+      assigneeId: userId,
+    }).returning({ id: tasks.id, title: tasks.title });
     if (!proofTask) {
       throw new Error("Failed to create coding-agent proof task");
     }
@@ -230,13 +169,15 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       workspaceId: workspace.id,
       provider: "github",
       status: "connected",
-      externalAccountId: "zexy2/Nexus",
-      externalAccountName: "zexy2/Nexus",
-      scopes: ["metadata:read", "issues:write", "pull_requests:read", "checks:read"],
+      externalAccountId: "demo/order-tracking",
+      externalAccountName: "Sample GitHub data (read-only)",
+      scopes: ["metadata:read", "pull_requests:read", "checks:read"],
       metadata: {
         seeded: true,
+        // demoOnly: proposals against this integration apply as a simulated
+        // no-op (see isDemoOnlyIntegration in the workflow activities).
         demoOnly: true,
-        note: "Seeded GitHub-like proof data for the public demo workspace.",
+        note: "Seeded GitHub-like sample data for the public demo workspace. No writes reach GitHub.",
       },
       lastSyncAt: new Date(),
       createdBy: userId,
@@ -247,12 +188,12 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       provider: "linear",
       status: "connected",
       externalAccountId: "nexus-demo",
-      externalAccountName: "Nexus Demo Linear",
-      scopes: ["read", "write"],
+      externalAccountName: "Sample Linear data (read-only)",
+      scopes: ["read"],
       metadata: {
         seeded: true,
         demoOnly: true,
-        note: "Seeded Linear-like issue data for the public demo workspace.",
+        note: "Seeded Linear-like sample data for the public demo workspace. No writes reach Linear.",
       },
       lastSyncAt: new Date(),
       createdBy: userId,
@@ -262,72 +203,32 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       throw new Error("Failed to seed demo integrations");
     }
 
-    const reviewTask = seededTasks.find((task) => task.title === "Review the living plan");
-    const kanbanTask = seededTasks.find((task) => task.title === "Test Kanban alignment");
-    if (!reviewTask || !kanbanTask) {
-      throw new Error("Failed to locate demo tasks for external issue seeding");
-    }
+    await seedDemoScenario(tx, {
+      userId,
+      workspaceId: workspace.id,
+      githubIntegrationId: githubIntegration.id,
+      linearIntegrationId: linearIntegration.id,
+    });
 
-    const seededIssues = await tx.insert(externalIssues).values([
-      {
-        workspaceId: workspace.id,
-        integrationId: linearIntegration.id,
-        taskId: reviewTask.id,
-        provider: "linear",
-        externalId: "LIN-DEMO-101",
-        externalKey: "LIN-101",
-        title: "Review plan impact before changing delivery work",
-        description: "Validate that new requirements are connected to reviewed work before the board changes.",
-        status: "In Progress",
-        priority: "High",
-        url: "https://linear.app/nexus-demo/issue/LIN-101/review-plan-impact",
-        teamName: "Demo",
-        projectName: "Nexus Change Control",
-        labels: ["living-plan", "approval-gate"],
-        metadata: { seeded: true, requirementHint: "review impact" },
-        syncedAt: new Date(),
-      },
-      {
-        workspaceId: workspace.id,
-        integrationId: linearIntegration.id,
-        taskId: kanbanTask.id,
-        provider: "linear",
-        externalId: "LIN-DEMO-102",
-        externalKey: "LIN-102",
-        title: "Keep Kanban aligned with accepted requirements",
-        description: "Move work only after the change proposal is reviewed.",
-        status: "Todo",
-        priority: "Medium",
-        url: "https://linear.app/nexus-demo/issue/LIN-102/kanban-alignment",
-        teamName: "Demo",
-        projectName: "Nexus Change Control",
-        labels: ["kanban", "traceability"],
-        metadata: { seeded: true, requirementHint: "kanban alignment" },
-        syncedAt: new Date(),
-      },
-      {
-        workspaceId: workspace.id,
-        integrationId: linearIntegration.id,
-        taskId: proofTask.id,
-        provider: "linear",
-        externalId: "LIN-DEMO-103",
-        externalKey: "LIN-103",
-        title: "Polish public workflow proof",
-        description: "Show a completed coding-agent handoff with PR evidence.",
-        status: "Done",
-        priority: "Medium",
-        url: "https://linear.app/nexus-demo/issue/LIN-103/workflow-proof",
-        teamName: "Demo",
-        projectName: "Nexus Change Control",
-        labels: ["agent-handoff", "proof"],
-        metadata: { seeded: true, requirementHint: "public proof" },
-        syncedAt: new Date(),
-      },
-    ]).returning({ id: externalIssues.id, externalKey: externalIssues.externalKey });
-
-    const proofIssue = seededIssues.find((issue) => issue.externalKey === "LIN-103");
-    const reviewIssue = seededIssues.find((issue) => issue.externalKey === "LIN-101");
-    if (!proofIssue || !reviewIssue) {
+    const [proofIssue] = await tx.insert(externalIssues).values({
+      workspaceId: workspace.id,
+      integrationId: linearIntegration.id,
+      taskId: proofTask.id,
+      provider: "linear",
+      externalId: "LIN-DEMO-103",
+      externalKey: "LIN-103",
+      title: "Polish public workflow proof",
+      description: "Show a completed coding-agent handoff with PR evidence.",
+      status: "Done",
+      priority: "Medium",
+      url: null,
+      teamName: "Demo",
+      projectName: "Nexus Change Control",
+      labels: ["agent-handoff", "proof"],
+      metadata: { seeded: true, requirementHint: "public proof" },
+      syncedAt: new Date(),
+    }).returning({ id: externalIssues.id });
+    if (!proofIssue) {
       throw new Error("Failed to seed demo external issue proof");
     }
 
@@ -343,7 +244,7 @@ export async function provisionIsolatedDemoSession(): Promise<ProvisionedDemoSes
       branch: "codex/landing-proof-polish",
       baseBranch: "main",
       latestCommitSha: "6c67e85cb35f4d5f6f087101cf618355e5e97e04",
-      linkedExternalIssueIds: [proofIssue.id, reviewIssue.id],
+      linkedExternalIssueIds: [proofIssue.id],
       changedFiles: [
         "apps/web/src/components/landing/hero-cinematic.tsx",
         "apps/web/src/components/landing/workflow-story.tsx",

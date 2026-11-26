@@ -18,7 +18,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { PartialBlock } from "@blocknote/core";
+import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { withCollaboration } from "@blocknote/core/yjs";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
@@ -54,6 +54,8 @@ interface CollaborativeEditorProps {
   userColor?: string;
   initialContent?: PartialBlock[];
   onChange?: (content: PartialBlock[]) => void;
+  /** Called once the editor is synced and seeded, with the live editor. */
+  onEditorReady?: (editor: BlockNoteEditor<any, any, any>) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
   editable?: boolean;
 }
 
@@ -90,6 +92,7 @@ function CollaborativeEditorInner({
   userColor,
   initialContent,
   onChange,
+  onEditorReady,
   editable,
   isConnected,
   isSynced,
@@ -106,6 +109,7 @@ function CollaborativeEditorInner({
   userColor: string;
   initialContent?: PartialBlock[];
   onChange?: (content: PartialBlock[]) => void;
+  onEditorReady?: CollaborativeEditorProps["onEditorReady"];
   editable: boolean;
   isConnected: boolean;
   isSynced: boolean;
@@ -150,6 +154,10 @@ function CollaborativeEditorInner({
       setContentLoaded(true);
     }
   }, [isSynced, contentLoaded, initialContent, ydoc, editor]);
+
+  useEffect(() => {
+    if (contentLoaded) onEditorReady?.(editor);
+  }, [contentLoaded, editor, onEditorReady]);
 
   const { mode, canEdit } = getCollabEditorState({
     editable,
@@ -401,6 +409,7 @@ export function CollaborativeEditor({
   userColor,
   initialContent,
   onChange,
+  onEditorReady,
   editable = true,
 }: CollaborativeEditorProps) {
   const t = useT();
@@ -576,6 +585,7 @@ export function CollaborativeEditor({
       userColor={stableUserColor}
       initialContent={initialContent}
       onChange={onChange}
+      onEditorReady={onEditorReady}
       editable={editable}
       isConnected={isConnected}
       isSynced={isSynced}
