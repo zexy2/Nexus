@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   doc: undefined as unknown,
   pendingCs: undefined as unknown,
   acceptedVersion: undefined as unknown,
+  latestRun: undefined as unknown,
   selectQueue: [] as unknown[][],
   expire: vi.fn(),
   access: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/db", () => {
         docs: { findFirst: async () => h.doc },
         changeSets: { findFirst: async () => h.pendingCs },
         planVersions: { findFirst: async () => h.acceptedVersion },
+        agentExecutions: { findFirst: async () => h.latestRun },
       },
     },
   };
@@ -72,6 +74,7 @@ beforeEach(() => {
   h.doc = doc;
   h.pendingCs = undefined;
   h.acceptedVersion = undefined;
+  h.latestRun = undefined;
   h.selectQueue = [];
   h.verifySession.mockResolvedValue({ user: { id: "user-1" } });
   h.access.mockResolvedValue({ ok: true, workspaceId: "ws-1", role: "member" });
@@ -109,6 +112,27 @@ describe("GET /api/plans/[docId]/living-plan", () => {
       requirements: [],
       coverage: { covered: 0, total: 0, percentage: 0 },
       pendingChangeSet: null,
+      latestAnalysis: null,
+    });
+  });
+
+  it("exposes the latest plan-impact run so a reload can resume it", async () => {
+    h.latestRun = {
+      id: "exec-1",
+      temporalWorkflowId: "plan_impact-1",
+      status: "running",
+      errorMessage: null,
+      createdAt: created,
+      completedAt: null,
+    };
+    const body = await (await get()).json();
+    expect(body.latestAnalysis).toEqual({
+      executionId: "exec-1",
+      workflowId: "plan_impact-1",
+      status: "running",
+      error: null,
+      createdAt: created.toISOString(),
+      completedAt: null,
     });
   });
 

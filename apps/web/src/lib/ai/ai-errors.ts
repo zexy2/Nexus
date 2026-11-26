@@ -8,6 +8,14 @@
  * the reset time. Safe to import from client components (no server deps).
  */
 
+/** An error whose message is already localized and safe to show as-is. */
+export class UserFacingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UserFacingError";
+  }
+}
+
 export interface AiErrorInfo {
   status: number;
   code?: string;

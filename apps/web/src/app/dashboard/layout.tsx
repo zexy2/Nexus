@@ -42,7 +42,7 @@ export default async function DashboardLayout({
 
   const [appearance, onboardingEligible] = await Promise.all([
     getAppearance(session.user.id),
-    getOnboardingEligibility(session.user.id, session.user.createdAt),
+    getOnboardingEligibility(session.user.id, session.user.createdAt, session.user.email),
   ]);
 
   return (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ import {
   Search,
   Code,
   Kanban,
+  AlertCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,11 @@ import { formatRelativeDate } from '@/lib/format';
 import { cleanDocTitle } from '@/lib/text';
 import { useT, useLocale } from '@/lib/i18n/provider';
 import { useUIStore } from '@/lib/store';
+import { useLocalFirstContext } from '@/lib/sync/local-first';
+import { persistTaskMove, TaskMoveError } from '@/lib/sync/task-move';
+import { showToast } from '@/components/shared/toast-provider';
+import { friendlyError } from '@/lib/friendly-error';
+import { latestExecutionBySlot } from '@/lib/run-category';
 import { DemoTourCard } from '@/components/demo/demo-tour-card';
 
 // Types
@@ -41,6 +47,8 @@ interface Task {
   status: string;
   priority: string;
   updatedAt: string;
+  /** Column to return to when a just-completed task is unchecked again. */
+  previousStatus?: string;
 }
 
 interface Agent {
@@ -171,9 +179,19 @@ function DocumentCard({ doc, index }: { doc: Document; index: number }) {
 }
 
 // Task item with checkbox
-function TaskItem({ task, index, onToggle }: { task: Task; index: number; onToggle: () => void }) {
+function TaskItem({
+  task,
+  index,
+  pending,
+  onToggle,
+}: {
+  task: Task;
+  index: number;
+  pending: boolean;
+  onToggle: (task: Task) => void;
+}) {
   const t = useT();
-  const [checked, setChecked] = useState(false);
+  const checked = task.status === 'done';
 
   const priorityColors: Record<string, string> = {
     urgent: 'bg-red-500',
@@ -187,16 +205,24 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
+      data-testid="dashboard-task-row"
+      data-task-id={task.id}
       className={cn(
         'group flex items-center gap-3 border-b border-border py-4 transition-all duration-300',
         checked ? 'opacity-50 bg-transparent' : 'hover:bg-foreground/[0.02]'
       )}
     >
       <motion.button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label={t('feedback.markDone').replace('{title}', task.title)}
+        disabled={pending}
         whileTap={{ scale: 0.9 }}
-        onClick={() => { setChecked(!checked); onToggle(); }}
+        onClick={() => onToggle(task)}
+        data-testid="dashboard-task-checkbox"
         className={cn(
-          'h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all',
+          'h-5 w-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all disabled:opacity-60',
           checked ? 'bg-foreground border-foreground' : 'border-foreground/30 hover:border-foreground/50'
         )}
       >
@@ -205,9 +231,15 @@ function TaskItem({ task, index, onToggle }: { task: Task; index: number; onTogg
 
       <span className={cn('h-2 w-2 rounded-full shrink-0', priorityColors[task.priority])} />
 
-      <span className={cn('flex-1 text-sm', checked && 'line-through text-muted-foreground')}>
+      <Link
+        href={`/dashboard/tasks/${task.id}`}
+        className={cn(
+          'flex-1 min-w-0 truncate text-sm hover:underline',
+          checked && 'line-through text-muted-foreground'
+        )}
+      >
         {task.title}
-      </span>
+      </Link>
 
       <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {t(`tasks.prio${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}`)}
@@ -225,7 +257,47 @@ export default function DashboardPage() {
   const [taskStats, setTaskStats] = useState<TaskStats>({ total: 0, done: 0, inProgress: 0 });
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const { openModal } = useUIStore();
+  const { engine } = useLocalFirstContext();
+
+  // Checking a task marks it done (unchecking restores its previous column)
+  // through the same single-write path as a Kanban move: queued in the sync
+  // engine offline, one PATCH online.
+  const toggleTask = useCallback(async (task: Task) => {
+    if (pendingTaskId) return;
+    const done = task.status !== 'done';
+    const nextStatus = done ? 'done' : (task.previousStatus && task.previousStatus !== 'done' ? task.previousStatus : 'todo');
+    setPendingTaskId(task.id);
+    setTasks((current) =>
+      current.map((item) =>
+        item.id === task.id ? { ...item, status: nextStatus, previousStatus: done ? task.status : undefined } : item
+      )
+    );
+    setTaskStats((stats) => ({ ...stats, done: Math.max(0, stats.done + (done ? 1 : -1)) }));
+    try {
+      const result = await persistTaskMove({
+        engine,
+        taskId: task.id,
+        status: nextStatus as 'todo' | 'in_progress' | 'in_review' | 'done',
+        online: typeof navigator === 'undefined' || navigator.onLine,
+      });
+      if (result === 'queued') showToast.info(t('tasks.toastMoveQueued'));
+      else showToast.success(done ? t('feedback.taskCompleted') : t('feedback.taskReopened'));
+    } catch (error) {
+      setTasks((current) => current.map((item) => (item.id === task.id ? task : item)));
+      setTaskStats((stats) => ({ ...stats, done: Math.max(0, stats.done + (done ? -1 : 1)) }));
+      showToast.error(
+        error instanceof TaskMoveError
+          ? friendlyError(error.body, t, t('tasks.toastUpdateFailed'))
+          : t('tasks.toastUpdateFailed')
+      );
+    } finally {
+      setPendingTaskId(null);
+    }
+  }, [engine, pendingTaskId, t]);
 
   const activeAgents = agents.filter(a => a.status !== 'idle').length;
   const totalAgents = agents.length || 4;
@@ -236,8 +308,10 @@ export default function DashboardPage() {
         const [docsRes, tasksRes, executionsRes] = await Promise.all([
           fetch('/api/docs'),
           fetch('/api/tasks'),
-          fetch('/api/agents/executions?limit=20'),
+          fetch('/api/agents/executions?limit=50'),
         ]);
+        // A failed request must not render as "no plans / no tasks".
+        setLoadFailed(!docsRes.ok || !tasksRes.ok || !executionsRes.ok);
 
         if (docsRes.ok) {
           const docsData = await docsRes.json();
@@ -269,13 +343,9 @@ export default function DashboardPage() {
             coder: { name: t('dashboard.agentCodeRun'), icon: Code },
             project_manager: { name: t('dashboard.agentTaskAlignment'), icon: Kanban },
           };
-          const latestByAgent = new Map<Execution['agentType'], Execution>();
-
-          for (const execution of executions) {
-            if (!latestByAgent.has(execution.agentType)) {
-              latestByAgent.set(execution.agentType, execution);
-            }
-          }
+          // Map by product workflow (input.workflowType), not worker role:
+          // plan-impact runs are stored as project_manager executions.
+          const latestByAgent = latestExecutionBySlot(executions);
 
           const nextAgents = (Object.entries(agentMeta) as Array<[Execution['agentType'], { name: string; icon: LucideIcon }]>)
             .map(([agentType, meta]) => {
@@ -299,12 +369,13 @@ export default function DashboardPage() {
         }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error);
+        setLoadFailed(true);
       } finally {
         setIsLoading(false);
       }
     }
     fetchData();
-  }, [t]);
+  }, [t, reloadKey]);
 
   if (isLoading) {
     return (
@@ -347,6 +418,29 @@ export default function DashboardPage() {
           </Button>
         </div>
       </header>
+
+      {loadFailed && (
+        <div
+          role="alert"
+          data-testid="dashboard-load-error"
+          className="mb-8 flex flex-col gap-3 border border-destructive/30 bg-destructive/5 p-4 text-sm sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span className="flex items-center gap-2 text-foreground">
+            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+            {t('feedback.dashboardLoadFailed')}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setIsLoading(true);
+              setReloadKey((key) => key + 1);
+            }}
+          >
+            {t('ux.retry')}
+          </Button>
+        </div>
+      )}
 
       <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 lg:grid-cols-4">
         {([
@@ -394,7 +488,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="mt-2 text-xl font-semibold text-foreground">{t('dashboard.bentoRecentDocs')}</h2>
           </div>
-          {docs.length === 0 ? (
+          {docs.length === 0 && !loadFailed ? (
             <div className="border-y border-border py-8 text-center">
               <FileText className="mx-auto mb-3 h-8 w-8 text-foreground-faint" />
               <p className="mb-4 text-sm text-foreground-subtle">{t('dashboard.noDocuments')}</p>
@@ -420,7 +514,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="mt-2 text-xl font-semibold text-foreground">{t('dashboard.bentoPriorityTasks')}</h2>
           </div>
-          {tasks.length === 0 ? (
+          {tasks.length === 0 && !loadFailed ? (
             <div className="border-y border-border py-8 text-center">
               <ListTodo className="mx-auto mb-3 h-8 w-8 text-foreground-faint" />
               <p className="mb-4 text-sm text-foreground-subtle">{t('dashboard.noTasks')}</p>
@@ -431,7 +525,13 @@ export default function DashboardPage() {
           ) : (
             <div className="border-y border-border">
               {tasks.map((task, i) => (
-                <TaskItem key={task.id} task={task} index={i} onToggle={() => {}} />
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  index={i}
+                  pending={pendingTaskId === task.id}
+                  onToggle={toggleTask}
+                />
               ))}
             </div>
           )}
