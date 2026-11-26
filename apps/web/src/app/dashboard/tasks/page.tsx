@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef, type KeyboardEventHandler } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type Task as SyncTask } from "@/lib/sync/zero";
 import { useLocalFirstContext } from "@/lib/sync/local-first";
 import { persistTaskMove } from "@/lib/sync/task-move";
@@ -12,7 +14,8 @@ import {
   pointerWithin,
   rectIntersection,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
@@ -30,7 +33,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ListTodo,
-  Trash2,
   CheckCircle2,
   Circle,
   Clock,
@@ -48,6 +50,9 @@ import {
   Link2,
   Unlink,
   Plus,
+  Archive,
+  RotateCcw,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +90,7 @@ import {
   SkeletonKanbanColumn,
 } from "@/components/shared";
 import { showToast } from "@/components/shared/toast-provider";
+import { friendlyError } from "@/lib/friendly-error";
 import { cn } from "@/lib/utils";
 import { formatRelativeDate } from "@/lib/format";
 import { useT, useLocale } from "@/lib/i18n/provider";
@@ -193,19 +199,27 @@ function SortableTaskCard({
   task,
   onDelete,
   onEdit,
+  onOpen,
 }: {
   task: Task;
   onDelete: (id: string) => void;
   onEdit: (task: Task) => void;
+  onOpen: (id: string) => void;
 }) {
   const {
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
   } = useSortable({ id: task.id });
+  // Mouse/touch drag starts anywhere on the card (MouseSensor needs 8px of
+  // movement, TouchSensor a long press, so a plain click/tap opens the task).
+  // Keyboard drag lives on the grip handle; the title link opens the detail.
+  const { onKeyDown, ...pointerListeners } = listeners ?? {};
+  const onDragHandleKeyDown = onKeyDown as KeyboardEventHandler<HTMLButtonElement> | undefined;
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -228,8 +242,8 @@ function SortableTaskCard({
     <motion.div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...pointerListeners}
+      onClick={() => onOpen(task.id)}
       data-testid="kanban-task-card"
       data-task-id={task.id}
       layout
@@ -237,7 +251,7 @@ function SortableTaskCard({
       animate={{ opacity: isDragging ? 0.5 : 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95 }}
       className={cn(
-        "group rounded-xl border border-border bg-foreground/[0.025] p-4 transition-all cursor-grab active:cursor-grabbing",
+        "group rounded-xl border border-border bg-foreground/[0.025] p-4 transition-all cursor-pointer touch-manipulation",
         isDragging && "shadow-2xl ring-2 ring-foreground/30 ring-offset-2 ring-offset-background",
         !isDragging && "hover:border-foreground/20 hover:bg-foreground/[0.03]"
       )}
@@ -246,21 +260,34 @@ function SortableTaskCard({
       <div className="flex items-start gap-2">
         <button
           type="button"
-          tabIndex={-1}
-          className="mt-1 p-1 -ml-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-all cursor-grab active:cursor-grabbing"
+          ref={setActivatorNodeRef}
+          {...attributes}
+          onKeyDown={onDragHandleKeyDown}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={t('feedback.dragTask').replace("{title}", task.title)}
+          data-testid="kanban-drag-handle"
+          className="mt-1 p-1 -ml-1 rounded-lg hover:bg-foreground/10 transition-all cursor-grab active:cursor-grabbing focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-fine:opacity-40 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100"
         >
           <GripVertical className="w-4 h-4 text-muted-foreground" />
         </button>
 
         <div className="flex-1 min-w-0">
-          {/* Title */}
+          {/* Title: the keyboard/screen-reader way into the task detail. */}
           <h4
             className={cn(
               "font-medium text-sm line-clamp-2",
               task.status === "done" && "line-through text-muted-foreground"
             )}
           >
-            {task.title}
+            <Link
+              href={`/dashboard/tasks/${task.id}`}
+              draggable={false}
+              onClick={(event) => event.stopPropagation()}
+              className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="kanban-task-link"
+            >
+              {task.title}
+            </Link>
           </h4>
 
           {/* Description */}
@@ -369,14 +396,28 @@ function SortableTaskCard({
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Actions: always visible on touch, revealed on hover/focus with a mouse. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-all">
+            <button
+              type="button"
+              onClick={(event) => event.stopPropagation()}
+              aria-label={t('feedback.taskActions')}
+              data-testid="kanban-task-menu"
+              className="p-1.5 rounded-lg hover:bg-foreground/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+            >
               <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40 glass-premium border-border">
+          {/* React events bubble through portals: keep menu clicks and presses
+              from opening the card or starting a drag. */}
+          <DropdownMenuContent
+            align="end"
+            className="w-40 glass-premium border-border"
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onTouchStart={(event) => event.stopPropagation()}
+          >
             <DropdownMenuItem
               onClick={() => onEdit(task)}
               className="flex items-center gap-2"
@@ -389,8 +430,8 @@ function SortableTaskCard({
               onClick={() => onDelete(task.id)}
               className="flex items-center gap-2 text-red-600 focus:text-red-600"
             >
-              <Trash2 className="w-4 h-4" />
-              {t('common.delete')}
+              <Archive className="w-4 h-4" />
+              {t('common.archive')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -452,11 +493,13 @@ function KanbanColumn({
   tasks,
   onDelete,
   onEdit,
+  onOpen,
 }: {
   column: typeof columns[0];
   tasks: Task[];
   onDelete: (id: string) => void;
   onEdit: (task: Task) => void;
+  onOpen: (id: string) => void;
 }) {
   const Icon = column.icon;
   const t = useT();
@@ -556,6 +599,7 @@ function KanbanColumn({
                   task={task}
                   onDelete={onDelete}
                   onEdit={onEdit}
+                  onOpen={onOpen}
                 />
               ))}
             </AnimatePresence>
@@ -580,9 +624,20 @@ function KanbanColumn({
   );
 }
 
+interface ArchivedTask {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
 export default function TasksPage() {
   const { engine, userId, workspaceId } = useLocalFirstContext();
   const t = useT();
+  const router = useRouter();
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  const [archivedTasks, setArchivedTasks] = useState<ArchivedTask[] | null>(null);
+  const [archiveError, setArchiveError] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Track the in-progress drag so background sync doesn't clobber it.
@@ -600,17 +655,31 @@ export default function TasksPage() {
     priority: "medium" as TaskPriority,
   });
 
-  // DnD sensors
+  // DnD sensors. Mouse drags after 8px of movement (a click opens the task);
+  // touch drags only after a long press so vertical swipes keep scrolling the
+  // board on phones; the keyboard sensor is bound to the grip handle.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 8,
       },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const openTask = useCallback((id: string) => {
+    // dnd-kit swallows the click that ends a drag; this guards the rest.
+    if (activeIdRef.current) return;
+    router.push(`/dashboard/tasks/${id}`);
+  }, [router]);
 
   const fetchTasks = useCallback(async () => {
     // Local-first read: render cached tasks from IndexedDB instantly (and while
@@ -912,36 +981,99 @@ export default function TasksPage() {
     }
   }, [editingTask, engine, fetchTasks, t]);
 
+  // Restore an archived task: through the sync engine when the row is cached
+  // (the board re-renders from the local store), otherwise over REST.
+  const restoreTask = useCallback(async (id: string) => {
+    if (engine) {
+      const existing = await engine.get<SyncTask>("tasks", id);
+      if (existing) {
+        await engine.mutate<SyncTask>("tasks", "update", {
+          ...existing,
+          isArchived: false,
+          updatedAt: Date.now(),
+        } as SyncTask);
+        return;
+      }
+    }
+    const response = await fetch(`/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived: false }),
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      throw new Error(friendlyError(body, t, t('feedback.taskRestoreFailed')));
+    }
+    await fetchTasks();
+  }, [engine, fetchTasks, t]);
+
+  const handleRestoreTask = useCallback(async (id: string, options?: { fromArchiveList?: boolean }) => {
+    setRestoringId(id);
+    try {
+      await restoreTask(id);
+      if (options?.fromArchiveList) {
+        setArchivedTasks((current) => current?.filter((task) => task.id !== id) ?? current);
+      }
+      showToast.success(t('feedback.taskRestored'));
+    } catch (error) {
+      console.error("Failed to restore task:", error);
+      showToast.error(error instanceof Error && error.message ? error.message : t('feedback.taskRestoreFailed'));
+    } finally {
+      setRestoringId(null);
+    }
+  }, [restoreTask, t]);
+
+  // "Delete" on the board archives (soft delete, like the detail page). The
+  // toast carries Undo; the Archived view restores later.
   const handleDeleteTask = useCallback(async (id: string) => {
     const previousTasks = tasks;
     setTasks((prev) => prev.filter((t) => t.id !== id));
+    const undo = {
+      label: t('feedback.undo'),
+      onClick: () => void handleRestoreTask(id),
+    };
 
-    // Local-first: optimistic delete + queued sync.
-    if (engine) {
-      try {
-        await engine.mutate<SyncTask>("tasks", "delete", { id } as SyncTask);
-        showToast.success(t('tasks.toastDeleted'));
-      } catch (error) {
-        console.error("Failed to delete task:", error);
-        showToast.error(t('tasks.toastDeleteFailed'));
-        setTasks(previousTasks);
-      }
-      return;
-    }
-
-    // Fallback: network delete.
     try {
-      const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error(`Failed to delete task: ${response.status}`);
+      const existing = engine ? await engine.get<SyncTask>("tasks", id) : undefined;
+      if (engine && existing) {
+        // Local-first: optimistic archive + queued sync (works offline).
+        await engine.mutate<SyncTask>("tasks", "update", {
+          ...existing,
+          isArchived: true,
+          updatedAt: Date.now(),
+        } as SyncTask);
+      } else {
+        const response = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+        if (!response.ok) {
+          throw new Error(`Failed to archive task: ${response.status}`);
+        }
       }
-      showToast.success(t('tasks.toastDeleted'));
+      showToast.success(t('feedback.taskArchived'), { action: undo, duration: 6000 });
     } catch (error) {
-      console.error("Failed to delete task:", error);
+      console.error("Failed to archive task:", error);
       showToast.error(t('tasks.toastDeleteFailed'));
       setTasks(previousTasks);
     }
-  }, [tasks, engine, t]);
+  }, [tasks, engine, t, handleRestoreTask]);
+
+  const loadArchivedTasks = useCallback(async () => {
+    setArchiveError(false);
+    setArchivedTasks(null);
+    try {
+      const response = await fetch("/api/tasks?archived=1", { cache: "no-store" });
+      if (!response.ok) throw new Error(`Failed to load archived tasks: ${response.status}`);
+      const data = await response.json() as ArchivedTask[];
+      setArchivedTasks(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("Failed to load archived tasks:", error);
+      setArchiveError(true);
+    }
+  }, []);
+
+  const openArchive = useCallback(() => {
+    setIsArchiveOpen(true);
+    void loadArchivedTasks();
+  }, [loadArchivedTasks]);
 
   if (isLoading) {
     return (
@@ -975,10 +1107,16 @@ export default function TasksPage() {
           </p>
         </div>
 
-        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
-          <Plus className="size-4" />
-          {t('tasks.newTask')}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={openArchive} className="gap-2" data-testid="tasks-archive-open">
+            <Archive className="size-4" />
+            {t('feedback.archivedTasks')}
+          </Button>
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+            <Plus className="size-4" />
+            {t('tasks.newTask')}
+          </Button>
+        </div>
       </header>
 
       <section className="mb-8 grid grid-cols-2 gap-px border-y border-border bg-foreground/10 sm:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1">
@@ -1056,6 +1194,7 @@ export default function TasksPage() {
                   tasks={getTasksByStatus(column.id)}
                   onDelete={handleDeleteTask}
                   onEdit={setEditingTask}
+                  onOpen={openTask}
                 />
               ))}
             </div>
@@ -1066,6 +1205,55 @@ export default function TasksPage() {
           </DndContext>
         </motion.div>
       </section>
+
+      {/* Archived tasks */}
+      <Dialog open={isArchiveOpen} onOpenChange={setIsArchiveOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('feedback.archivedTasks')}</DialogTitle>
+            <DialogDescription>{t('feedback.archivedTasksDesc')}</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto" data-testid="tasks-archive-list">
+            {archiveError ? (
+              <div className="flex flex-col items-center gap-3 py-8 text-center text-sm text-muted-foreground">
+                <AlertCircle className="size-6 text-destructive" />
+                {t('feedback.archivedTasksLoadFailed')}
+                <Button size="sm" variant="outline" onClick={() => void loadArchivedTasks()}>
+                  {t('ux.retry')}
+                </Button>
+              </div>
+            ) : archivedTasks === null ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : archivedTasks.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{t('feedback.archivedTasksEmpty')}</p>
+            ) : (
+              <ul className="divide-y divide-border border-y border-border">
+                {archivedTasks.map((task) => (
+                  <li key={task.id} className="flex items-center justify-between gap-3 py-3" data-task-id={task.id}>
+                    <span className="min-w-0 truncate text-sm">{task.title}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 gap-1.5"
+                      disabled={restoringId === task.id}
+                      onClick={() => void handleRestoreTask(task.id, { fromArchiveList: true })}
+                    >
+                      {restoringId === task.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="size-3.5" />
+                      )}
+                      {t('archive.restore')}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Task Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

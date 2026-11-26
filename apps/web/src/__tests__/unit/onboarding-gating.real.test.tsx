@@ -127,6 +127,18 @@ describe("getOnboardingEligibility", () => {
     await expect(getOnboardingEligibility("u1", NEW_USER_CREATED)).resolves.toBe(false);
   });
 
+  it("never shows onboarding to ephemeral demo sessions", async () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    try {
+      await expect(
+        getOnboardingEligibility("u1", NEW_USER_CREATED, "visitor@sessions.nexus.invalid")
+      ).resolves.toBe(false);
+      expect(getAccessibleWorkspaceIds).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("fails closed on DB errors", async () => {
     getAccessibleWorkspaceIds.mockRejectedValue(new Error("db down"));
     vi.spyOn(console, "error").mockImplementation(() => {});

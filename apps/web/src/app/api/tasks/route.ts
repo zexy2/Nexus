@@ -29,6 +29,8 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
     const requestedWorkspaceId = url.searchParams.get("workspaceId");
+    // `?archived=1` lists the archive (restorable soft-deleted tasks) instead.
+    const archived = url.searchParams.get("archived") === "1" ? 1 : 0;
 
     const workspaceIds = requestedWorkspaceId
       ? await requireWorkspaceAccess(userId, requestedWorkspaceId).then((access) =>
@@ -41,8 +43,8 @@ export async function GET(req: Request) {
     }
 
     const taskList = await db.query.tasks.findMany({
-      where: and(inArray(tasks.workspaceId, workspaceIds), eq(tasks.isArchived, 0)),
-      orderBy: [desc(tasks.createdAt)],
+      where: and(inArray(tasks.workspaceId, workspaceIds), eq(tasks.isArchived, archived)),
+      orderBy: archived ? [desc(tasks.updatedAt)] : [desc(tasks.createdAt)],
     });
 
     const taskIds = taskList.map((task) => task.id);

@@ -30,14 +30,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   User,
   Bot,
-  Bell,
   Palette,
   Database,
   CheckCircle2,
   Loader2,
   Save,
-  Upload,
   Languages,
+  AlertTriangle,
+  Unplug,
   GitBranch,
   KeyRound,
   Copy,
@@ -50,6 +50,27 @@ import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
 import { formatDateTime } from "@/lib/format";
 import { applyAppearance, normalizeTheme, storeAppearance } from "@/lib/appearance";
+import { showToast } from "@/components/shared/toast-provider";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { friendlyError } from "@/lib/friendly-error";
+import { copyText } from "@/lib/clipboard";
+
+class SettingsActionError extends Error {}
+
+/** Throws a SettingsActionError with mapped copy when the response failed. */
+async function readOrThrow(
+  response: Response,
+  t: (path: string) => string,
+  fallback: string
+) {
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new SettingsActionError(friendlyError(body, t, fallback));
+  return body;
+}
+
+function actionMessage(error: unknown, fallback: string) {
+  return error instanceof SettingsActionError && error.message ? error.message : fallback;
+}
 
 interface SettingsData {
   profile: {
@@ -153,8 +174,10 @@ function SettingsContent() {
   const { locale, setLocale } = useLocale();
   
   const [isLoading, setIsLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [disconnectTarget, setDisconnectTarget] = useState<IntegrationSummary | null>(null);
   const [activeTab, setActiveTab] = useState(defaultTab); // Track active tab
   
   // Form state
@@ -162,18 +185,14 @@ function SettingsContent() {
   const [email, setEmail] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [defaultModel, setDefaultModel] = useState("gemini-2.5-flash");
-  const [autoSaveAiOutputs, setAutoSaveAiOutputs] = useState(true);
   const [serverGeminiAvailable, setServerGeminiAvailable] = useState(true);
   const [usageLimits, setUsageLimits] = useState({ workflowsPerDay: 25, chatMessagesPerDay: 100 });
   const [isAdmin, setIsAdmin] = useState(false);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [agentNotifications, setAgentNotifications] = useState(true);
-  const [taskReminders, setTaskReminders] = useState(true);
   const router = useRouter();
   const [theme, setTheme] = useState("system");
   const [compactMode, setCompactMode] = useState(false);
-  const [offlineMode, setOfflineMode] = useState(true);
-  const [syncFrequency, setSyncFrequency] = useState("realtime");
+  // Notification, reminder, offline-mode, sync-frequency and auto-save
+  // switches were removed: nothing read them. The DB columns stay.
   const [storageUsed, setStorageUsed] = useState(0);
   const [workspaceId, setWorkspaceId] = useState("");
   const [repositoryUrl, setRepositoryUrl] = useState("");
@@ -194,8 +213,7 @@ function SettingsContent() {
   // Track original values for dirty checking
   const [originalSettings, setOriginalSettings] = useState<SettingsData | null>(null);
   
-  const avatarInputRef = React.useRef<HTMLInputElement>(null);
-  
+
   // Check if model is available through the server-managed provider.
   const isModelAvailable = useCallback((modelId: string) => {
     const model = AI_MODELS.find(m => m.id === modelId);
@@ -206,22 +224,15 @@ function SettingsContent() {
   // Get available models
   const availableModels = AI_MODELS.filter(m => isModelAvailable(m.id));
   
-  // Check if there are unsaved changes
-  const hasChanges = useCallback(() => {
-    if (!originalSettings) return false;
-    return (
-      name !== originalSettings.profile.name ||
-      defaultModel !== originalSettings.ai.defaultModel ||
-      autoSaveAiOutputs !== originalSettings.ai.autoSaveAiOutputs ||
-      emailNotifications !== originalSettings.notifications.emailNotifications ||
-      agentNotifications !== originalSettings.notifications.agentNotifications ||
-      taskReminders !== originalSettings.notifications.taskReminders ||
-      theme !== originalSettings.appearance.theme ||
-      compactMode !== originalSettings.appearance.compactMode ||
-      offlineMode !== originalSettings.sync.offlineMode ||
-      syncFrequency !== originalSettings.sync.syncFrequency
-    );
-  }, [originalSettings, name, defaultModel, autoSaveAiOutputs, emailNotifications, agentNotifications, taskReminders, theme, compactMode, offlineMode, syncFrequency]);
+  // Unsaved changes per section: each section has its own Save button (like
+  // the repository and integration sections), instead of one global button
+  // that silently covered some tabs and not others.
+  const profileDirty = Boolean(originalSettings) && name !== originalSettings?.profile.name;
+  const appearanceDirty =
+    Boolean(originalSettings) &&
+    (theme !== originalSettings?.appearance.theme ||
+      compactMode !== originalSettings?.appearance.compactMode);
+  const hasChanges = useCallback(() => profileDirty || appearanceDirty, [profileDirty, appearanceDirty]);
   
   // Fetch settings from API. isLoading starts true, so the initial load does
   // not need to set it; explicit reloads go through fetchSettings below.
@@ -237,17 +248,11 @@ function SettingsContent() {
       setEmail(data.profile.email);
       setImage(data.profile.image);
       setDefaultModel(data.ai.defaultModel);
-      setAutoSaveAiOutputs(data.ai.autoSaveAiOutputs);
       setServerGeminiAvailable(data.ai.serverGeminiAvailable);
       setUsageLimits(data.ai.usageLimits ?? { workflowsPerDay: 25, chatMessagesPerDay: 100 });
       setIsAdmin(data.ai.isAdmin === true);
-      setEmailNotifications(data.notifications.emailNotifications);
-      setAgentNotifications(data.notifications.agentNotifications);
-      setTaskReminders(data.notifications.taskReminders);
       setTheme(data.appearance.theme);
       setCompactMode(data.appearance.compactMode);
-      setOfflineMode(data.sync.offlineMode);
-      setSyncFrequency(data.sync.syncFrequency);
       setWorkspaceId(data.agentHandoff.workspaceId);
       setRepositoryUrl(data.agentHandoff.repository?.url || "");
       setDefaultBranchName(data.agentHandoff.repository?.defaultBranch || "main");
@@ -273,8 +278,11 @@ function SettingsContent() {
           setStorageUsed(0);
         }
       }
+      setLoadFailed(false);
     } catch (error) {
       console.error("Error fetching settings:", error);
+      // Never render the form with blank defaults as if they were saved.
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -298,18 +306,6 @@ function SettingsContent() {
     .join("")
     .toUpperCase()
     .slice(0, 2) || "U";
-  
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) {
-        alert("File too large. Max 2MB allowed.");
-        return;
-      }
-      // TODO: Implement avatar upload to storage
-      alert(`Selected: ${file.name}. Avatar upload will be implemented with storage service.`);
-    }
-  };
   
   const handleSave = async () => {
     setIsSaving(true);
@@ -338,20 +334,15 @@ function SettingsContent() {
         body: JSON.stringify({
           name,
           defaultModel: modelToSave,
-          autoSaveAiOutputs,
-          emailNotifications,
-          agentNotifications,
-          taskReminders,
           theme,
           compactMode,
-          offlineMode,
-          syncFrequency,
         }),
       });
       
       if (!response.ok) throw new Error("Failed to save settings");
-      
+
       setSaveSuccess(true);
+      showToast.success(t("feedback.settingsSaved"));
 
       // Apply the saved appearance right away and refresh the dashboard layout
       // so <AppearanceSync> receives the new server values.
@@ -367,7 +358,7 @@ function SettingsContent() {
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
       console.error("Error saving settings:", error);
-      alert("Failed to save settings. Please try again.");
+      showToast.error(t("feedback.settingsSaveFailed"));
     } finally {
       setIsSaving(false);
     }
@@ -381,11 +372,11 @@ function SettingsContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, repositoryUrl, defaultBranch: defaultBranchName }),
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.message || body?.error || "Repository could not be saved");
-      setSaveSuccess(true);
+      await readOrThrow(response, t, t("feedback.repositorySaveFailed"));
+      showToast.success(t("feedback.repositorySaved"));
+      await fetchSettings();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Repository could not be saved");
+      showToast.error(actionMessage(error, t("feedback.repositorySaveFailed")));
     } finally {
       setAgentSaving(false);
     }
@@ -399,20 +390,30 @@ function SettingsContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId, name: "Local coding agent" }),
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.message || body?.error || "Token could not be created");
+      const body = await readOrThrow(response, t, t("feedback.tokenCreateFailed"));
       setNewAgentToken(body.token);
       await fetchSettings();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Token could not be created");
+      showToast.error(actionMessage(error, t("feedback.tokenCreateFailed")));
     } finally {
       setAgentSaving(false);
     }
   };
 
   const revokeAgentToken = async (id: string) => {
-    const response = await fetch(`/api/agent-tokens/${id}`, { method: "DELETE" });
-    if (response.ok) setAgentTokens((current) => current.map((token) => token.id === id ? { ...token, revokedAt: new Date().toISOString() } : token));
+    try {
+      const response = await fetch(`/api/agent-tokens/${id}`, { method: "DELETE" });
+      await readOrThrow(response, t, t("feedback.tokenRevokeFailed"));
+      setAgentTokens((current) => current.map((token) => token.id === id ? { ...token, revokedAt: new Date().toISOString() } : token));
+      showToast.success(t("feedback.tokenRevoked"));
+    } catch (error) {
+      showToast.error(actionMessage(error, t("feedback.tokenRevokeFailed")));
+    }
+  };
+
+  const copyWithFeedback = async (text: string) => {
+    if (await copyText(text)) showToast.success(t("feedback.copied"));
+    else showToast.error(t("feedback.copyFailed"));
   };
 
   const connectIntegration = async (provider: "github" | "linear") => {
@@ -423,14 +424,11 @@ function SettingsContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workspaceId }),
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Integration could not be connected");
-      }
+      const body = await readOrThrow(response, t, t("feedback.integrationConnectFailed"));
       const url = body.installUrl || body.authUrl;
       if (url) window.location.assign(url);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Integration could not be connected");
+      showToast.error(actionMessage(error, t("feedback.integrationConnectFailed")));
     } finally {
       setIntegrationSaving(null);
     }
@@ -440,13 +438,14 @@ function SettingsContent() {
     setIntegrationSaving(integrationId);
     try {
       const response = await fetch(`/api/integrations/${integrationId}/sync`, { method: "POST" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Integration sync failed");
-      }
+      const body = await readOrThrow(response, t, t("feedback.integrationSyncFailed"));
+      // Seeded demo integrations are read-only: the sync succeeds without
+      // fetching anything, so say so instead of appearing to do nothing.
+      if (body?.seeded) showToast.info(t("feedback.integrationSyncSeeded"));
+      else showToast.success(t("feedback.integrationSynced"));
       await fetchSettings();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Integration sync failed");
+      showToast.error(actionMessage(error, t("feedback.integrationSyncFailed")));
     } finally {
       setIntegrationSaving(null);
     }
@@ -456,16 +455,13 @@ function SettingsContent() {
     setIntegrationSaving(`${integrationId}:resources`);
     try {
       const response = await fetch(`/api/integrations/${integrationId}/resources`);
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Integration resources could not be loaded");
-      }
+      const body = await readOrThrow(response, t, t("feedback.integrationResourcesFailed"));
       setIntegrationResources((current) => ({
         ...current,
         [integrationId]: body.resources || {},
       }));
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Integration resources could not be loaded");
+      showToast.error(actionMessage(error, t("feedback.integrationResourcesFailed")));
     } finally {
       setIntegrationSaving(null);
     }
@@ -482,17 +478,52 @@ function SettingsContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        throw new Error(body?.message || body?.error || "Integration config could not be saved");
-      }
+      await readOrThrow(response, t, t("feedback.integrationConfigFailed"));
+      showToast.success(t("feedback.integrationConfigSaved"));
       await fetchSettings();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Integration config could not be saved");
+      showToast.error(actionMessage(error, t("feedback.integrationConfigFailed")));
     } finally {
       setIntegrationSaving(null);
     }
   };
+
+  const disconnectIntegration = async (integration: IntegrationSummary) => {
+    setIntegrationSaving(`${integration.id}:disconnect`);
+    try {
+      const response = await fetch(`/api/integrations/${integration.id}`, { method: "DELETE" });
+      await readOrThrow(response, t, t("feedback.integrationDisconnectFailed"));
+      setIntegrations((current) => current.filter((item) => item.id !== integration.id));
+      showToast.success(t("feedback.integrationDisconnected"));
+      await fetchSettings();
+    } catch (error) {
+      showToast.error(actionMessage(error, t("feedback.integrationDisconnectFailed")));
+    } finally {
+      setIntegrationSaving(null);
+    }
+  };
+
+  const sectionSave = (dirty: boolean) => (
+    <div className="flex items-center justify-end gap-3 border-t border-border pt-4 dark:border-neutral-700">
+      {dirty && !saveSuccess && (
+        <span className="text-xs text-amber-600">{t("common.unsavedChanges")}</span>
+      )}
+      <Button
+        onClick={handleSave}
+        disabled={isSaving || !dirty}
+        aria-label={t("common.saveChanges")}
+      >
+        {isSaving ? (
+          <Loader2 className="size-4 mr-2 animate-spin" />
+        ) : saveSuccess ? (
+          <CheckCircle2 className="size-4 mr-2 text-green-700 dark:text-green-500" />
+        ) : (
+          <Save className="size-4 mr-2" />
+        )}
+        {saveSuccess ? t("common.saved") : t("common.saveChanges")}
+      </Button>
+    </div>
+  );
 
   if (isLoading) {
     return (
@@ -508,6 +539,24 @@ function SettingsContent() {
     );
   }
 
+  if (loadFailed) {
+    return (
+      <div className="flex flex-col h-full w-full overflow-hidden">
+        <header className="flex items-center gap-4 border-b border-border px-4 md:px-6 py-3 shrink-0">
+          <SidebarTrigger />
+          <h1 className="text-lg md:text-xl font-semibold">{t("settings.title")}</h1>
+        </header>
+        <div role="alert" data-testid="settings-load-error" className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <AlertTriangle className="size-8 text-destructive" />
+          <p className="text-sm text-foreground">{t("feedback.settingsLoadFailed")}</p>
+          <Button variant="outline" size="sm" onClick={() => void fetchSettings()}>
+            {t("ux.retry")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Header */}
@@ -515,26 +564,6 @@ function SettingsContent() {
         <div className="flex items-center gap-4">
           <SidebarTrigger />
           <h1 className="text-lg md:text-xl font-semibold">{t("settings.title")}</h1>
-        </div>
-        <div className="ml-0 sm:ml-auto flex items-center gap-2 w-full sm:w-auto">
-          {hasChanges() && !saveSuccess && (
-            <span className="text-xs text-amber-600">{t("common.unsavedChanges")}</span>
-          )}
-          <Button 
-            onClick={handleSave} 
-            disabled={isSaving} 
-            className="flex-1 sm:flex-none"
-            aria-label={t("common.saveChanges")}
-          >
-            {isSaving ? (
-              <Loader2 className="size-4 mr-2 animate-spin" />
-            ) : saveSuccess ? (
-              <CheckCircle2 className="size-4 mr-2 text-green-700 dark:text-green-500" />
-            ) : (
-              <Save className="size-4 mr-2" />
-            )}
-            {saveSuccess ? t("common.saved") : t("common.saveChanges")}
-          </Button>
         </div>
       </header>
 
@@ -558,10 +587,6 @@ function SettingsContent() {
               <TabsTrigger value="integrations" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Plug className="size-3 md:size-4" />
                 <span className="hidden xs:inline">{t("settingsPage.integrations")}</span>
-              </TabsTrigger>
-              <TabsTrigger value="notifications" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
-                <Bell className="size-3 md:size-4" />
-                <span className="hidden xs:inline">{t("settings.tabs.notifications")}</span>
               </TabsTrigger>
               <TabsTrigger value="appearance" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Palette className="size-3 md:size-4" />
@@ -588,25 +613,9 @@ function SettingsContent() {
                       <AvatarImage src={image || undefined} />
                       <AvatarFallback className="text-xl md:text-2xl">{userInitials}</AvatarFallback>
                     </Avatar>
-                    <div className="space-y-2">
-                      <input
-                        type="file"
-                        ref={avatarInputRef}
-                        accept="image/jpeg,image/png,image/gif"
-                        className="hidden"
-                        onChange={handleAvatarChange}
-                      />
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => avatarInputRef.current?.click()}
-                      >
-                        <Upload className="size-3 mr-2" />
-                        {t("settings.profile.changeAvatar")}
-                      </Button>
-                      <p className="text-xs text-muted-foreground hidden sm:block">
-                        {t("settings.profile.avatarHint")}
-                      </p>
+                    <div className="min-w-0 text-center sm:text-left">
+                      <p className="truncate text-sm font-medium">{name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{email}</p>
                     </div>
                   </div>
 
@@ -636,6 +645,7 @@ function SettingsContent() {
                       </p>
                     </div>
                   </div>
+                  {sectionSave(profileDirty)}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -658,7 +668,7 @@ function SettingsContent() {
                         onValueChange={(value) => {
                           // Check if model is available
 	                          if (!isModelAvailable(value)) {
-                            alert(t("settingsPage.serverManagedGeminiIsNot"));
+                            showToast.warning(t("settings.ai.unavailableNotice"));
 	                            return;
 	                          }
                           setDefaultModel(value);
@@ -742,24 +752,6 @@ function SettingsContent() {
                       )}
                     </div>
 
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium">{t("settings.ai.agentBehavior")}</h4>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>{t("settings.ai.autoSave")}</Label>
-                          <p className="text-xs text-muted-foreground">
-                            {t("settings.ai.autoSaveHint")}
-                          </p>
-                        </div>
-                        <Switch
-                          checked={autoSaveAiOutputs}
-                          onCheckedChange={setAutoSaveAiOutputs}
-                        />
-                      </div>
-                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -817,7 +809,7 @@ function SettingsContent() {
                       </p>
                       <div className="flex gap-2">
                         <Input readOnly value={newAgentToken} className="font-mono text-xs" />
-                        <Button size="icon" variant="outline" onClick={() => navigator.clipboard.writeText(newAgentToken)} title={t("settingsPage.copyToken")} aria-label={t("settingsPage.copyToken")}>
+                        <Button size="icon" variant="outline" onClick={() => void copyWithFeedback(newAgentToken)} title={t("feedback.copy")} aria-label={t("feedback.copy")}>
                           <Copy className="size-4" />
                         </Button>
                       </div>
@@ -834,7 +826,7 @@ function SettingsContent() {
                           </p>
                         </div>
                         {!token.revokedAt && (
-                          <Button size="icon" variant="ghost" onClick={() => revokeAgentToken(token.id)} title={t("settingsPage.revokeToken")} aria-label={t("settingsPage.revokeToken")}>
+                          <Button size="icon" variant="ghost" onClick={() => void revokeAgentToken(token.id)} title={t("feedback.revokeToken")} aria-label={t("feedback.revokeToken")}>
                             <Trash2 className="size-4" />
                           </Button>
                         )}
@@ -859,7 +851,7 @@ function SettingsContent() {
                         <div key={client} className="border border-border p-3">
                           <div className="mb-2 flex items-center justify-between">
                             <span className="text-sm font-medium">{client}</span>
-                            <Button size="icon" variant="ghost" onClick={() => navigator.clipboard.writeText(command)} title={t("settingsPage.copySetup")} aria-label={t("settingsPage.copySetup")}>
+                            <Button size="icon" variant="ghost" onClick={() => void copyWithFeedback(command)} title={t("feedback.copy")} aria-label={t("feedback.copy")}>
                               <Copy className="size-3.5" />
                             </Button>
                           </div>
@@ -1055,7 +1047,24 @@ function SettingsContent() {
                             </div>
                           )}
 
-                          <div className="mt-4 flex gap-2">
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {existing && !existing.seeded && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDisconnectTarget(existing)}
+                                disabled={integrationSaving === `${existing.id}:disconnect`}
+                                data-testid={`integration-disconnect-${provider}`}
+                              >
+                                {integrationSaving === `${existing.id}:disconnect` ? (
+                                  <Loader2 className="mr-2 size-3.5 animate-spin" />
+                                ) : (
+                                  <Unplug className="mr-2 size-3.5" />
+                                )}
+                                {t("feedback.disconnect")}
+                              </Button>
+                            )}
                             {existing ? (
                               <Button
                                 variant="outline"
@@ -1093,62 +1102,6 @@ function SettingsContent() {
                         </div>
                       );
                     })}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Notifications */}
-            <TabsContent value="notifications">
-              <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
-                <CardHeader className="p-4 md:p-6">
-                  <CardTitle className="text-base md:text-lg">{t("settings.notifications.title")}</CardTitle>
-                  <CardDescription className="text-xs md:text-sm">
-                    {t("settings.notifications.description")}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 p-4 pt-0 md:p-6 md:pt-0">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Label className="text-sm">{t("settings.notifications.email")}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.notifications.emailHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Label className="text-sm">{t("settings.notifications.agent")}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.notifications.agentHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={agentNotifications}
-                      onCheckedChange={setAgentNotifications}
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Label className="text-sm">{t("settings.notifications.reminders")}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.notifications.remindersHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={taskReminders}
-                      onCheckedChange={setTaskReminders}
-                    />
                   </div>
                 </CardContent>
               </Card>
@@ -1211,6 +1164,7 @@ function SettingsContent() {
                       />
                     </div>
                   </div>
+                  {sectionSave(appearanceDirty)}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1235,51 +1189,12 @@ function SettingsContent() {
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Label className="text-sm">{t("settings.sync.offlineMode")}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.sync.offlineModeHint")}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={offlineMode}
-                      onCheckedChange={setOfflineMode}
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="grid gap-2">
-                    <Label className="text-sm">{t("settings.sync.frequency")}</Label>
-                    <Select value={syncFrequency} onValueChange={setSyncFrequency}>
-                      <SelectTrigger className="text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="realtime">{t("settings.sync.frequencyRealtime")}</SelectItem>
-                        <SelectItem value="5min">{t("settings.sync.frequency5min")}</SelectItem>
-                        <SelectItem value="15min">{t("settings.sync.frequency15min")}</SelectItem>
-                        <SelectItem value="manual">{t("settings.sync.frequencyManual")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Separator />
-
                   <div className="space-y-2">
                     <Label className="text-sm">{t("settings.sync.storageUsage")}</Label>
-                    <div className="flex items-center gap-3 md:gap-4">
-                      <div className="flex-1 h-2 rounded-full bg-muted dark:bg-neutral-700 overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${Math.min((storageUsed / 100) * 100, 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs md:text-sm text-muted-foreground whitespace-nowrap">
-                        {storageUsed} MB / 100 MB
-                      </span>
-                    </div>
+                    {/* Browser storage estimate only; there is no app quota. */}
+                    <p className="text-xs md:text-sm text-muted-foreground" data-testid="settings-storage-used">
+                      {t("feedback.storageUsed").replace("{n}", String(storageUsed))}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -1287,6 +1202,20 @@ function SettingsContent() {
           </Tabs>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={disconnectTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDisconnectTarget(null);
+        }}
+        title={t("feedback.disconnectTitle").replace("{provider}", disconnectTarget?.provider === "linear" ? "Linear" : "GitHub")}
+        description={t("feedback.disconnectDesc")}
+        confirmLabel={t("feedback.disconnect")}
+        destructive
+        onConfirm={async () => {
+          if (disconnectTarget) await disconnectIntegration(disconnectTarget);
+        }}
+      />
     </div>
   );
 }

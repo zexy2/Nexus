@@ -3,11 +3,12 @@ import { verifySession } from "@/lib/api-middleware";
 import {
   docs,
   documentYjsSnapshots,
+  vectors,
   workspaceMembers,
   workspaces,
 } from "@nexus/database/schema";
 import { and, eq, or } from "drizzle-orm";
-import { enforceMutationBudget } from "@/lib/production-guardrails";
+import { enforceMutationBudget, writeAuditLog } from "@/lib/production-guardrails";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,9 +48,9 @@ async function getUserId() {
   return session?.user.id;
 }
 
-async function findAuthorizedDoc(id: string, userId: string) {
+async function findAuthorizedDocWithOwner(id: string, userId: string) {
   const [row] = await db
-    .select({ doc: docs })
+    .select({ doc: docs, workspaceOwnerId: workspaces.ownerId })
     .from(docs)
     .innerJoin(workspaces, eq(docs.workspaceId, workspaces.id))
     .leftJoin(workspaceMembers, eq(workspaceMembers.workspaceId, workspaces.id))
@@ -61,7 +62,11 @@ async function findAuthorizedDoc(id: string, userId: string) {
     )
     .limit(1);
 
-  return row?.doc;
+  return row;
+}
+
+async function findAuthorizedDoc(id: string, userId: string) {
+  return (await findAuthorizedDocWithOwner(id, userId))?.doc;
 }
 
 // GET - Get single document
@@ -259,14 +264,56 @@ export async function DELETE(
     });
     if (mutationLimit) return mutationLimit;
 
-    const existing = await findAuthorizedDoc(id, userId);
+    const authorized = await findAuthorizedDocWithOwner(id, userId);
+    const existing = authorized?.doc;
     if (!existing) {
       return Response.json({ error: "Document not found" }, { status: 404 });
     }
 
-    await db.update(docs).set({ isArchived: 1 }).where(eq(docs.id, id));
+    const permanent = new URL(req.url).searchParams.get("permanent") === "1";
+    if (!permanent) {
+      // Default DELETE stays a soft delete (archive), restorable from the archive.
+      await db.update(docs).set({ isArchived: 1 }).where(eq(docs.id, id));
+      return Response.json({ success: true });
+    }
 
-    return Response.json({ success: true });
+    // Permanent delete: only for docs already in the archive, and only by the
+    // workspace owner. Plan versions, requirements, change sets/proposals and
+    // Yjs state cascade at the FK level; tasks keep existing with doc_id set
+    // to NULL. Vectors carry doc_id without an FK, and children reference the
+    // doc via parent_id without one, so both are handled explicitly.
+    if (existing.isArchived !== 1) {
+      return Response.json(
+        { error: "DOC_NOT_ARCHIVED", message: "Archive the document before deleting it permanently." },
+        { status: 409 }
+      );
+    }
+    if (authorized.workspaceOwnerId !== userId) {
+      return Response.json(
+        { error: "WORKSPACE_OWNER_REQUIRED", message: "Only the workspace owner can permanently delete documents." },
+        { status: 403 }
+      );
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(vectors)
+        .where(or(eq(vectors.docId, id), and(eq(vectors.sourceType, "doc"), eq(vectors.sourceId, id))));
+      await tx
+        .update(docs)
+        .set({ parentId: null })
+        .where(and(eq(docs.parentId, id), eq(docs.workspaceId, existing.workspaceId)));
+      await tx.delete(docs).where(and(eq(docs.id, id), eq(docs.isArchived, 1)));
+    });
+
+    await writeAuditLog({
+      userId,
+      workspaceId: existing.workspaceId,
+      event: "doc.delete_permanent",
+      metadata: { docId: id, title: existing.title },
+    });
+
+    return Response.json({ success: true, deleted: true });
   } catch (error) {
     console.error("Failed to delete doc:", error);
     return Response.json({ error: "Failed to delete document" }, { status: 500 });

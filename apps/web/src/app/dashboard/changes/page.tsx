@@ -23,6 +23,9 @@ import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { friendlyError } from "@/lib/friendly-error";
+import { plural } from "@/lib/i18n/plural";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import {
   confidenceBand,
   confidenceIsInformative,
@@ -126,6 +129,7 @@ export default function ChangesPage() {
   const selectionInitializedFor = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<"apply" | "reject" | null>(null);
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
 
   const displayDocTitle = useCallback((value: string) => {
     return localizeGeneratedCopy(
@@ -429,7 +433,7 @@ export default function ChangesPage() {
           await fetchDetail(detail.id);
           return;
         }
-        throw new Error(body?.message || body?.error || t("changes.resolveError"));
+        throw new Error(friendlyError(body, t, t("changes.resolveError")));
       }
       if (body?.alreadyResolved) {
         showToast.success(
@@ -462,7 +466,7 @@ export default function ChangesPage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(body?.message || body?.error || t("changes.externalWriteFailed"));
+        throw new Error(friendlyError(body, t, t("changes.externalWriteFailed")));
       }
       showToast.success(t("changesPage.externalWriteQueuedAgain"));
       if (detail) await fetchDetail(detail.id);
@@ -639,7 +643,7 @@ export default function ChangesPage() {
                 {appliedTaskCount > 0 && detail.status !== "pending" && (
                   <div className="mt-4 flex flex-col justify-between gap-3 border border-border px-5 py-4 sm:flex-row sm:items-center">
                     <span className="text-sm text-foreground-secondary">
-                      {t("changesPage.tasksAppliedToBoard").replace("{n}", String(appliedTaskCount))}
+                      {plural(t, "feedback.tasksApplied", appliedTaskCount)}
                     </span>
                     <Button asChild variant="outline" size="sm">
                       <Link href="/dashboard/tasks">
@@ -832,7 +836,7 @@ export default function ChangesPage() {
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => void resolveChangeSet("reject")}
+                        onClick={() => setRejectConfirmOpen(true)}
                         disabled={resolving !== null}
                       >
                         {resolving === "reject" ? (
@@ -859,6 +863,15 @@ export default function ChangesPage() {
           </main>
         </div>
       )}
+      <ConfirmDialog
+        open={rejectConfirmOpen}
+        onOpenChange={setRejectConfirmOpen}
+        title={t("feedback.rejectPlanTitle")}
+        description={t("feedback.rejectPlanDesc")}
+        confirmLabel={t("changes.rejectPlan")}
+        destructive
+        onConfirm={() => resolveChangeSet("reject")}
+      />
     </div>
   );
 }
