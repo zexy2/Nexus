@@ -80,7 +80,7 @@ printf '%s ai_traces retention=%sd result=%s\n' \
 echo "ai_traces: ${ai_result:-unknown} (older than $AI_TRACE_RETENTION_DAYS days)"
 
 # In-app notifications: the bell lists the latest 30, so old rows are dead
-# weight. Skipped until migration 0019 created the table.
+# weight. Skipped until migration 0020 created the table.
 has_notifications="$(
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T postgres \
     psql -U "${POSTGRES_USER:-nexus}" -d "${POSTGRES_DB:-nexus}" -v ON_ERROR_STOP=1 -At \

@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   bigint,
   bigserial,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -449,6 +450,13 @@ export const changeSets = pgTable(
     status: varchar("status", { length: 30 }).notNull().default("pending"),
     summary: text("summary").notNull(),
     stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+    // Set on a change set that undoes an earlier applied change set. History is
+    // never deleted: an undo is a new, already-applied change set pointing at
+    // the one it reverts. Unique, so a change set can be reverted only once.
+    revertsChangeSetId: uuid("reverts_change_set_id").references(
+      (): AnyPgColumn => changeSets.id,
+      { onDelete: "set null" }
+    ),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     resolvedBy: text("resolved_by").references(() => users.id, { onDelete: "set null" }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -463,6 +471,7 @@ export const changeSets = pgTable(
     index("change_sets_doc_idx").on(table.docId),
     index("change_sets_status_idx").on(table.status),
     index("change_sets_workflow_idx").on(table.temporalWorkflowId),
+    uniqueIndex("change_sets_reverts_idx").on(table.revertsChangeSetId),
   ]
 );
 
@@ -1034,7 +1043,7 @@ export const agentExecutions = pgTable(
     output: jsonb("output").$type<Record<string, unknown>>(),
     errorMessage: text("error_message"),
     temporalWorkflowId: varchar("temporal_workflow_id", { length: 255 }),
-    // User who started the run (null for rows created before 0019). Used for
+    // User who started the run (null for rows created before 0020). Used for
     // cancel authorization and to address completion notifications.
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     // Set when the user asks Temporal to cancel; the row stays "running" until

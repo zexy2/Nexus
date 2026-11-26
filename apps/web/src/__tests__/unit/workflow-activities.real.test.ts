@@ -34,6 +34,7 @@ const mockState = vi.hoisted(() => ({
     status: "pending",
   },
   insertedTaskId: "task-created",
+  taskSnapshot: null as Record<string, unknown> | null,
   integrations: [] as Array<{ id: string; metadata: Record<string, unknown> | null }>,
   end: vi.fn(),
   postgres: vi.fn(),
@@ -51,6 +52,10 @@ function makeSqlClient() {
 
       if (text.includes("FROM change_proposals")) {
         return mockState.proposals as T;
+      }
+
+      if (text.includes("FROM tasks") && text.includes("FOR UPDATE")) {
+        return (mockState.taskSnapshot ? [mockState.taskSnapshot] : []) as T;
       }
 
       if (text.includes("INSERT INTO tasks")) {
@@ -133,6 +138,7 @@ describe("applyPlanChangeSet", () => {
       status: "pending",
     };
     mockState.insertedTaskId = "task-created";
+    mockState.taskSnapshot = null;
     mockState.integrations = [];
     mockState.end.mockClear();
     mockState.postgres.mockClear();
@@ -210,6 +216,62 @@ describe("applyPlanChangeSet", () => {
     expect(taskUpdate?.text).toContain("ELSE priority");
     expect(taskUpdate?.values).toContain(false);
     expect(taskUpdate?.values).toContain(null);
+  });
+
+  it("stores the pre-apply task snapshot on the proposal so the change set can be undone", async () => {
+    mockState.taskSnapshot = {
+      title: "Old title",
+      description: null,
+      priority: "low",
+      is_archived: 0,
+      doc_id: "doc-0",
+      alignment_status: "aligned",
+    };
+    mockState.proposals = [
+      {
+        id: "cp-1",
+        requirement_id: "req-1",
+        task_id: "task-1",
+        action: "update_task",
+        title: "New title",
+        description: "New description",
+        priority: "high",
+        rationale: "Requirement changed",
+      },
+    ];
+
+    await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
+
+    const snapshotRead = mockState.calls.findIndex(
+      (call) => call.text.includes("FROM tasks") && call.text.includes("FOR UPDATE")
+    );
+    const taskUpdate = mockState.calls.findIndex((call) => call.text.includes("description = COALESCE"));
+    expect(snapshotRead).toBeGreaterThan(-1);
+    expect(snapshotRead).toBeLessThan(taskUpdate);
+    const proposalUpdate = mockState.calls.find(
+      (call) => call.text.includes("UPDATE change_proposals") && call.text.includes("metadata = COALESCE")
+    );
+    expect(proposalUpdate).toBeDefined();
+    expect(JSON.parse(String(proposalUpdate!.values.at(-2)))).toEqual({ undoBefore: mockState.taskSnapshot });
+  });
+
+  it("does not snapshot tasks it creates", async () => {
+    mockState.proposals = [
+      {
+        id: "cp-1",
+        requirement_id: "req-1",
+        task_id: null,
+        action: "create_task",
+        title: "Create",
+        description: null,
+        priority: "medium",
+        rationale: "New requirement",
+      },
+    ];
+    await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
+    expect(
+      mockState.calls.some((call) => call.text.includes("FROM tasks") && call.text.includes("FOR UPDATE"))
+    ).toBe(false);
   });
 
   it("performs a true relink and records a fully applied change set", async () => {

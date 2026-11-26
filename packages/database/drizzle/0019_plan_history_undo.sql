@@ -1,0 +1,3 @@
+ALTER TABLE "change_sets" ADD COLUMN "reverts_change_set_id" uuid;--> statement-breakpoint
+ALTER TABLE "change_sets" ADD CONSTRAINT "change_sets_reverts_change_set_id_change_sets_id_fk" FOREIGN KEY ("reverts_change_set_id") REFERENCES "public"."change_sets"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "change_sets_reverts_idx" ON "change_sets" USING btree ("reverts_change_set_id");

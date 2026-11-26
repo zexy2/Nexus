@@ -63,7 +63,7 @@ export async function createNotification(input: {
       .returning({ id: notifications.id });
     return inserted.length > 0;
   } catch (error) {
-    // Before migration 0019 runs the table does not exist; stay silent.
+    // Before migration 0020 runs the table does not exist; stay silent.
     if (!isUndefinedTable(error)) {
       console.error("[Notifications] create failed:", error);
     }
@@ -73,7 +73,7 @@ export async function createNotification(input: {
 
 /**
  * Who started a run. New rows carry `created_by`; rows started before
- * migration 0019 fall back to the `workflow.start` audit entry.
+ * migration 0020 fall back to the `workflow.start` audit entry.
  */
 export async function resolveExecutionOwner(
   execution: Pick<AgentExecutionRow, "id" | "createdBy">
