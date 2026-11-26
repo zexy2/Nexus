@@ -7,8 +7,11 @@
 
 import {
   ApplicationFailure,
+  CancellationScope,
   condition,
   defineSignal,
+  isCancellation,
+  patched,
   proxyActivities,
   setHandler,
   sleep,
@@ -45,6 +48,7 @@ const {
   applyPlanChangeSet,
   rejectPlanChangeSet,
   expirePlanChangeSet,
+  cancelPlanImpactRun,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "5 minutes",
   retry: {
@@ -385,7 +389,42 @@ export async function taskBreakdownWorkflow(
   };
 }
 
+/**
+ * Patch ids. `patched()` records a marker the first time new code runs, and
+ * returns false while replaying history that predates the marker, so
+ * executions already in flight when this code shipped replay the commands
+ * they originally produced.
+ */
+export const PLAN_IMPACT_CANCEL_CLEANUP_PATCH = "plan-impact-cancel-cleanup-v1";
+export const PLAN_IMPACT_APPLY_SHIELD_PATCH = "plan-impact-apply-noncancellable-v1";
+
+/**
+ * Plan impact analysis + review. Cancellation (user cancel from the UI) is
+ * handled here: the pending change set would otherwise stay `pending` and
+ * block new analyses of the doc until the 72 h expiry/recovery.
+ *
+ * Replay safety: the happy path issues exactly the same commands in the same
+ * order as before. New commands only appear after a cancellation request, and
+ * they are gated by `patched()`, so a closed execution whose history already
+ * contains a cancellation (e.g. replayed for a query) still replays cleanly.
+ */
 export async function planImpactWorkflow(
+  input: PlanImpactInput
+): Promise<PlanImpactOutput> {
+  try {
+    return await runPlanImpact(input);
+  } catch (error) {
+    if (isCancellation(error) && patched(PLAN_IMPACT_CANCEL_CLEANUP_PATCH)) {
+      // The root scope is cancelled; cleanup must run outside of it.
+      await CancellationScope.nonCancellable(() =>
+        cancelPlanImpactRun(workflowInfo().workflowId, input.userId)
+      );
+    }
+    throw error;
+  }
+}
+
+async function runPlanImpact(
   input: PlanImpactInput
 ): Promise<PlanImpactOutput> {
   const analysis = await analyzePlanImpact(input);
@@ -429,11 +468,16 @@ export async function planImpactWorkflow(
     };
   }
 
-  const applied = await applyChangeSetAndExternalWrites({
+  const applyInput = {
     changeSetId: persisted.changeSetId,
     selectedProposalIds: decision.selectedProposalIds || [],
     userId: decision.userId,
-  });
+  };
+  // Once the user approved, a cancel must not interrupt the apply halfway
+  // (change set applied but external writes never executed/finalized).
+  const applied = patched(PLAN_IMPACT_APPLY_SHIELD_PATCH)
+    ? await CancellationScope.nonCancellable(() => applyChangeSetAndExternalWrites(applyInput))
+    : await applyChangeSetAndExternalWrites(applyInput);
 
   return {
     changeSetId: persisted.changeSetId,

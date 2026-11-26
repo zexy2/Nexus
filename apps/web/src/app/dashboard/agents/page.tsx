@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   ArrowRight,
+  Ban,
   CheckCircle2,
   CircleDot,
   FileText,
@@ -38,6 +39,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { RunCancelButton, RunPhase, type RunProgress } from "@/components/shared/run-controls";
 import { showToast } from "@/components/shared/toast-provider";
 import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
 import { aiErrorFromBody, formatAiError, isAiQuotaError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
@@ -49,12 +51,14 @@ import { friendlyError } from "@/lib/friendly-error";
 
 type Run = {
   id: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   agentType: string;
   input: Record<string, unknown> | null;
   output: Record<string, unknown> | null;
   errorMessage: string | null;
   temporalWorkflowId: string | null;
+  cancelRequestedAt?: string | null;
+  progress?: RunProgress;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -96,6 +100,11 @@ const runStatus = {
     icon: XCircle,
     labelKey: "agents.center.statusFailed",
     className: "border-red-400/25 bg-red-400/10 text-red-800 dark:text-red-200",
+  },
+  cancelled: {
+    icon: Ban,
+    labelKey: "runs.status.cancelled",
+    className: "border-border bg-foreground/5 text-foreground-subtle",
   },
 };
 
@@ -420,7 +429,9 @@ export default function WorkflowCenterPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium capitalize text-foreground">{getRunName(run, t)}</div>
-                    {run.errorMessage ? (
+                    {run.status === "cancelled" ? (
+                      <p className="mt-1 text-sm text-foreground-subtle">{t("runs.cancelledMessage")}</p>
+                    ) : run.errorMessage ? (
                       <p className="mt-1 text-sm text-red-700 dark:text-red-300">{run.errorMessage}</p>
                     ) : (
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -447,6 +458,18 @@ export default function WorkflowCenterPage() {
                   </div>
                   <div className="text-left text-xs text-foreground-faint md:text-right">
                     <div>{formatRelativeDate(run.startedAt || run.createdAt, locale)}</div>
+                    {run.status === "running" && (
+                      <div className="mt-2 flex flex-col gap-2 md:items-end">
+                        <RunPhase progress={run.progress} cancelRequested={Boolean(run.cancelRequestedAt)} />
+                        {run.temporalWorkflowId && !run.temporalWorkflowId.startsWith("cmd-") && (
+                          <RunCancelButton
+                            workflowId={run.temporalWorkflowId}
+                            cancelRequested={Boolean(run.cancelRequestedAt)}
+                            onCancelRequested={() => void fetchRuns()}
+                          />
+                        )}
+                      </div>
+                    )}
                     {run.input?.workflowType === "plan_impact" && (
                       <Link
                         href="/dashboard/changes"

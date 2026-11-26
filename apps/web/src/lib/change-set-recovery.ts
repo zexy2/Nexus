@@ -74,12 +74,13 @@ async function getPlanWorkflowLiveness(
 }
 
 /**
- * Transition a still-pending change set to `rejected` or `expired`. Returns
+ * Transition a still-pending change set to `rejected`, `expired` or
+ * `cancelled` (its planImpactWorkflow was cancelled). Returns
  * false when the row is no longer pending (someone else resolved it).
  */
 export async function resolveOrphanedChangeSet(
   changeSetId: string,
-  outcome: "rejected" | "expired",
+  outcome: "rejected" | "expired" | "cancelled",
   userId: string | null,
   reason: string
 ): Promise<boolean> {
@@ -134,7 +135,7 @@ export async function resolveOrphanedChangeSet(
     await tx.insert(auditLogs).values({
       userId,
       workspaceId: locked.workspaceId,
-      event: outcome === "rejected" ? "plan.change_rejected" : "plan.change_expired",
+      event: `plan.change_${outcome}`,
       status: "success",
       metadata: { changeSetId, recovered: true, reason },
     });

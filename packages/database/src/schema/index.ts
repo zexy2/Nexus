@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   bigint,
   bigserial,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -449,6 +450,13 @@ export const changeSets = pgTable(
     status: varchar("status", { length: 30 }).notNull().default("pending"),
     summary: text("summary").notNull(),
     stats: jsonb("stats").$type<Record<string, number>>().notNull().default({}),
+    // Set on a change set that undoes an earlier applied change set. History is
+    // never deleted: an undo is a new, already-applied change set pointing at
+    // the one it reverts. Unique, so a change set can be reverted only once.
+    revertsChangeSetId: uuid("reverts_change_set_id").references(
+      (): AnyPgColumn => changeSets.id,
+      { onDelete: "set null" }
+    ),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     resolvedBy: text("resolved_by").references(() => users.id, { onDelete: "set null" }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -463,6 +471,7 @@ export const changeSets = pgTable(
     index("change_sets_doc_idx").on(table.docId),
     index("change_sets_status_idx").on(table.status),
     index("change_sets_workflow_idx").on(table.temporalWorkflowId),
+    uniqueIndex("change_sets_reverts_idx").on(table.revertsChangeSetId),
   ]
 );
 
@@ -1034,6 +1043,12 @@ export const agentExecutions = pgTable(
     output: jsonb("output").$type<Record<string, unknown>>(),
     errorMessage: text("error_message"),
     temporalWorkflowId: varchar("temporal_workflow_id", { length: 255 }),
+    // User who started the run (null for rows created before 0020). Used for
+    // cancel authorization and to address completion notifications.
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    // Set when the user asks Temporal to cancel; the row stays "running" until
+    // reconciliation observes the CANCELLED close status.
+    cancelRequestedAt: timestamp("cancel_requested_at", { withTimezone: true }),
     startedAt: timestamp("started_at", { withTimezone: true }),
     // Lease heartbeat for in-process (non-Temporal) runs. A "running" row whose
     // heartbeat is older than the lease TTL is treated as abandoned.
@@ -1386,6 +1401,37 @@ export const aiTraces = pgTable(
   (table) => [
     index("ai_traces_created_idx").on(table.createdAt),
     index("ai_traces_user_created_idx").on(table.userId, table.createdAt),
+  ]
+);
+
+// ==========================================
+// NOTIFICATIONS (In-app bildirimler)
+// ==========================================
+
+/**
+ * Per-user in-app notifications (workflow finished, plan review waiting).
+ * Copy is rendered client-side from `type` + `data` so it follows the UI
+ * locale. `dedupeKey` makes emission idempotent: reconciliation may observe
+ * the same transition from several requests.
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+    /** workflow_completed | workflow_failed | workflow_cancelled | plan_review_pending */
+    type: varchar("type", { length: 50 }).notNull(),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    dedupeKey: varchar("dedupe_key", { length: 255 }).notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("notifications_user_dedupe_idx").on(table.userId, table.dedupeKey),
+    index("notifications_user_created_idx").on(table.userId, table.createdAt),
   ]
 );
 

@@ -10,6 +10,7 @@ import {
   ExternalLink,
   GitBranch,
   GitPullRequestArrow,
+  History,
   ListChecks,
   Loader2,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { RunCancelButton, RunPhase, type RunProgress } from "@/components/shared/run-controls";
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
@@ -24,6 +26,7 @@ import { localeHeaders } from "@/lib/i18n/locale";
 import { aiErrorFromBody, formatAiError, isAiQuotaError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
 import { friendlyError } from "@/lib/friendly-error";
+import { PlanHistoryDialog } from "@/components/plan-history/plan-history-dialog";
 import {
   LIVING_PLAN_ANALYSIS_STARTED_EVENT,
   type LivingPlanAnalysisStartedDetail,
@@ -177,6 +180,8 @@ export function LivingPlanInspector({
   const [loadFailed, setLoadFailed] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({ status: "idle" });
   const [slow, setSlow] = useState(false);
+  const [runProgress, setRunProgress] = useState<{ workflowId: string; progress: RunProgress; cancelRequested: boolean } | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const readableError = useCallback((error?: unknown) => {
     const message = typeof error === "string" ? error : "";
@@ -278,12 +283,22 @@ export function LivingPlanInspector({
         );
         const workflow = await response.json().catch(() => null);
         if (cancelled || !response.ok) return;
+        setRunProgress({
+          workflowId: analysis.workflowId,
+          progress: workflow?.progress,
+          cancelRequested: Boolean(workflow?.cancelRequestedAt),
+        });
         if (workflow?.status === "failed") {
           setSlow(false);
           setAnalysis({
             status: "failed",
             message: readableError(workflow.error),
           });
+        } else if (workflow?.status === "cancelled") {
+          // Cancelled from here or elsewhere; the workflow released the review.
+          setSlow(false);
+          setAnalysis({ status: "idle" });
+          await fetchPlan();
         } else if (workflow?.status === "completed") {
           // Finished without a review to open (e.g. no impactful changes).
           setSlow(false);
@@ -404,6 +419,10 @@ export function LivingPlanInspector({
     );
   }
 
+  // Progress of the run currently shown (ignores a previous run's last poll).
+  const liveRun =
+    analysis.status === "running" && runProgress?.workflowId === analysis.workflowId ? runProgress : null;
+
   return (
     <aside className="min-w-0 border-t border-border px-5 py-7 sm:px-6 lg:border-l lg:border-t-0 lg:px-7 xl:px-8">
       <div className="flex items-start justify-between gap-3">
@@ -415,12 +434,36 @@ export function LivingPlanInspector({
             {t('docs.livingPlan.title')}
           </h2>
         </div>
-        {plan?.currentVersion && (
-          <Badge variant="outline" className="border-border bg-foreground/5 font-mono text-foreground-subtle">
-            v{plan.currentVersion.versionNumber}
-          </Badge>
+        {(plan?.currentVersion || plan?.pendingChangeSet) && (
+          <div className="flex shrink-0 items-center gap-2">
+            {plan.currentVersion && (
+              <Badge variant="outline" className="border-border bg-foreground/5 font-mono text-foreground-subtle">
+                v{plan.currentVersion.versionNumber}
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setHistoryOpen(true)}
+              aria-label={t('planHistory.openAria')}
+              data-testid="plan-history-open"
+            >
+              <History className="mr-1 size-3.5" />
+              {t('planHistory.open')}
+            </Button>
+          </div>
         )}
       </div>
+      <PlanHistoryDialog
+        docId={docId}
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        onUndone={() => {
+          void fetchPlan().catch(() => undefined);
+          void fetchImpactGraph();
+        }}
+      />
 
       <div className="mt-6 border-y border-border py-5">
         <div className="flex items-end justify-between">
@@ -482,7 +525,20 @@ export function LivingPlanInspector({
       {analysis.status === "running" && (
         <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-foreground-subtle" data-testid="living-plan-running">
           <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-cyan-700 dark:text-cyan-300" />
-          {slow ? t('feedback.analysisSlow') : t('docs.livingPlan.running')}
+          <div className="min-w-0 flex-1">
+            <div>{slow ? t('feedback.analysisSlow') : t('docs.livingPlan.running')}</div>
+            <RunPhase
+              progress={liveRun?.progress}
+              cancelRequested={liveRun?.cancelRequested}
+              className="mt-0.5 block text-foreground-faint"
+            />
+          </div>
+          <RunCancelButton
+            key={analysis.workflowId}
+            workflowId={analysis.workflowId}
+            cancelRequested={liveRun?.cancelRequested}
+            className="h-7 shrink-0 px-2 text-xs"
+          />
         </div>
       )}
       {analysis.status === "failed" && (

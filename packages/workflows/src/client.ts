@@ -5,7 +5,7 @@
  */
 
 import { Client, Connection } from "@temporalio/client";
-import type { WorkflowResult, WorkflowStatus } from "./types";
+import type { PendingActivity, WorkflowResult, WorkflowStatus } from "./types";
 
 let client: Client | null = null;
 
@@ -132,7 +132,24 @@ export async function getWorkflowStatus(
     workflowId,
     runId: description.runId,
     status,
+    ...(status === "RUNNING" ? { pendingActivities: getPendingActivities(description.raw) } : {}),
   };
+}
+
+/**
+ * Activity types the run is currently executing, from the describe response
+ * (no extra RPC). This is the only live progress signal Temporal exposes;
+ * callers map it to a phase label instead of inventing percentages.
+ */
+export function getPendingActivities(raw: unknown): PendingActivity[] {
+  const pending = asRecord(raw)?.pendingActivities;
+  if (!Array.isArray(pending)) return [];
+  return pending.flatMap((entry) => {
+    const name = getNestedString(entry, ["activityType", "name"]);
+    if (!name) return [];
+    const attempt = asRecord(entry)?.attempt;
+    return [{ activityType: name, attempt: typeof attempt === "number" ? attempt : 1 }];
+  });
 }
 
 /**

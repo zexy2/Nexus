@@ -71,6 +71,8 @@ export async function GET(request: NextRequest) {
       output: Record<string, unknown> | null;
       errorMessage: string | null;
       temporalWorkflowId: string | null;
+      createdBy: string | null;
+      cancelRequestedAt: Date | null;
       startedAt: Date | null;
       heartbeatAt: Date | null;
       completedAt: Date | null;
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Calculate duration for each execution
-    const executionsWithDuration = (reconciledExecutions as ExecutionRow[]).map((exec) => {
+    const executionsWithDuration = (reconciledExecutions as Array<ExecutionRow & { progress?: unknown }>).map((exec) => {
       let duration: string | null = null;
       if (exec.startedAt && exec.completedAt) {
         const ms = exec.completedAt.getTime() - exec.startedAt.getTime();
@@ -117,6 +119,8 @@ export async function GET(request: NextRequest) {
         temporalWorkflowId: exec.temporalWorkflowId,
         workflowId: exec.temporalWorkflowId,
         duration,
+        progress: exec.progress ?? null,
+        cancelRequestedAt: exec.cancelRequestedAt?.getTime() || null,
         startedAt: exec.startedAt?.getTime() || null,
         completedAt: exec.completedAt?.getTime() || null,
         createdAt: exec.createdAt?.getTime() || Date.now(),

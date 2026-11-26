@@ -87,7 +87,7 @@ interface Document {
 type TaskWorkflowState = {
   workflowId: string;
   executionId: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   taskCount?: number;
   error?: string;
 };
@@ -193,6 +193,9 @@ export default function DocDetailPage() {
             taskCount: tasks.length,
           });
           setAiSuccess("tasks");
+          setAiLoading(null);
+        } else if (data.status === "cancelled") {
+          setTaskWorkflow({ workflowId, executionId, status: "cancelled" });
           setAiLoading(null);
         } else if (data.status === "failed") {
           setTaskWorkflow({
