@@ -7,6 +7,7 @@ import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { POST as startWorkflow } from "@/app/api/workflows/route";
 import { aiUnavailableResponse, getAiProviderStatus } from "@/lib/production-guardrails";
 import { expirePendingChangeSetIfOrphaned } from "@/lib/change-set-recovery";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,9 @@ export async function POST(
   }
 
   const { docId } = await context.params;
+  // Body is optional for this route; it may carry the UI locale.
+  const requestBody = (await request.json().catch(() => null)) as { locale?: unknown } | null;
+  const locale = resolveRequestLocale(request, requestBody?.locale);
   const doc = await db.query.docs.findFirst({
     where: eq(docs.id, docId),
   });
@@ -67,6 +71,7 @@ export async function POST(
       body: JSON.stringify({
         workflowType: "plan_impact",
         workspaceId: doc.workspaceId,
+        ...(locale ? { locale } : {}),
         input: {
           workspaceId: doc.workspaceId,
           docId,

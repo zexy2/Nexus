@@ -11,6 +11,7 @@
  */
 import { create } from 'zustand';
 import { readTextStream } from '@/lib/stream-text';
+import { localeHeaders } from '@/lib/i18n/locale';
 import { getBrowserStorage } from '@/lib/sync/browser-storage';
 import { notifyAiQuotaChanged, readAiError, type AiErrorInfo } from '@/lib/ai/ai-errors';
 import { AGENT_META_HEADER, decodeAgentMeta } from '@/lib/ai/agent-meta';
@@ -168,7 +169,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
 
         const response = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...localeHeaders() },
           body: JSON.stringify({ messages: history, agentMode: 'auto' }),
           signal: controller.signal,
         });

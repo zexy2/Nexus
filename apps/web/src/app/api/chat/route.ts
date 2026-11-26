@@ -13,7 +13,8 @@ import { enforceAiBudget, writeAuditLog } from "@/lib/production-guardrails";
 import { isAiQuotaError, aiQuotaResponse } from "@/lib/ai/quota";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { getRAGContext } from "@/lib/ai/chat-rag";
-import { CHAT_CAPABILITIES, type ChatCapability } from "@/lib/ai/chat-agents";
+import { CHAT_CAPABILITIES, capabilitySystemPrompt, type ChatCapability } from "@/lib/ai/chat-agents";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
 import { runAgent } from "@/lib/ai/agent";
 import { generateTextTraced } from "@/lib/ai/traced-generate";
 import { ensureDefaultWorkspace, getAccessibleWorkspaceIds } from "@/lib/workspace-auth";
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
   // `messages` stays loosely typed: the AI SDK's ModelMessage union is stricter
   // than the wire format the existing clients send, and we validate the parts
   // we rely on below.
-  let body: { messages?: any[]; agentMode?: string };
+  let body: { messages?: any[]; agentMode?: string; locale?: string };
   try {
     body = await req.json();
   } catch {
@@ -65,6 +66,8 @@ export async function POST(req: Request) {
 
   const chatMessages = messages as any[];
   const userMessage: string = lastMessage.content;
+  // UI locale (body -> x-nexus-locale header -> cookie); absent -> mirror the user.
+  const locale = resolveRequestLocale(req, body.locale);
 
   let modelConfig: Awaited<ReturnType<typeof getUserModelConfig>>;
   try {
@@ -109,7 +112,6 @@ export async function POST(req: Request) {
     agentMode !== "auto" &&
     CHAT_CAPABILITIES[agentMode as ChatCapability]
   ) {
-    const capability = CHAT_CAPABILITIES[agentMode as ChatCapability];
 
     const workspaceId = (await ensureDefaultWorkspace(userId)).id;
     const agentRagContext = await getRAGContext(userMessage, workspaceId);
@@ -124,7 +126,7 @@ export async function POST(req: Request) {
             .slice(0, 5)
             .map(r => `- [${r.title}](${r.url})`)
             .join("\n");
-          webContext = `**Web Search Results (${new Date().toLocaleDateString()}):**\n${webResults.answer}\n\n**Sources:**\n${sources}`;
+          webContext = `**Web Search Results (${new Date().toISOString().slice(0, 10)}):**\n${webResults.answer}\n\n**Sources:**\n${sources}`;
         }
       } catch (e) {
         console.error("Tavily error:", e);
@@ -133,13 +135,13 @@ export async function POST(req: Request) {
 
     const contextParts: string[] = [];
     if (agentRagContext) {
-      contextParts.push(`📚 WORKSPACE BAĞLAMI:\n${agentRagContext}`);
+      contextParts.push(`📚 WORKSPACE CONTEXT:\n${agentRagContext}`);
     }
     if (webContext) {
-      contextParts.push(`🌐 GÜNCEL WEB BİLGİSİ:\n${webContext}`);
+      contextParts.push(`🌐 CURRENT WEB INFORMATION:\n${webContext}`);
     }
 
-    const enhancedSystem = capability.systemPrompt + (contextParts.length > 0
+    const enhancedSystem = capabilitySystemPrompt(agentMode as ChatCapability, locale) + (contextParts.length > 0
       ? `\n\n---\n${contextParts.join("\n\n---\n")}`
       : "");
 
@@ -172,6 +174,7 @@ export async function POST(req: Request) {
       messages: chatMessages,
       context: { userId, workspaceId, readableWorkspaceIds },
       maxSteps: 6,
+      locale,
       trace: { name: "chat.agent", modelName, provider },
     });
   } catch (error) {

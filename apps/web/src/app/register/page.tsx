@@ -1,5 +1,6 @@
 "use client";
 
+import { LocaleToggle } from "@/components/shared/locale-toggle";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -99,6 +100,9 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-background via-background to-primary/5">
+      <div className="fixed right-4 top-4 z-50">
+        <LocaleToggle />
+      </div>
       {/* Left Side - Features */}
       <div className="hidden lg:flex flex-1 flex-col justify-center p-12 bg-primary/5">
         <div className="max-w-md">

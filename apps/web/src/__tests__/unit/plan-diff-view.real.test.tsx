@@ -21,9 +21,14 @@ function makeDiff(before: string, after: string, overrides: Partial<PlanDiffData
   };
 }
 
+// Turkish copy is asserted below; the app default is now browser-driven (en fallback).
+function renderTr(ui: React.ReactElement) {
+  return render(<LocaleProvider initialLocale="tr">{ui}</LocaleProvider>);
+}
+
 describe("PlanDiffView", () => {
   it("shows added and removed lines with version labels and counts", () => {
-    render(<PlanDiffView diff={makeDiff("keep\nold", "keep\nnew")} />);
+    renderTr(<PlanDiffView diff={makeDiff("keep\nold", "keep\nnew")} />);
     expect(screen.getByText("v1 → v2")).toBeInTheDocument();
     expect(screen.getByText("+1 satır")).toBeInTheDocument();
     expect(screen.getByText("−1 satır")).toBeInTheDocument();
@@ -35,14 +40,14 @@ describe("PlanDiffView", () => {
   it("collapses long unchanged runs and expands them on demand", () => {
     const before = Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n");
     const after = before.replace("line 29", "line 29 edited");
-    render(<PlanDiffView diff={makeDiff(before, after)} />);
+    renderTr(<PlanDiffView diff={makeDiff(before, after)} />);
     expect(screen.queryByText("line 0")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "26 değişmeyen satırı göster" }));
     expect(screen.getByText("line 0")).toBeInTheDocument();
   });
 
   it("lists requirement and title changes, and says when the text is identical", () => {
-    render(
+    renderTr(
       <PlanDiffView
         diff={makeDiff("same", "same", {
           title: { from: "Old plan", to: "New plan", changed: true },

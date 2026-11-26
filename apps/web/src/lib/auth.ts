@@ -4,6 +4,8 @@ import { db } from "./db";
 import * as schema from "@nexus/database/schema";
 import { actionEmailHtml, canDeliverPasswordReset, isEmailConfigured, sendEmail } from "./email";
 import { beforeUserCreate } from "./auth-signup-guard";
+import { authEmailCopy } from "./auth-email-copy";
+import { resolveRequestLocale } from "./i18n/locale";
 import { isPublicSignupEnabled } from "./production-guardrails";
 
 // When public signup is disabled, social providers may only sign in users that
@@ -59,17 +61,15 @@ export const auth = betterAuth({
     // reset requests with RESET_PASSWORD_DISABLED instead of creating a token
     // whose link could only end up in the logs.
     sendResetPassword: canDeliverPasswordReset()
-      ? async ({ user, url }: { user: { email: string }; url: string }) => {
+      ? async ({ user, url }: { user: { email: string }; url: string }, request?: Request) => {
+          // UI locale of the request (cookie/header); unknown → bilingual email.
+          const locale = request ? resolveRequestLocale(request) : undefined;
+          const copy = authEmailCopy("resetPassword", locale, url);
           await sendEmail({
             to: user.email,
-            subject: "Nexus — Şifre sıfırlama",
-            text: `Şifreni sıfırlamak için: ${url}`,
-            html: actionEmailHtml({
-              heading: "Şifre sıfırlama",
-              body: "Şifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bu isteği sen yapmadıysan görmezden gelebilirsin.",
-              ctaLabel: "Şifreyi sıfırla",
-              url,
-            }),
+            subject: copy.subject,
+            text: copy.text,
+            html: actionEmailHtml({ heading: copy.heading, body: copy.body, ctaLabel: copy.ctaLabel, url, locale }),
           });
         }
       : undefined,
@@ -77,17 +77,14 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: isEmailConfigured(),
     autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+    sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }, request?: Request) => {
+      const locale = request ? resolveRequestLocale(request) : undefined;
+      const copy = authEmailCopy("verifyEmail", locale, url);
       await sendEmail({
         to: user.email,
-        subject: "Nexus — E-posta adresini doğrula",
-        text: `E-posta adresini doğrulamak için: ${url}`,
-        html: actionEmailHtml({
-          heading: "E-postanı doğrula",
-          body: "Nexus hesabını etkinleştirmek için e-posta adresini doğrula.",
-          ctaLabel: "E-postamı doğrula",
-          url,
-        }),
+        subject: copy.subject,
+        text: copy.text,
+        html: actionEmailHtml({ heading: copy.heading, body: copy.body, ctaLabel: copy.ctaLabel, url, locale }),
       });
     },
   },

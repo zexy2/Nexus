@@ -80,14 +80,30 @@ export async function sendEmail(opts: {
 }
 
 /** Minimal branded HTML wrapper around a call-to-action link. */
-export function actionEmailHtml(opts: { heading: string; body: string; ctaLabel: string; url: string }): string {
+const LINK_FALLBACK_NOTE = {
+  en: "If the button does not work, paste this address into your browser:",
+  tr: "Bağlantı çalışmazsa şu adresi tarayıcına yapıştır:",
+} as const;
+
+export function actionEmailHtml(opts: {
+  heading: string;
+  body: string;
+  ctaLabel: string;
+  url: string;
+  /** Footer language; omitted → bilingual (English, then Turkish). */
+  locale?: "tr" | "en";
+}): string {
+  const note = opts.locale
+    ? LINK_FALLBACK_NOTE[opts.locale]
+    : `${LINK_FALLBACK_NOTE.en}<br>${LINK_FALLBACK_NOTE.tr}`;
+  const body = opts.body.replace(/\n\n/g, "<br><br>");
   return `
   <div style="font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
     <h2 style="color: #111;">${opts.heading}</h2>
-    <p style="color: #444; line-height: 1.5;">${opts.body}</p>
+    <p style="color: #444; line-height: 1.5;">${body}</p>
     <p style="margin: 24px 0;">
       <a href="${opts.url}" style="background:#6d28d9;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;">${opts.ctaLabel}</a>
     </p>
-    <p style="color:#888;font-size:13px;">Bağlantı çalışmazsa şu adresi tarayıcına yapıştır:<br>${opts.url}</p>
+    <p style="color:#888;font-size:13px;">${note}<br>${opts.url}</p>
   </div>`;
 }

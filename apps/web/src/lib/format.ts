@@ -7,7 +7,7 @@
  * for recent timestamps, absolute (locale-aware) once they age out.
  */
 
-type AppLocale = "tr" | "en";
+import { intlLocale, type AppLocale } from "@/lib/i18n/locale";
 
 type DateInput = Date | string | number;
 
@@ -39,7 +39,7 @@ const RELATIVE_STRINGS: Record<AppLocale, {
  * Relative for the last week, absolute (DD.MM.YYYY in TR, locale default in EN)
  * after that. Use everywhere a timestamp is shown in a list or card.
  */
-export function formatRelativeDate(value: DateInput, locale: AppLocale = "tr"): string {
+export function formatRelativeDate(value: DateInput, locale: AppLocale): string {
   const date = toDate(value);
   const diff = Date.now() - date.getTime();
   const minutes = Math.floor(diff / 60_000);
@@ -51,5 +51,14 @@ export function formatRelativeDate(value: DateInput, locale: AppLocale = "tr"): 
   if (minutes < 60) return s.minutes(minutes);
   if (hours < 24) return s.hours(hours);
   if (days < 7) return s.days(days);
-  return date.toLocaleDateString(locale === "tr" ? "tr-TR" : "en-US");
+  return date.toLocaleDateString(intlLocale(locale));
+}
+
+/** Absolute date/time in the active UI locale (`Intl.DateTimeFormat` options). */
+export function formatDateTime(
+  value: DateInput,
+  locale: AppLocale,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "short", timeStyle: "short" }
+): string {
+  return new Intl.DateTimeFormat(intlLocale(locale), options).format(toDate(value));
 }

@@ -22,6 +22,7 @@ import { RunCancelButton, RunPhase, type RunProgress } from "@/components/shared
 import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { localeHeaders } from "@/lib/i18n/locale";
 import { aiErrorFromBody, formatAiError, isAiQuotaError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
 import { friendlyError } from "@/lib/friendly-error";
@@ -336,95 +337,21 @@ export function LivingPlanInspector({
 
   const graphDiagnostic = useMemo(() => {
     const code = impactGraph?.diagnostics?.[0];
-    const copy: Record<
-      NonNullable<typeof code>,
-      {
-        title: [string, string];
-        body: [string, string];
-        tips: [string[], string[]];
-      }
-    > = {
-      NO_INTEGRATION: {
-        title: ["GitHub veya Linear bağlantısı yok.", "No GitHub or Linear integration is connected."],
-        body: [
-          "Etki grafiği gerçek issue, PR ve test kanıtı göstermek için önce bir dış sistem bağlantısına ihtiyaç duyar.",
-          "The impact graph needs an external system connection before it can show real issues, PRs, and test evidence.",
-        ],
-        tips: [
-          ["Ayarlar > Bağlantılar bölümünden GitHub App'i bağlayın.", "Bağlantı sonrası kaynakları getirip senkronize edin."],
-          ["Connect the GitHub App from Settings > Integrations.", "Fetch resources and sync after connecting."],
-        ],
-      },
-      NO_SYNCED_ISSUES: {
-        title: [
-          "GitHub bağlı, fakat senkronize issue yok.",
-          "GitHub is connected, but no synced issues were found.",
-        ],
-        body: [
-          "Repo seçilmiş olsa bile Nexus grafiği ancak senkronize edilmiş issue kayıtlarıyla kurabilir.",
-          "Even with a selected repository, Nexus can build the graph only after issues are synced.",
-        ],
-        tips: [
-          ["Ayarlar > Bağlantılar bölümünde Kaynakları getir ve Senkronize et adımlarını çalıştırın.", "Repo'da en az bir issue olduğundan emin olun."],
-          ["Run Fetch resources and Sync from Settings > Integrations.", "Make sure the repository has at least one issue."],
-        ],
-      },
-      NO_REQUIREMENT_MATCHES: {
-        title: [
-          "Issue var, ama bu planın gereksinimleriyle eşleşmiyor.",
-          "Issues exist, but none match this plan's requirements.",
-        ],
-        body: [
-          "Nexus güvenilir bağlantı için issue başlığı veya açıklamasında REQ-001 gibi gereksinim anahtarlarını arar.",
-          "Nexus looks for requirement keys like REQ-001 in issue titles or descriptions to create reliable links.",
-        ],
-        tips: [
-          ["Issue başlığına veya açıklamasına REQ-001 ekleyin.", "Alternatif olarak değişiklik önerilerinden GitHub issue oluşturun."],
-          ["Add REQ-001 to the issue title or description.", "Alternatively create GitHub issues from change proposals."],
-        ],
-      },
-      NO_LINKED_PRS: {
-        title: [
-          "Issue eşleşti, fakat bağlı PR yok.",
-          "Issues are matched, but no linked PR was found.",
-        ],
-        body: [
-          "PR grafiğe girmek için issue numarasına veya gereksinim anahtarına açıkça referans vermeli.",
-          "A PR must explicitly reference the issue number or requirement key before it appears in the graph.",
-        ],
-        tips: [
-          ["PR açıklamasına Fixes #123 veya Closes #123 ekleyin.", "Branch veya PR başlığında REQ-001 kullanabilirsiniz."],
-          ["Add Fixes #123 or Closes #123 to the PR body.", "You can also use REQ-001 in the branch name or PR title."],
-        ],
-      },
-      NO_CHECK_RUNS: {
-        title: ["PR bağlı, fakat check sonucu yok.", "A PR is linked, but no check result is available."],
-        body: [
-          "GitHub Actions veya başka bir check run tamamlandığında Nexus test kanıtını grafiğe ekleyebilir.",
-          "When GitHub Actions or another check run completes, Nexus can attach the test evidence to the graph.",
-        ],
-        tips: [
-          ["PR üzerinde CI çalıştırın.", "Check tamamlandıktan sonra GitHub senkronizasyonunu yenileyin."],
-          ["Run CI on the PR.", "Refresh the GitHub sync after checks complete."],
-        ],
-      },
-    } as const;
-    const item = code ? copy[code] : null;
-    const index = locale === "tr" ? 0 : 1;
-    return item
-      ? {
-          title: item.title[index],
-          body: item.body[index],
-          tips: item.tips[index],
-        }
-      : null;
-  }, [impactGraph, locale]);
+    if (!code) return null;
+    const base = `livingPlan.diagnostics.${code}`;
+    return {
+      title: t(`${base}.title`),
+      body: t(`${base}.body`),
+      tips: [t(`${base}.tip1`), t(`${base}.tip2`)],
+    };
+  }, [impactGraph, t]);
 
   const startAnalysis = async () => {
     setAnalysis({ status: "starting" });
     try {
       const response = await fetch(`/api/plans/${docId}/analyze-change`, {
         method: "POST",
+        headers: localeHeaders(locale),
       });
       const body = await response.json().catch(() => null);
       if (response.status === 409 && body?.changeSetId) {
@@ -625,12 +552,10 @@ export function LivingPlanInspector({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-sm font-medium text-foreground">
-              {locale === "tr" ? "Etki grafiği" : "Impact graph"}
+              {t("livingPlan.impactGraph")}
             </h3>
             <p className="mt-1 text-xs leading-5 text-foreground-faint">
-              {locale === "tr"
-                ? "Plan, iş, PR, test ve agent kanıtlarını aynı bağlamda gösterir."
-                : "Shows plan, work, PR, test, and agent evidence in one context."}
+              {t("livingPlan.showsPlanWorkPrTest")}
             </p>
           </div>
           <GitBranch className="mt-0.5 size-4 text-cyan-700 dark:text-cyan-300" />
@@ -639,7 +564,7 @@ export function LivingPlanInspector({
         <div className="grid grid-cols-3 divide-x divide-border border-y border-border">
           {[
             {
-              label: locale === "tr" ? "Issue" : "Issues",
+              label: t("livingPlan.issues"),
               value: impactGraph?.summary.externalIssues ?? 0,
             },
             {
@@ -647,7 +572,7 @@ export function LivingPlanInspector({
               value: impactGraph?.summary.pullRequests ?? 0,
             },
             {
-              label: locale === "tr" ? "Test" : "Checks",
+              label: t("livingPlan.checks"),
               value: impactGraph?.summary.checkRuns ?? 0,
             },
           ].map((item) => (
@@ -664,7 +589,7 @@ export function LivingPlanInspector({
           <div className="mt-4 flex flex-wrap gap-2">
             {impactGraph.integrations.length === 0 ? (
               <Badge variant="outline" className="border-border text-foreground-subtle">
-                {locale === "tr" ? "Entegrasyon yok" : "No integrations"}
+                {t("livingPlan.noIntegrations")}
               </Badge>
             ) : (
               impactGraph.integrations.map((integration) => (
@@ -679,9 +604,9 @@ export function LivingPlanInspector({
                   {integration.provider}
                   <span className="ml-1 text-foreground-faint">
                     {integration.seeded
-                      ? locale === "tr" ? "örnek veri" : "sample data"
+                      ? t("livingPlan.sampleData")
                       : integration.status === "connected"
-                        ? locale === "tr" ? "bağlı" : "connected"
+                        ? t("livingPlan.connected")
                         : integration.status}
                   </span>
                 </Badge>
@@ -693,9 +618,7 @@ export function LivingPlanInspector({
         {impactGraph?.summary.outdatedAgentJobs ? (
           <div className="mt-4 flex items-start gap-2 border border-amber-300/20 bg-amber-300/[0.05] p-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            {locale === "tr"
-              ? `${impactGraph.summary.outdatedAgentJobs} agent işi eski bağlamla kalmış.`
-              : `${impactGraph.summary.outdatedAgentJobs} agent job is running on outdated context.`}
+            {t("livingPlan.outdatedAgentJobs").replace("{n}", String(impactGraph.summary.outdatedAgentJobs))}
           </div>
         ) : null}
 
@@ -761,14 +684,12 @@ export function LivingPlanInspector({
                 </ul>
               </div>
             ) : (
-              locale === "tr"
-                ? "Plan analizi ve dış iş bağlantıları oluşunca burada etkilenen issue, PR ve test kanıtları görünür."
-                : "Affected issues, PRs, and test evidence appear here after plan analysis and external links exist."
+              t("livingPlan.affectedIssuesPrsAndTest")
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href="/dashboard/settings?tab=integrations">
-                  {locale === "tr" ? "Bağlantıları aç" : "Open integrations"}
+                  {t("livingPlan.openIntegrations")}
                 </Link>
               </Button>
               {impactGraph?.integrations.find((item) => item.provider === "github")?.config?.selectedRepository && (
@@ -778,7 +699,7 @@ export function LivingPlanInspector({
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {locale === "tr" ? "GitHub issue'larını aç" : "Open GitHub issues"}
+                    {t("livingPlan.openGithubIssues")}
                     <ExternalLink className="ml-2 size-3.5" />
                   </a>
                 </Button>

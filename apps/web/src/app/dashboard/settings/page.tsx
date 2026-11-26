@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { LOCALES, LOCALE_LABELS } from "@/lib/i18n/messages";
+import { formatDateTime } from "@/lib/format";
 import { applyAppearance, normalizeTheme, storeAppearance } from "@/lib/appearance";
 import { showToast } from "@/components/shared/toast-provider";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -581,11 +582,11 @@ function SettingsContent() {
               </TabsTrigger>
               <TabsTrigger value="agents" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <GitBranch className="size-3 md:size-4" />
-                <span className="hidden xs:inline">{locale === "tr" ? "Agentlar" : "Agents"}</span>
+                <span className="hidden xs:inline">{t("settingsPage.agents")}</span>
               </TabsTrigger>
               <TabsTrigger value="integrations" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Plug className="size-3 md:size-4" />
-                <span className="hidden xs:inline">{locale === "tr" ? "Bağlantılar" : "Integrations"}</span>
+                <span className="hidden xs:inline">{t("settingsPage.integrations")}</span>
               </TabsTrigger>
               <TabsTrigger value="appearance" className="gap-1 md:gap-2 flex-none text-xs md:text-sm px-3 py-1.5">
                 <Palette className="size-3 md:size-4" />
@@ -674,7 +675,7 @@ function SettingsContent() {
                         }}
                       >
                         <SelectTrigger className="text-sm">
-                          <SelectValue placeholder={locale === "tr" ? "Model seç" : "Select a model"} />
+                          <SelectValue placeholder={t("settingsPage.selectAModel")} />
                         </SelectTrigger>
                         <SelectContent>
                           {AI_MODELS.map((model) => {
@@ -759,54 +760,52 @@ function SettingsContent() {
             <TabsContent value="agents">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader>
-                  <CardTitle>{locale === "tr" ? "Coding agent bağlantısı" : "Coding agent connection"}</CardTitle>
+                  <CardTitle>{t("settingsPage.codingAgentConnection")}</CardTitle>
                   <CardDescription>
-                    {locale === "tr"
-                      ? "Codex, Claude Code veya Cursor'a sürümlenmiş görev bağlamını MCP ile teslim edin. Nexus kod çalıştırmaz veya GitHub anahtarı saklamaz."
-                      : "Hand versioned task context to Codex, Claude Code, or Cursor over MCP. Nexus does not execute code or store GitHub credentials."}
+                    {t("settingsPage.handVersionedTaskContextTo")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid gap-4 md:grid-cols-[1fr_180px]">
                     <div className="space-y-2">
-                      <Label>GitHub repository</Label>
+                      <Label>{t("settingsPage.githubRepository")}</Label>
                       <Input value={repositoryUrl} onChange={(event) => setRepositoryUrl(event.target.value)} placeholder="https://github.com/owner/repository" />
                     </div>
                     <div className="space-y-2">
-                      <Label>{locale === "tr" ? "Varsayılan branch" : "Default branch"}</Label>
+                      <Label>{t("settingsPage.defaultBranch")}</Label>
                       <Input value={defaultBranchName} onChange={(event) => setDefaultBranchName(event.target.value)} placeholder="main" />
                     </div>
                   </div>
                   <Button onClick={saveAgentRepository} disabled={agentSaving || !tokenCreationEnabled || !repositoryUrl.trim()}>
                     {agentSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
-                    {locale === "tr" ? "Repo'yu kaydet" : "Save repository"}
+                    {t("settingsPage.saveRepository")}
                   </Button>
 
                   <Separator />
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h3 className="font-medium">MCP access token</h3>
+                      <h3 className="font-medium">{t("settingsPage.mcpAccessToken")}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {locale === "tr" ? "Token yalnızca bir kez gösterilir ve 30 gün sonra sona erer." : "The token is shown once and expires after 30 days."}
+                        {t("settingsPage.theTokenIsShownOnce")}
                       </p>
                     </div>
                     <Button variant="outline" onClick={createAgentToken} disabled={agentSaving || !tokenCreationEnabled || !repositoryUrl.trim()}>
                       <KeyRound className="mr-2 size-4" />
-                      {locale === "tr" ? "Token oluştur" : "Create token"}
+                      {t("settingsPage.createToken")}
                     </Button>
                   </div>
 
                   {!tokenCreationEnabled && (
                     <p className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
-                      {locale === "tr" ? "Geçici demo oturumlarında token üretimi kapalıdır." : "Token creation is disabled for temporary demo sessions."}
+                      {t("settingsPage.tokenCreationIsDisabledFor")}
                     </p>
                   )}
 
                   {newAgentToken && (
                     <div className="border border-emerald-400/20 bg-emerald-400/5 p-4">
                       <p className="mb-2 text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                        {locale === "tr" ? "Bu tokenı şimdi kaydedin; tekrar gösterilmeyecek." : "Store this token now; it will not be shown again."}
+                        {t("settingsPage.storeThisTokenNowIt")}
                       </p>
                       <div className="flex gap-2">
                         <Input readOnly value={newAgentToken} className="font-mono text-xs" />
@@ -823,7 +822,7 @@ function SettingsContent() {
                         <div>
                           <p className="font-medium">{token.name}</p>
                           <p className="font-mono text-xs text-muted-foreground">
-                            {token.prefix}... · {token.revokedAt ? (locale === "tr" ? "iptal edildi" : "revoked") : new Date(token.expiresAt).toLocaleDateString(locale)}
+                            {token.prefix}... · {token.revokedAt ? (t("settingsPage.revoked")) : formatDateTime(token.expiresAt, locale, { dateStyle: "medium" })}
                           </p>
                         </div>
                         {!token.revokedAt && (
@@ -837,9 +836,9 @@ function SettingsContent() {
 
                   <Separator />
                   <div className="space-y-3">
-                    <h3 className="font-medium">{locale === "tr" ? "İstemci kurulumu" : "Client setup"}</h3>
+                    <h3 className="font-medium">{t("settingsPage.clientSetup")}</h3>
                     <p className="text-sm text-muted-foreground">
-                      {locale === "tr" ? "Önce NEXUS_AGENT_TOKEN ortam değişkenini oluşturduğunuz token ile ayarlayın." : "First set NEXUS_AGENT_TOKEN to the token you created."}
+                      {t("settingsPage.firstSetNexusAgentToken")}
                     </p>
                     {["Codex", "Claude Code", "Cursor"].map((client) => {
                       const endpoint = `${typeof window !== "undefined" ? window.location.origin : "https://your-nexus.example"}/api/mcp`;
@@ -868,19 +867,15 @@ function SettingsContent() {
             <TabsContent value="integrations">
               <Card className="dark:bg-neutral-800/50 dark:border-neutral-700">
                 <CardHeader>
-                  <CardTitle>{locale === "tr" ? "GitHub ve Linear bağlantıları" : "GitHub and Linear integrations"}</CardTitle>
+                  <CardTitle>{t("settingsPage.githubAndLinearIntegrations")}</CardTitle>
                   <CardDescription>
-                    {locale === "tr"
-                      ? "Nexus plan değişikliğinin issue, PR, test ve agent işlerini nasıl etkilediğini bu bağlantılardan okur. Dış sistemlere yazma yalnızca onaylı önerilerle yapılmalıdır."
-                      : "Nexus reads issues, PRs, checks, and agent work from these integrations. External writes must happen through approved proposals only."}
+                    {t("settingsPage.nexusReadsIssuesPrsChecks")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-5">
                   {!integrationConnectionEnabled && (
                     <div className="border border-amber-400/20 bg-amber-400/5 p-3 text-sm text-amber-800 dark:text-amber-200">
-                      {locale === "tr"
-                        ? "Geçici demo oturumlarında gerçek GitHub/Linear bağlantısı kapalıdır. Demo seed verisi salt okunur olarak gösterilir."
-                        : "Temporary demo sessions cannot connect real GitHub/Linear accounts. Seeded demo data is shown read-only."}
+                      {t("settingsPage.temporaryDemoSessionsCannotConnect")}
                     </div>
                   )}
 
@@ -901,30 +896,30 @@ function SettingsContent() {
                               <h3 className="font-medium">{title}</h3>
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {existing?.accountName ||
-                                  (locale === "tr" ? "Bağlı çalışma alanı yok" : "No connected workspace")}
+                                  (t("settingsPage.noConnectedWorkspace"))}
                               </p>
                             </div>
                             <Badge variant={connected ? "secondary" : "outline"}>
                               {connected
                                 ? existing.seeded
-                                  ? locale === "tr" ? "örnek veri" : "sample data"
-                                  : locale === "tr" ? "bağlı" : "connected"
+                                  ? t("settingsPage.sampleData")
+                                  : t("settingsPage.connected")
                                 : providerConfig.configured
-                                  ? locale === "tr" ? "hazır" : "ready"
-                                  : locale === "tr" ? "env eksik" : "env missing"}
+                                  ? t("settingsPage.ready")
+                                  : t("settingsPage.envMissing")}
                             </Badge>
                           </div>
 
                           {existing?.lastSyncAt && (
                             <p className="mt-3 text-xs text-muted-foreground">
-                              {locale === "tr" ? "Son senkronizasyon" : "Last sync"}:{" "}
-                              {new Date(existing.lastSyncAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}
+                              {t("settingsPage.lastSync")}:{" "}
+                              {formatDateTime(existing.lastSyncAt, locale)}
                             </p>
                           )}
 
                           {providerConfig.missing.length > 0 && !existing && (
                             <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                              {locale === "tr" ? "Eksik env" : "Missing env"}:{" "}
+                              {t("settingsPage.missingEnv")}:{" "}
                               <span className="font-mono">{providerConfig.missing.join(", ")}</span>
                             </p>
                           )}
@@ -947,13 +942,13 @@ function SettingsContent() {
                                 ) : (
                                   <RefreshCw className="mr-2 size-3.5" />
                                 )}
-                                {locale === "tr" ? "Kaynakları getir" : "Load resources"}
+                                {t("settingsPage.loadResources")}
                               </Button>
 
                               {provider === "github" && repositories.length > 0 && (
                                 <div className="grid gap-2">
                                   <Label className="text-xs">
-                                    {locale === "tr" ? "Senkronize edilecek repo" : "Repository to sync"}
+                                    {t("settingsPage.repositoryToSync")}
                                   </Label>
                                   <Select
                                     value={existing.config.selectedRepository || ""}
@@ -963,7 +958,7 @@ function SettingsContent() {
                                   >
                                     <SelectTrigger className="h-9 text-xs">
                                       <SelectValue
-                                        placeholder={locale === "tr" ? "Repo seç" : "Select repository"}
+                                        placeholder={t("settingsPage.selectRepository")}
                                       />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -980,7 +975,7 @@ function SettingsContent() {
                               {provider === "linear" && teams.length > 0 && (
                                 <div className="grid gap-2">
                                   <Label className="text-xs">
-                                    {locale === "tr" ? "Linear takım" : "Linear team"}
+                                    {t("settingsPage.linearTeam")}
                                   </Label>
                                   <Select
                                     value={existing.config.selectedTeamId || ""}
@@ -993,7 +988,7 @@ function SettingsContent() {
                                   >
                                     <SelectTrigger className="h-9 text-xs">
                                       <SelectValue
-                                        placeholder={locale === "tr" ? "Takım seç" : "Select team"}
+                                        placeholder={t("settingsPage.selectTeam")}
                                       />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1010,7 +1005,7 @@ function SettingsContent() {
                               {provider === "linear" && projects.length > 0 && (
                                 <div className="grid gap-2">
                                   <Label className="text-xs">
-                                    {locale === "tr" ? "Linear proje" : "Linear project"}
+                                    {t("settingsPage.linearProject")}
                                   </Label>
                                   <Select
                                     value={existing.config.selectedProjectId || "all"}
@@ -1026,7 +1021,7 @@ function SettingsContent() {
                                     </SelectTrigger>
                                     <SelectContent>
                                       <SelectItem value="all">
-                                        {locale === "tr" ? "Tüm projeler" : "All projects"}
+                                        {t("settingsPage.allProjects")}
                                       </SelectItem>
                                       {projects.map((project) => (
                                         <SelectItem key={project.id} value={project.id}>
@@ -1042,7 +1037,7 @@ function SettingsContent() {
                                 existing.config.selectedTeamName ||
                                 existing.config.selectedProjectName) && (
                                 <p className="text-xs text-muted-foreground">
-                                  {locale === "tr" ? "Seçili kaynak" : "Selected source"}:{" "}
+                                  {t("settingsPage.selectedSource")}:{" "}
                                   {existing.config.selectedRepository ||
                                     [existing.config.selectedTeamName, existing.config.selectedProjectName]
                                       .filter(Boolean)
@@ -1082,7 +1077,7 @@ function SettingsContent() {
                                 ) : (
                                   <RefreshCw className="mr-2 size-3.5" />
                                 )}
-                                {locale === "tr" ? "Senkronize et" : "Sync"}
+                                {t("settingsPage.sync")}
                               </Button>
                             ) : (
                               <Button
@@ -1100,7 +1095,7 @@ function SettingsContent() {
                                 ) : (
                                   <ExternalLink className="mr-2 size-3.5" />
                                 )}
-                                {locale === "tr" ? "Bağla" : "Connect"}
+                                {t("settingsPage.connect")}
                               </Button>
                             )}
                           </div>

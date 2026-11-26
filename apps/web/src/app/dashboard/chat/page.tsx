@@ -11,6 +11,7 @@ import { showToast } from '@/components/shared/toast-provider';
 import { AiQuotaBadge } from '@/components/shared/ai-quota-badge';
 import { useLocale, useT } from '@/lib/i18n/provider';
 import { formatAiError } from '@/lib/ai/ai-errors';
+import { formatDateTime } from '@/lib/format';
 import { isNewChatShortcut } from '@/lib/shortcuts';
 import {
   X,
@@ -115,7 +116,7 @@ function MessageCard({ message, isLatest, onRetry }: MessageCardProps) {
   const [saving, setSaving] = useState(false);
   const [savedDocId, setSavedDocId] = useState<string | null>(null);
   const isUser = message.role === 'user';
-  const t = useT();
+  const { t, locale } = useLocale();
 
   const handleCopy = useCallback(async () => {
     await navigator.clipboard.writeText(message.content);
@@ -228,7 +229,7 @@ function MessageCard({ message, isLatest, onRetry }: MessageCardProps) {
         )}
 
         <div className={cn('text-[10px] text-foreground-faint mt-1', isUser ? 'text-right' : 'text-left')}>
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {formatDateTime(message.timestamp, locale, { hour: '2-digit', minute: '2-digit' })}
         </div>
       </div>
     </motion.div>

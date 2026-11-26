@@ -11,6 +11,7 @@ import {
   reconcileRunningWorkflowExecutions,
   reconcileWorkflowExecution,
 } from "@/lib/workflow-reconcile";
+import { resolveRequestLocale } from "@/lib/i18n/locale";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,6 +32,8 @@ type WorkflowRequest = {
   type?: PublicWorkflowType;
   input?: Record<string, unknown>;
   workspaceId?: string;
+  /** UI locale ("tr" | "en") for AI output; absent → the plan/input language. */
+  locale?: string;
 };
 
 type WorkflowStarter = (
@@ -248,12 +251,13 @@ export async function POST(request: NextRequest) {
   if (!aiBudget.ok) return aiBudget.response;
 
   const workflowId = `${workflow.publicType}-${crypto.randomUUID()}`;
-  const temporalInput = buildTemporalInput(
-    workflow.publicType,
-    body.input,
-    workspaceAccess.workspaceId,
-    userId
-  );
+  // Optional field: workflows default to the plan/input language without it,
+  // so in-flight runs started before this field existed are unaffected.
+  const locale = resolveRequestLocale(request, body.locale ?? body.input.locale);
+  const temporalInput = {
+    ...buildTemporalInput(workflow.publicType, body.input, workspaceAccess.workspaceId, userId),
+    ...(locale ? { locale } : {}),
+  };
 
   const [execution] = await db
     .insert(agentExecutions)

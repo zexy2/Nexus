@@ -1,5 +1,6 @@
 "use client";
 
+import { LocaleToggle } from "@/components/shared/locale-toggle";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -114,6 +115,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-background">
+      <div className="fixed right-4 top-4 z-50">
+        <LocaleToggle />
+      </div>
       {/* Left side - Form */}
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-sm">

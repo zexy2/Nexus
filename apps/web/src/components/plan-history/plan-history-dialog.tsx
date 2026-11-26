@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { showToast } from "@/components/shared/toast-provider";
 import { cn } from "@/lib/utils";
-import { formatRelativeDate } from "@/lib/format";
+import { formatDateTime, formatRelativeDate } from "@/lib/format";
 import { useLocale } from "@/lib/i18n/provider";
 import type { UndoBlockReason } from "@/lib/plan-history/eligibility";
 import type { UndoConflict } from "@/lib/plan-history/undo-plan";
@@ -306,7 +306,7 @@ export function PlanHistoryDialog({
                       </span>
                     </div>
                     <p className="break-words text-sm text-foreground-subtle">
-                      {new Date(selected.createdAt).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")}
+                      {formatDateTime(selected.createdAt, locale, { dateStyle: "medium", timeStyle: "short" })}
                       {" · "}
                       {fill(t("planHistory.createdBy"), {
                         name: selected.createdBy?.name || t("planHistory.unknownUser"),

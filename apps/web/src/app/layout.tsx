@@ -4,6 +4,8 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n/provider";
 import { APPEARANCE_BOOT_SCRIPT } from "@/lib/appearance";
+import { cookies, headers } from "next/headers";
+import { LOCALE_COOKIE, resolveInitialLocale } from "@/lib/i18n/locale";
 
 // Primary body font - Clean, modern
 const inter = Inter({
@@ -61,13 +63,21 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Server-rendered language: cookie (saved preference) → Accept-Language → en.
+  // The provider then applies a localStorage preference after mount.
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  const initialLocale = resolveInitialLocale({
+    cookie: cookieStore.get(LOCALE_COOKIE)?.value,
+    acceptLanguage: headerStore.get("accept-language"),
+  });
+
   return (
-    <html lang="en" className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
+    <html lang={initialLocale} className="dark" data-scroll-behavior="smooth" suppressHydrationWarning>
       <head>
         {/* Applies the cached dashboard theme/compact mode before first paint. */}
         <script dangerouslySetInnerHTML={{ __html: APPEARANCE_BOOT_SCRIPT }} />
@@ -76,7 +86,7 @@ export default function RootLayout({
         className={`${inter.variable} ${geistMono.variable} ${newsreader.variable} ${playfairDisplay.variable} antialiased`}
         suppressHydrationWarning
       >
-        <LocaleProvider>
+        <LocaleProvider initialLocale={initialLocale}>
           <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
         </LocaleProvider>
       </body>

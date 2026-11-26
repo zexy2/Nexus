@@ -53,6 +53,7 @@ import { NotificationBell } from '@/components/shared/notification-bell';
 import { CommandPalette } from '@/components/shared/command-palette';
 import { NexusMark } from '@/components/shared/nexus-mark';
 import { SyncIssuesPanel } from '@/components/shared/sync-issues-panel';
+import { LocaleToggle } from '@/components/shared/locale-toggle';
 import type { UnsyncedChanges } from '@/lib/sync/sign-out';
 
 // Navigation items
@@ -394,6 +395,9 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
 
           {/* Right side - Actions & User */}
           <div className="flex items-center gap-2">
+            {/* Language */}
+            <LocaleToggle />
+
             {/* Search trigger */}
             <motion.button
               whileHover={{ scale: 1.05 }}

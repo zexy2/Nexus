@@ -10,6 +10,7 @@ import { requireWorkspaceAccess } from "@/lib/workspace-auth";
 import { agentExecutions } from "@nexus/database/schema";
 import { getUserModelConfig } from "@/lib/ai/model-config";
 import { runAgent } from "@/lib/ai/agent";
+import { resolveRequestLocale, type AppLocale } from "@/lib/i18n/locale";
 import {
   COMMAND_WORKFLOW_ID_PREFIX,
   expireStaleCommandExecution,
@@ -67,6 +68,7 @@ export async function POST(request: NextRequest) {
       workspaceId?: unknown;
       priority?: unknown;
       metadata?: unknown;
+      locale?: unknown;
     };
 
     if (typeof commandId !== "string" || typeof command !== "string" || !command.trim()) {
@@ -154,6 +156,7 @@ export async function POST(request: NextRequest) {
       command,
       workspaceId: access.workspaceId,
       userId: protection.user.id,
+      locale: resolveRequestLocale(request, (body as { locale?: unknown }).locale),
     });
 
     return NextResponse.json({
@@ -235,6 +238,7 @@ async function processCommandAsync(input: {
   command: string;
   workspaceId: string;
   userId: string;
+  locale?: AppLocale;
 }) {
   const startTime = Date.now();
   const stopHeartbeat = startCommandHeartbeat(input.executionId);
@@ -253,6 +257,7 @@ async function processCommandAsync(input: {
       messages: [{ role: "user", content: input.command }],
       context: { userId: input.userId, workspaceId: input.workspaceId },
       maxSteps: 6,
+      locale: input.locale,
       trace: { name: "commands.process", modelName, provider },
     });
 

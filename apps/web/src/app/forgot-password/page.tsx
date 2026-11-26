@@ -1,5 +1,6 @@
 "use client";
 
+import { LocaleToggle } from "@/components/shared/locale-toggle";
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,9 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
+      <div className="fixed right-4 top-4 z-50">
+        <LocaleToggle />
+      </div>
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">

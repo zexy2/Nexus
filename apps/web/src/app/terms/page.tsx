@@ -2,10 +2,13 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { NexusMark } from "@/components/shared/nexus-mark";
+import { ForceDocumentLang } from "@/lib/i18n/provider";
 
 export default function TermsOfServicePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+    <div lang="en" className="min-h-screen bg-gradient-to-b from-background to-muted/20">
+      {/* English-only legal copy. */}
+      <ForceDocumentLang lang="en" />
       {/* Header */}
       <header className="container mx-auto px-4 py-6">
         <nav className="flex items-center justify-between">

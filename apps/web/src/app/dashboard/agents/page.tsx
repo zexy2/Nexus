@@ -46,6 +46,7 @@ import { aiErrorFromBody, formatAiError, isAiQuotaError, notifyAiQuotaChanged } 
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { formatRelativeDate } from "@/lib/format";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
+import { localeHeaders } from "@/lib/i18n/locale";
 import { friendlyError } from "@/lib/friendly-error";
 
 type Run = {
@@ -200,12 +201,13 @@ export default function WorkflowCenterPage() {
         if (!selectedDocId) throw new Error(t("agents.center.choosePlanError"));
         response = await fetch(`/api/plans/${selectedDocId}/analyze-change`, {
           method: "POST",
+          headers: localeHeaders(locale),
         });
       } else {
         if (!prompt.trim()) throw new Error(t("agents.center.describeOutcomeError"));
         response = await fetch("/api/workflows", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...localeHeaders(locale) },
           body: JSON.stringify({
             workflowType: launchMode === "plan" ? "document" : "research",
             input: launchMode === "plan"
@@ -336,16 +338,14 @@ export default function WorkflowCenterPage() {
           <div>
             <h2 className="text-sm font-semibold text-foreground">{t("agents.codingRunsTitle")}</h2>
             <p className="mt-1 text-xs text-foreground-faint">
-              {locale === "tr"
-                ? "Yerel Codex, Claude Code ve Cursor istemcilerine teslim edilen sürümlenmiş işler."
-                : "Versioned work handed to local Codex, Claude Code, and Cursor clients."}
+              {t("agentsPage.versionedWorkHandedToLocal")}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => void fetchCodingJobs()}>{t("common.refresh")}</Button>
         </div>
         {codingJobs.length === 0 ? (
           <div className="flex min-h-36 items-center justify-center border-y border-border text-sm text-foreground-faint">
-            {locale === "tr" ? "Henüz coding agent çalışması yok." : "No coding-agent runs yet."}
+            {t("agentsPage.noCodingAgentRunsYet")}
           </div>
         ) : (
           <div className="divide-y divide-border border-y border-border">
@@ -359,11 +359,11 @@ export default function WorkflowCenterPage() {
                       job.status === "outdated" ? "border-amber-400/25 text-amber-800 dark:text-amber-200" :
                         job.status === "submitted" ? "border-blue-400/25 text-blue-800 dark:text-blue-200" :
                           job.status === "approved" ? "border-emerald-400/25 text-emerald-800 dark:text-emerald-200" : "border-border text-muted-foreground"
-                    )}>{job.status}</Badge>
+                    )}>{t(`taskDetail.agentStatuses.${job.status}`)}</Badge>
                   </div>
                   <div>
                     <p className="font-medium text-foreground">{job.task?.title || t("feedback.agentJobTaskDeleted")}</p>
-                    <p className="mt-1 text-xs text-foreground-faint">Context v{job.contextVersion} · {job.claimedByClient || (locale === "tr" ? "agent bekleniyor" : "waiting for agent")}</p>
+                    <p className="mt-1 text-xs text-foreground-faint">Context v{job.contextVersion} · {job.claimedByClient || (t("agentsPage.waitingForAgent"))}</p>
                   </div>
                   <div className="text-xs text-foreground-faint md:text-right">{formatRelativeDate(job.createdAt, locale)}</div>
                 </>

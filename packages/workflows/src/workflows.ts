@@ -252,7 +252,7 @@ export async function documentGenerationWorkflow(
   // Step 1: Research phase
   await sendNotification(input.userId, "Starting document research...", "info");
   
-  const researchResult = await callResearchAgent(input.prompt, ["web"]);
+  const researchResult = await callResearchAgent(input.prompt, ["web"], "", input.locale);
   steps.push(researchResult);
   
   // Step 2: Writing phase
@@ -261,7 +261,8 @@ export async function documentGenerationWorkflow(
   const writerResult = await callWriterAgent(
     `Create a ${input.style || "formal"} document about: ${input.prompt}. 
     Use this research: ${researchResult.output}`,
-    researchResult.output
+    researchResult.output,
+    input.locale
   );
   steps.push(writerResult);
   
@@ -316,7 +317,8 @@ export async function researchWorkflow(
   const researchResult = await callResearchAgent(
     input.query,
     input.sources || ["both"],
-    docResults.map((doc) => `${doc.title}\n${doc.content}`).join("\n\n---\n\n")
+    docResults.map((doc) => `${doc.title}\n${doc.content}`).join("\n\n---\n\n"),
+    input.locale
   );
   steps.push(researchResult);
   sources.push(...researchResult.sources);
@@ -327,7 +329,9 @@ export async function researchWorkflow(
     
     const deepResult = await callResearchAgent(
       `Expand on: ${researchResult.output}`,
-      ["web"]
+      ["web"],
+      "",
+      input.locale
     );
     steps.push(deepResult);
   }
@@ -354,7 +358,7 @@ export async function taskBreakdownWorkflow(
   // Step 1: Analyze project
   await sendNotification(input.userId, "Analyzing project requirements...", "info");
   
-  const taskResult = await callTaskAgent(input.projectDescription);
+  const taskResult = await callTaskAgent(input.projectDescription, input.locale);
   steps.push(taskResult);
   
   const parsedTasks = parseTaskBreakdown(taskResult.output).map((t, index) => ({

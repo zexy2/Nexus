@@ -205,17 +205,17 @@ export default function ChangesPage() {
 
   const actionLabel = useCallback((action: string) => {
     const fallback: Record<string, string> = {
-      linear_create_issue: locale === "tr" ? "Linear issue oluştur" : "Create Linear issue",
-      linear_update_issue: locale === "tr" ? "Linear issue güncelle" : "Update Linear issue",
-      linear_comment: locale === "tr" ? "Linear yorum ekle" : "Add Linear comment",
-      github_create_issue: locale === "tr" ? "GitHub issue oluştur" : "Create GitHub issue",
-      github_issue_comment: locale === "tr" ? "GitHub yorum ekle" : "Add GitHub comment",
-      github_issue_update: locale === "tr" ? "GitHub issue güncelle" : "Update GitHub issue",
-      github_issue_label: locale === "tr" ? "GitHub label güncelle" : "Update GitHub label",
-      mark_agent_job_outdated: locale === "tr" ? "Agent işini eski işaretle" : "Mark agent job outdated",
+      linear_create_issue: t("changesPage.createLinearIssue"),
+      linear_update_issue: t("changesPage.updateLinearIssue"),
+      linear_comment: t("changesPage.addLinearComment"),
+      github_create_issue: t("changesPage.createGithubIssue"),
+      github_issue_comment: t("changesPage.addGithubComment"),
+      github_issue_update: t("changesPage.updateGithubIssue"),
+      github_issue_label: t("changesPage.updateGithubLabel"),
+      mark_agent_job_outdated: t("changesPage.markAgentJobOutdated"),
     };
     return fallback[action] || t(`changes.action.${action}`);
-  }, [locale, t]);
+  }, [t]);
 
   const fetchChangeSets = useCallback(async () => {
     const response = await fetch("/api/change-sets", { cache: "no-store" });
@@ -362,11 +362,9 @@ export default function ChangesPage() {
     }
     if (detail.status === "applying" || detail.status === "running") {
       return {
-        title: locale === "tr" ? "Değişiklikler uygulanıyor" : "Changes are being applied",
+        title: t("changesPage.changesAreBeingApplied"),
         description:
-          locale === "tr"
-            ? "Görevler ve dış sistem yazımları tamamlanana kadar durum otomatik yenileniyor."
-            : "Status updates automatically until tasks and external writes finish.",
+          t("changesPage.statusUpdatesAutomaticallyUntilTasks"),
         className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-800 dark:text-cyan-100",
       };
     }
@@ -386,21 +384,17 @@ export default function ChangesPage() {
     }
     if (detail.status === "external_pending") {
       return {
-        title: locale === "tr" ? "Dış sistem yazımları bekliyor" : "External writes are pending",
+        title: t("changesPage.externalWritesArePending"),
         description:
-          locale === "tr"
-            ? "Plan kabul edildi. GitHub ve Linear güncellemeleri otomatik olarak uygulanıyor."
-            : "The plan was accepted. GitHub and Linear updates are being applied automatically.",
+          t("changesPage.thePlanWasAcceptedGithub"),
         className: "border-purple-400/20 bg-purple-400/10 text-purple-800 dark:text-purple-100",
       };
     }
     if (detail.status === "external_failed") {
       return {
-        title: locale === "tr" ? "Dış sistem güncellemesi başarısız" : "External update failed",
+        title: t("changesPage.externalUpdateFailed"),
         description:
-          locale === "tr"
-            ? "İç görevler ayrı uygulanmış olabilir. Başarısız dış operasyonları inceleyip yalnızca onları yeniden deneyin."
-            : "Internal tasks may have been applied separately. Review the failed external operations and retry only those.",
+          t("changesPage.internalTasksMayHaveBeen"),
         className: "border-red-400/20 bg-red-400/10 text-red-800 dark:text-red-100",
       };
     }
@@ -416,7 +410,7 @@ export default function ChangesPage() {
       description: t("changes.resolution.rejectedDesc"),
       className: "border-border bg-foreground/[0.04] text-foreground-secondary",
     };
-  }, [detail, locale, outcome, t]);
+  }, [detail, outcome, t]);
 
   const toggleProposal = (id: string) => {
     setSelectedProposalIds((current) => {
@@ -442,9 +436,7 @@ export default function ChangesPage() {
       if (!response.ok) {
         if (body?.error === "CHANGE_SET_ALREADY_RESOLVED" || body?.error === "CHANGE_SET_NOT_PENDING") {
           showToast.success(
-            locale === "tr"
-              ? "Bu plan sürümü daha önce sonuçlandırıldı."
-              : "This plan version has already been resolved."
+            t("changesPage.thisPlanVersionHasAlready")
           );
           await fetchChangeSets();
           await fetchDetail(detail.id);
@@ -454,9 +446,7 @@ export default function ChangesPage() {
       }
       if (body?.alreadyResolved) {
         showToast.success(
-          locale === "tr"
-            ? "Bu plan sürümü daha önce sonuçlandırıldı."
-            : "This plan version has already been resolved."
+          t("changesPage.thisPlanVersionHasAlready")
         );
         await fetchChangeSets();
         await fetchDetail(detail.id);
@@ -464,9 +454,7 @@ export default function ChangesPage() {
       }
       showToast.success(
         decision === "apply" && (body?.status === "applying" || body?.recovery || body?.status === "external_pending")
-          ? locale === "tr"
-            ? "Uygulama başlatıldı. Terminal durum bekleniyor."
-            : "Apply started. Waiting for the terminal state."
+          ? t("changesPage.applyStartedWaitingForThe")
           : decision === "apply"
             ? t("changes.appliedToast")
             : t("changes.rejectedToast")
@@ -489,7 +477,7 @@ export default function ChangesPage() {
       if (!response.ok) {
         throw new Error(friendlyError(body, t, t("changes.externalWriteFailed")));
       }
-      showToast.success(locale === "tr" ? "Dış sistem yazımı yeniden kuyruğa alındı" : "External write queued again");
+      showToast.success(t("changesPage.externalWriteQueuedAgain"));
       if (detail) await fetchDetail(detail.id);
     } catch (error) {
       showToast.error(error instanceof Error ? error.message : t("changes.externalWriteFailed"));
@@ -668,7 +656,7 @@ export default function ChangesPage() {
                     </span>
                     <Button asChild variant="outline" size="sm">
                       <Link href="/dashboard/tasks">
-                        {locale === "tr" ? "İşleri aç" : "Open work"}
+                        {t("changesPage.openWork")}
                         <ArrowRight className="ml-2 size-4" />
                       </Link>
                     </Button>
@@ -794,7 +782,7 @@ export default function ChangesPage() {
                                         {operationStatusLabel(operationStatus)}
                                       </Badge>
                                       <span className="ml-2 text-foreground-faint">
-                                        {operation.attemptCount} {locale === "tr" ? "deneme" : "attempts"}
+                                        {operation.attemptCount} {t("changesPage.attempts")}
                                       </span>
                                       {operationError && (
                                         <p className="mt-1 text-red-700 dark:text-red-300">{operationError}</p>
@@ -811,7 +799,7 @@ export default function ChangesPage() {
                                           void retryExternalOperation(operation.id);
                                         }}
                                       >
-                                        {locale === "tr" ? "Yeniden dene" : "Retry"}
+                                        {t("changesPage.retry")}
                                       </Button>
                                     ) : (
                                       <span className="text-right text-[11px] text-foreground-faint">
