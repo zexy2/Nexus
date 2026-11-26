@@ -363,14 +363,16 @@ jobs:
             -e DATABASE_URL -e TEMPORAL_ADDRESS=temporal:7233 -e NODE_ENV=production \
             nexus-worker:ci < /dev/null
           for i in $(seq 1 60); do
-            if docker logs worker 2>&1 | grep -q "Waiting for workflows"; then break; fi
+            docker logs worker > /tmp/worker.log 2>&1 || true
+            if grep -q "Waiting for workflows" /tmp/worker.log; then break; fi
             if [ "$(docker inspect -f '{{.State.Running}}' worker)" != "true" ] || [ "$i" -eq 60 ]; then
               docker logs worker; exit 1
             fi
             sleep 2
           done
-          docker logs worker 2>&1 | grep -E "Workflow bundle created|Worker connected|Task Queue"
-          docker logs worker 2>&1 | grep -q "Workflow bundle created"
+          docker logs worker > /tmp/worker.log 2>&1 || true
+          grep -E "Workflow bundle created|Worker connected|Task Queue" /tmp/worker.log
+          grep -q "Workflow bundle created" /tmp/worker.log
 
       - name: "Smoke: collaboration serves HTTP and authorised Yjs websockets"
         run: |
@@ -437,7 +439,8 @@ jobs:
           docker exec web node -e 'const p=require.resolve("next/dist/server/image-optimizer",{paths:["/app/apps/web"]}); require(require.resolve("sharp",{paths:[p]}))({create:{width:2,height:2,channels:3,background:"#000"}}).png().toBuffer().then(b=>console.log("sharp ok", b.length))'
           echo "--- container log"
           docker logs web 2>&1 | tail -20
-          if docker logs web 2>&1 | grep -E "Cannot find module|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND"; then exit 1; fi
+          docker logs web > /tmp/web.log 2>&1 || true
+          if grep -E "Cannot find module|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND" /tmp/web.log; then exit 1; fi
 
       - name: Container logs on failure
         if: failure()

@@ -299,13 +299,14 @@ wait_healthy() {
 }
 
 wait_worker() {
-  local deadline=$((SECONDS + 120)) id
+  local deadline=$((SECONDS + 120)) id logs
   log "Wait for the worker to connect to Temporal"
   while :; do
     id="$(dc ps -q worker | awk 'NR == 1')"
     if [[ -n "$id" ]] \
       && [[ "$(docker inspect --format '{{.State.Running}}/{{.State.Restarting}}' "$id" < /dev/null 2>/dev/null)" == "true/false" ]] \
-      && docker logs "$id" 2>&1 < /dev/null | grep -c "Waiting for workflows" > /dev/null; then
+      && logs="$(docker logs "$id" 2>&1 < /dev/null || true)" \
+      && grep -q "Waiting for workflows" <<< "$logs"; then
       echo "worker ready"
       return 0
     fi
