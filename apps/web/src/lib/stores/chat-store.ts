@@ -63,9 +63,10 @@ function persist(state: Pick<ChatStore, 'userId' | 'sessions'>) {
 }
 
 function newId() {
-  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // randomUUID needs a secure context; getRandomValues does not.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export const useChatStore = create<ChatStore>()((set, get) => {
