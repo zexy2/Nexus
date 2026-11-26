@@ -192,10 +192,14 @@ export function aiUnavailableResponse(message = "AI is temporarily unavailable f
   );
 }
 
-export function rateLimitResponse(result: PersistentLimitResult) {
+export function rateLimitResponse(result: PersistentLimitResult & { scope?: string }) {
   return NextResponse.json(
     {
       error: "RATE_LIMIT_EXCEEDED",
+      // English fallback; clients localize from scope/limit/resetAt
+      // (lib/ai/ai-errors.ts).
+      message: `Usage limit reached. Try again after ${new Date(result.resetAt).toISOString()}.`,
+      scope: result.scope,
       limit: result.limit,
       remaining: 0,
       resetAt: result.resetAt,
@@ -457,6 +461,38 @@ export async function getAiUsageRemaining(userId: string, email?: string | null)
     chatDaily: Math.max(0, limits.chatDaily - countFor(userId, "ai:chat:daily")),
   };
 }
+
+/**
+ * Today's AI quota for the quota badges (GET /api/ai/quota): per-kind limit,
+ * use, what is left and when each daily window resets (epoch ms; null while
+ * the window has not started).
+ */
+export async function getAiQuotaStatus(userId: string, email?: string | null) {
+  const limits = getAiUsageLimits(await isVerifiedAdminUser(userId, email), isDemoEmail(email));
+  const rows = await db
+    .select()
+    .from(rateLimitBuckets)
+    .where(and(gte(rateLimitBuckets.resetAt, new Date()), eq(rateLimitBuckets.key, userId)));
+
+  const bucketState = (bucket: string, limit: number) => {
+    const row = rows.find((r) => r.bucket === bucket);
+    const count = row?.count ?? 0;
+    return {
+      limit,
+      used: Math.min(limit, count),
+      remaining: Math.max(0, limit - count),
+      resetAt: row ? row.resetAt.getTime() : null,
+    };
+  };
+
+  return {
+    calls: bucketState("ai:user:daily", limits.userDaily),
+    chat: bucketState("ai:chat:daily", limits.chatDaily),
+    workflow: bucketState("ai:workflow:daily", limits.workflowDaily),
+  };
+}
+
+export type AiQuotaStatus = Awaited<ReturnType<typeof getAiQuotaStatus>>;
 
 export async function writeAuditLog(input: {
   userId?: string | null;

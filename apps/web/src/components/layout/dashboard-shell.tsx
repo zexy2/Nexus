@@ -30,7 +30,6 @@ import {
   CloudOff,
   AlertTriangle,
   RefreshCw,
-  Wand2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -51,7 +50,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { CommandPalette } from '@/components/shared/command-palette';
-import { CommandInput } from '@/components/shared/command-input';
 import { NexusMark } from '@/components/shared/nexus-mark';
 import { SyncIssuesPanel } from '@/components/shared/sync-issues-panel';
 import type { UnsyncedChanges } from '@/lib/sync/sign-out';
@@ -289,6 +287,8 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
           import('@/lib/collab/offline-store').then(({ clearCollabOfflineData }) =>
             clearCollabOfflineData()
           ),
+        // Removes this user's Ask Nexus history (lib/stores/chat-persistence.ts).
+        userId: user?.id,
       });
       navigate = result === 'signed-out';
     } finally {
@@ -413,11 +413,15 @@ function TopBar({ onMenuClick, syncState }: { onMenuClick: () => void; syncState
               <Plus className="h-4 w-4" />
             </motion.button>
 
-            {/* AI Assistant */}
+            {/* Ask Nexus: the single global AI entry point. The dialog opens
+                /dashboard/chat?q=..., which sends the question once. */}
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => openModal('aiAssistant')}
+              data-testid="ask-nexus-trigger"
+              aria-label={t('chat.askNexus')}
+              title={t('chat.askNexus')}
               className="hidden md:flex p-2.5 rounded-full glass-premium hover:bg-foreground/10 transition-colors"
             >
               <Sparkles className="h-4 w-4" />
@@ -544,7 +548,6 @@ interface DashboardShellProps {
 
 export function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
   const { status, isOnline, isSyncing, pendingMutations } = useZeroStatus();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -574,8 +577,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
         ? 'syncing'
         : 'synced';
 
-  const user = session?.user;
-
   return (
     <>
       {/* Top bar */}
@@ -603,89 +604,6 @@ export function DashboardShell({ children }: DashboardShellProps) {
           </motion.div>
         </AnimatePresence>
       </main>
-
-      {/* AI Command Button - Floating - Hide on chat page */}
-      {user && !pathname.startsWith('/dashboard/chat') && (
-        <AICommandButton userId={user.id} />
-      )}
-    </>
-  );
-}
-
-// Floating AI Command Button with Modal
-function AICommandButton({ userId }: { userId: string }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const t = useT();
-
-  return (
-    <>
-      {/* Floating Button */}
-      <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 20 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(true)}
-        className={cn(
-          'fixed bottom-6 right-6 z-40',
-          'w-14 h-14 rounded-full',
-          'bg-foreground text-background',
-          'flex items-center justify-center',
-          'shadow-lg shadow-black/20',
-          'hover:shadow-xl hover:shadow-black/30',
-          'transition-shadow duration-200'
-        )}
-        title={t('chat.askAiAnything')}
-      >
-        <Wand2 className="h-6 w-6" />
-      </motion.button>
-
-      {/* Modal Overlay */}
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-            />
-
-            {/* Modal */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4"
-            >
-              <div className="bg-popover border border-border rounded-2xl overflow-hidden shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Sparkles className="h-4 w-4" />
-                    <span>{t('chat.askAiAnything')}</span>
-                  </div>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="p-1 rounded-lg text-foreground-faint hover:text-foreground hover:bg-foreground/10 transition-colors"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <CommandInput
-                  workspaceId="default"
-                  userId={userId}
-                  placeholder={t('chat.commandPlaceholder')}
-                  onCommandCreated={() => setIsOpen(false)}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </>
   );
 }

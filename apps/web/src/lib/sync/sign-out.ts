@@ -20,8 +20,9 @@
 import type { SyncEngine } from "./engine";
 import { getBrowserStorage } from "./browser-storage";
 import { clearOfflineCommands, countQueuedOfflineCommands } from "./offline-commands";
+import { CHAT_STORE_KEY, chatStorageKey } from "../stores/chat-persistence";
 
-export const CHAT_STORE_KEY = "nexus-chat-store";
+export { CHAT_STORE_KEY };
 
 export interface UnsyncedChanges {
   /** Sync-engine mutations still queued after the final sync. */
@@ -64,6 +65,8 @@ export async function signOutAndClearLocalData(options: {
   confirmDiscard?: (unsynced: UnsyncedChanges) => Promise<boolean>;
   /** Extra per-user cleanup, e.g. collaborative documents' offline copies. */
   clearExtraLocalData?: () => Promise<void>;
+  /** Signed-in user, whose per-user chat history (chatStorageKey) is removed. */
+  userId?: string | null;
 }): Promise<SignOutResult> {
   const { engine, signOut, confirmDiscard, clearExtraLocalData } = options;
   const storage = options.storage !== undefined ? options.storage : getBrowserStorage();
@@ -125,6 +128,7 @@ export async function signOutAndClearLocalData(options: {
     ]);
     try {
       storage?.removeItem(CHAT_STORE_KEY);
+      if (options.userId) storage?.removeItem(chatStorageKey(options.userId));
     } catch {
       // storage unavailable
     }
