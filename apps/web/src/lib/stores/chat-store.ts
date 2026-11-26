@@ -1,456 +1,235 @@
 'use client';
 
+/**
+ * Ask Nexus chat state.
+ *
+ * One send path (sendMessage) used by the composer, the `?q=` deep link and
+ * Retry. Every message is written into its session, and sessions are saved
+ * per user (lib/stores/chat-persistence.ts) so history survives reloads. A
+ * session only exists once it has a message: "New chat" just clears the
+ * selection. In-flight requests can be cancelled with stop().
+ */
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { currentUiLocale, FALLBACK_LOCALE, localeHeaders } from '@/lib/i18n/locale';
-import { translate } from '@/lib/i18n/provider';
-import { 
-  Sparkles, 
-  Search, 
-  FileText, 
-  Code, 
-  ListTodo,
-  type LucideIcon 
-} from 'lucide-react';
+import { readTextStream } from '@/lib/stream-text';
+import { localeHeaders } from '@/lib/i18n/locale';
+import { getBrowserStorage } from '@/lib/sync/browser-storage';
+import { notifyAiQuotaChanged, readAiError, type AiErrorInfo } from '@/lib/ai/ai-errors';
+import { AGENT_META_HEADER, decodeAgentMeta } from '@/lib/ai/agent-meta';
+import {
+  deriveSessionTitle,
+  loadChatSessions,
+  saveChatSessions,
+  type ChatMessage,
+  type ChatSession,
+} from '@/lib/stores/chat-persistence';
 
-// ==========================================
-// TYPES
-// ==========================================
+export type { ChatMessage, ChatSession } from '@/lib/stores/chat-persistence';
 
-export type AgentMode = 'auto' | 'research' | 'writer' | 'coder' | 'task';
-
-export interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  timestamp: number;
-  agentMode?: AgentMode;
-  isStreaming?: boolean;
-  metadata?: {
-    model?: string;
-    tokensUsed?: number;
-    executionTime?: number;
-    sources?: string[];
-  };
+/** A failed send. `info` is localized by the page (lib/ai/ai-errors.ts). */
+export interface ChatError {
+  info: AiErrorInfo;
 }
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  agentMode: AgentMode;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface ActiveAgent {
-  id: string;
-  name: string;
-  mode: AgentMode;
-  status: 'idle' | 'thinking' | 'working' | 'error';
-  currentTask?: string;
-  progress?: number;
-  startedAt?: number;
-}
-
-interface AgentDefinition {
-  id: string;
-  /** English fallback; UI renders `t(labelKey)`. */
-  label: string;
-  description: string;
-  labelKey: string;
-  descriptionKey: string;
-  icon: LucideIcon;
-  color: string;
-  gradient: string;
-}
-
-// ==========================================
-// ASK NEXUS CAPABILITY DEFINITIONS
-// ==========================================
-
-export const AGENT_DEFINITIONS: Record<AgentMode, AgentDefinition> = {
-  auto: {
-    id: 'auto',
-    label: 'Nexus',
-    description: 'Chooses the required workspace tools automatically',
-    labelKey: 'chat.modes.auto.label',
-    descriptionKey: 'chat.modes.auto.description',
-    icon: Sparkles,
-    color: 'text-violet-700 dark:text-violet-400',
-    gradient: 'from-violet-500 to-purple-600',
-  },
-  research: {
-    id: 'research',
-    label: 'Research',
-    description: 'Workspace analysis and optional web search',
-    labelKey: 'chat.modes.research.label',
-    descriptionKey: 'chat.modes.research.description',
-    icon: Search,
-    color: 'text-blue-700 dark:text-blue-400',
-    gradient: 'from-blue-500 to-cyan-500',
-  },
-  writer: {
-    id: 'writer',
-    label: 'Drafting',
-    description: 'Structured document drafting and editing',
-    labelKey: 'chat.modes.writer.label',
-    descriptionKey: 'chat.modes.writer.description',
-    icon: FileText,
-    color: 'text-emerald-700 dark:text-emerald-400',
-    gradient: 'from-emerald-500 to-teal-500',
-  },
-  coder: {
-    id: 'coder',
-    label: 'Technical help',
-    description: 'Code explanation and technical problem solving',
-    labelKey: 'chat.modes.coder.label',
-    descriptionKey: 'chat.modes.coder.description',
-    icon: Code,
-    color: 'text-orange-700 dark:text-orange-400',
-    gradient: 'from-orange-500 to-amber-500',
-  },
-  task: {
-    id: 'task',
-    label: 'Task breakdown',
-    description: 'Turns scope into structured delivery tasks',
-    labelKey: 'chat.modes.task.label',
-    descriptionKey: 'chat.modes.task.description',
-    icon: ListTodo,
-    color: 'text-rose-700 dark:text-rose-400',
-    gradient: 'from-rose-500 to-pink-500',
-  },
-};
-
-// ==========================================
-// STORE INTERFACE
-// ==========================================
 
 interface ChatStore {
-  // Session State
-  currentSessionId: string | null;
+  userId: string | null;
   sessions: ChatSession[];
-  
-  // Message State
-  messages: Message[];
-  
-  // Input State
+  currentSessionId: string | null;
   input: string;
-  agentMode: AgentMode;
-  
-  // UI State
   isLoading: boolean;
-  isStreaming: boolean;
   streamingContent: string;
-  error: string | null;
-  
-  // Active Agents
-  activeAgents: ActiveAgent[];
-  activeAgent: ActiveAgent | null;
-  
-  // Sidebar State
-  isSidebarOpen: boolean;
-  
-  // Suggested prompts
-  suggestedPrompts: string[];
-  
-  // Actions - Input
+  error: ChatError | null;
+
+  /** Load this user's saved sessions (call when the session user is known). */
+  bindUser: (userId: string) => void;
   setInput: (input: string) => void;
-  setAgentMode: (mode: AgentMode) => void;
-  
-  // Actions - Messages
-  addMessage: (message: Omit<Message, 'id' | 'timestamp'>) => void;
-  updateMessage: (id: string, updates: Partial<Message>) => void;
-  deleteMessage: (id: string) => void;
-  clearMessages: () => void;
-  
-  // Actions - Loading
-  setLoading: (loading: boolean) => void;
-  setIsLoading: (loading: boolean) => void;
-  setIsStreaming: (streaming: boolean) => void;
-  setStreamingContent: (content: string) => void;
-  appendStreamingContent: (chunk: string) => void;
-  setError: (error: string | null) => void;
   clearError: () => void;
-  
-  // Actions - Agents
-  setAgentStatus: (agentId: string, status: ActiveAgent['status'], task?: string) => void;
-  addActiveAgent: (agent: ActiveAgent) => void;
-  removeActiveAgent: (agentId: string) => void;
-  clearActiveAgents: () => void;
-  
-  // Actions - Sidebar
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  
-  // Actions - Sessions
-  createSession: () => string;
-  loadSession: (sessionId: string) => void;
+
+  newChat: () => void;
+  openSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
-  
-  // Actions - Send Message
+
   sendMessage: (content: string) => Promise<void>;
   retryLastMessage: () => Promise<void>;
+  stop: () => void;
 }
 
-// ==========================================
-// STORE IMPLEMENTATION
-// ==========================================
+const EMPTY: ChatMessage[] = [];
 
-export const useChatStore = create<ChatStore>()(
-  persist(
-    (set, get) => ({
-      // Initial State
-      currentSessionId: null,
-      sessions: [],
-      messages: [],
-      input: '',
-      agentMode: 'auto',
-      isLoading: false,
-      isStreaming: false,
-      streamingContent: '',
-      error: null,
-      activeAgents: [],
-      activeAgent: null,
-      isSidebarOpen: true,
-      suggestedPrompts: [
-        'Create a marketing plan for a product launch',
-        'Research competitor pricing strategies',
-        'Help me write a technical specification',
-        'Create tasks for a development sprint',
-      ],
-      
-      // Input Actions
-      setInput: (input) => set({ input }),
-      setAgentMode: (agentMode) => set({ agentMode }),
-      
-      // Message Actions
-      addMessage: (message) => {
-        const newMessage: Message = {
-          ...message,
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
+// Not part of the state: an AbortController is not serializable and never
+// needs to trigger a render.
+let inFlight: AbortController | null = null;
+
+function persist(state: Pick<ChatStore, 'userId' | 'sessions'>) {
+  if (state.userId) saveChatSessions(getBrowserStorage(), state.userId, state.sessions);
+}
+
+function newId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // randomUUID needs a secure context; getRandomValues does not.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export const useChatStore = create<ChatStore>()((set, get) => {
+  /** Replace one session (and bump it to "recent"), then save. */
+  const updateSession = (sessionId: string, update: (s: ChatSession) => ChatSession) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? update(s) : s)),
+    }));
+    persist(get());
+  };
+
+  const appendMessage = (sessionId: string, message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+    const full: ChatMessage = { ...message, id: newId(), timestamp: Date.now() };
+    updateSession(sessionId, (s) => ({ ...s, messages: [...s.messages, full], updatedAt: full.timestamp }));
+    return full;
+  };
+
+  return {
+    userId: null,
+    sessions: [],
+    currentSessionId: null,
+    input: '',
+    isLoading: false,
+    streamingContent: '',
+    error: null,
+
+    bindUser: (userId) => {
+      if (get().userId === userId) return;
+      inFlight?.abort();
+      set({
+        userId,
+        sessions: loadChatSessions(getBrowserStorage(), userId),
+        currentSessionId: null,
+        input: '',
+        error: null,
+        isLoading: false,
+        streamingContent: '',
+      });
+    },
+
+    setInput: (input) => set({ input }),
+    clearError: () => set({ error: null }),
+
+    newChat: () => {
+      if (get().isLoading) get().stop();
+      set({ currentSessionId: null, error: null, input: '', streamingContent: '' });
+    },
+
+    openSession: (sessionId) => {
+      if (!get().sessions.some((s) => s.id === sessionId)) return;
+      if (get().isLoading) get().stop();
+      set({ currentSessionId: sessionId, error: null, streamingContent: '' });
+    },
+
+    deleteSession: (sessionId) => {
+      if (get().currentSessionId === sessionId && get().isLoading) get().stop();
+      set((state) => ({
+        sessions: state.sessions.filter((s) => s.id !== sessionId),
+        currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
+        error: state.currentSessionId === sessionId ? null : state.error,
+      }));
+      persist(get());
+    },
+
+    stop: () => {
+      inFlight?.abort();
+    },
+
+    sendMessage: async (raw) => {
+      const content = raw.trim();
+      if (!content || get().isLoading) return;
+
+      // Create the session lazily, so an unused "New chat" leaves nothing behind.
+      let sessionId = get().currentSessionId;
+      if (!sessionId || !get().sessions.some((s) => s.id === sessionId)) {
+        const now = Date.now();
+        const session: ChatSession = {
+          id: newId(),
+          title: deriveSessionTitle(content),
+          messages: [],
+          createdAt: now,
+          updatedAt: now,
         };
-        set((state) => ({
-          messages: [...state.messages, newMessage],
-        }));
-        return newMessage;
-      },
-      
-      updateMessage: (id, updates) => {
-        set((state) => ({
-          messages: state.messages.map((msg) =>
-            msg.id === id ? { ...msg, ...updates } : msg
-          ),
-        }));
-      },
-      
-      deleteMessage: (id) => {
-        set((state) => ({
-          messages: state.messages.filter((msg) => msg.id !== id),
-        }));
-      },
-      
-      clearMessages: () => set({ messages: [], streamingContent: '' }),
-      
-      // Loading Actions
-      setLoading: (isLoading) => set({ isLoading }),
-      setIsLoading: (isLoading) => set({ isLoading }),
-      setIsStreaming: (isStreaming) => set({ isStreaming }),
-      setStreamingContent: (streamingContent) => set({ streamingContent }),
-      appendStreamingContent: (chunk) => {
-        set((state) => ({
-          streamingContent: state.streamingContent + chunk,
-        }));
-      },
-      setError: (error) => set({ error }),
-      clearError: () => set({ error: null }),
-      
-      // Agent Actions
-      setAgentStatus: (agentId, status, task) => {
-        set((state) => ({
-          activeAgents: state.activeAgents.map((agent) =>
-            agent.id === agentId
-              ? { ...agent, status, currentTask: task }
-              : agent
-          ),
-        }));
-      },
-      
-      addActiveAgent: (agent) => {
-        set((state) => ({
-          activeAgents: [...state.activeAgents, agent],
-          activeAgent: agent,
-        }));
-      },
-      
-      removeActiveAgent: (agentId) => {
-        set((state) => {
-          const newAgents = state.activeAgents.filter((a) => a.id !== agentId);
-          return {
-            activeAgents: newAgents,
-            activeAgent: newAgents.length > 0 ? newAgents[0] : null,
-          };
+        sessionId = session.id;
+        set((state) => ({ sessions: [session, ...state.sessions], currentSessionId: session.id }));
+      }
+
+      appendMessage(sessionId, { role: 'user', content });
+      set({ input: '', error: null, isLoading: true, streamingContent: '' });
+
+      const controller = new AbortController();
+      inFlight = controller;
+      let streamed = '';
+
+      try {
+        const history = (get().sessions.find((s) => s.id === sessionId)?.messages ?? EMPTY)
+          .filter((m) => m.content.trim())
+          .map((m) => ({ role: m.role, content: m.content }));
+
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...localeHeaders() },
+          body: JSON.stringify({ messages: history, agentMode: 'auto' }),
+          signal: controller.signal,
         });
-      },
-      
-      clearActiveAgents: () => set({ activeAgents: [], activeAgent: null }),
-      
-      // Sidebar Actions
-      toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
-      setSidebarOpen: (isSidebarOpen) => set({ isSidebarOpen }),
-      
-      // Session Actions
-      createSession: () => {
-        const sessionId = crypto.randomUUID();
-        const newSession: ChatSession = {
-          id: sessionId,
-          title: 'New Chat',
-          messages: [],
-          agentMode: get().agentMode,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        set((state) => ({
-          sessions: [...state.sessions, newSession],
-          currentSessionId: sessionId,
-          messages: [],
-        }));
-        return sessionId;
-      },
-      
-      loadSession: (sessionId) => {
-        const session = get().sessions.find((s) => s.id === sessionId);
-        if (session) {
+
+        if (!response.ok) {
+          // Keep the server's code/message (quota reset time etc.).
+          set({ error: { info: await readAiError(response) } });
+          return;
+        }
+
+        const meta = decodeAgentMeta(response.headers.get(AGENT_META_HEADER));
+        const text = await readTextStream(response.body, (_chunk, accumulated) => {
+          streamed = accumulated;
+          if (get().currentSessionId === sessionId) set({ streamingContent: accumulated });
+        });
+        appendMessage(sessionId, { role: 'assistant', content: text, meta });
+      } catch (error) {
+        if (controller.signal.aborted) {
+          appendMessage(sessionId, { role: 'assistant', content: streamed, stopped: true });
+        } else {
           set({
-            currentSessionId: sessionId,
-            messages: session.messages,
-            agentMode: session.agentMode,
+            error: {
+              info: {
+                status: 0,
+                message: error instanceof Error && error.message ? error.message : undefined,
+              },
+            },
           });
         }
-      },
-      
-      deleteSession: (sessionId) => {
-        set((state) => ({
-          sessions: state.sessions.filter((s) => s.id !== sessionId),
-          currentSessionId:
-            state.currentSessionId === sessionId ? null : state.currentSessionId,
-          messages: state.currentSessionId === sessionId ? [] : state.messages,
-        }));
-      },
-      
-      // Send Message Action
-      sendMessage: async (content) => {
-        const { agentMode, addMessage, setLoading, setError, setStreamingContent, appendStreamingContent, addActiveAgent, setAgentStatus, removeActiveAgent } = get();
-        
-        if (!content.trim()) return;
-        
-        // Add user message
-        addMessage({
-          role: 'user',
-          content: content.trim(),
-          agentMode,
-        });
-        
-        // Clear input and set loading
-        set({ input: '', error: null });
-        setLoading(true);
-        setStreamingContent('');
-        
-        // Add active agent indicator
-        const agentDef = AGENT_DEFINITIONS[agentMode];
-        addActiveAgent({
-          id: agentMode,
-          name: translate(currentUiLocale() ?? FALLBACK_LOCALE, agentDef.labelKey),
-          mode: agentMode,
-          status: 'thinking',
-          startedAt: Date.now(),
-        });
-        
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...localeHeaders() },
-            body: JSON.stringify({
-              messages: [...get().messages],
-              agentMode,
-            }),
-          });
-          
-          if (!response.ok) {
-            throw new Error('Failed to send message');
-          }
-          
-          // Update agent status to working
-          setAgentStatus(agentMode, 'working', translate(currentUiLocale() ?? FALLBACK_LOCALE, 'chat.generatingResponse'));
-          
-          // Handle streaming response
-          const reader = response.body?.getReader();
-          const decoder = new TextDecoder();
-          
-          if (reader) {
-            let done = false;
-            while (!done) {
-              const { value, done: readerDone } = await reader.read();
-              done = readerDone;
-              
-              if (value) {
-                const chunk = decoder.decode(value, { stream: true });
-                appendStreamingContent(chunk);
-              }
-            }
-            // Flush bytes of a character left incomplete by the last chunk.
-            const tail = decoder.decode();
-            if (tail) appendStreamingContent(tail);
-          }
-          
-          // Add assistant message with streamed content
-          const finalContent = get().streamingContent;
-          addMessage({
-            role: 'assistant',
-            content: finalContent,
-            agentMode,
-          });
-          
-          // Clear streaming content
-          setStreamingContent('');
-          
-        } catch (error) {
-          console.error('Chat error:', error);
-          setError(error instanceof Error ? error.message : 'An error occurred');
-          setAgentStatus(agentMode, 'error');
-        } finally {
-          setLoading(false);
-          removeActiveAgent(agentMode);
-        }
-      },
-      
-      retryLastMessage: async () => {
-        const { messages, sendMessage, deleteMessage } = get();
-        
-        // Find last user message
-        const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-        if (!lastUserMessage) return;
-        
-        // Remove last assistant message if exists
-        const lastAssistantMessage = [...messages].reverse().find((m) => m.role === 'assistant');
-        if (lastAssistantMessage) {
-          deleteMessage(lastAssistantMessage.id);
-        }
-        
-        // Remove the user message too (sendMessage will re-add it)
-        deleteMessage(lastUserMessage.id);
-        
-        // Resend
-        await sendMessage(lastUserMessage.content);
-      },
-    }),
-    {
-      name: 'nexus-chat-store',
-      partialize: (state) => ({
-        sessions: state.sessions,
-        agentMode: state.agentMode,
-      }),
-    }
-  )
-);
+      } finally {
+        if (inFlight === controller) inFlight = null;
+        set({ isLoading: false, streamingContent: '' });
+        notifyAiQuotaChanged();
+      }
+    },
+
+    retryLastMessage: async () => {
+      const { currentSessionId, sessions, isLoading } = get();
+      if (!currentSessionId || isLoading) return;
+      const session = sessions.find((s) => s.id === currentSessionId);
+      if (!session) return;
+
+      // Drop the trailing reply (if any) and the question it answered, then
+      // ask again through the normal send path.
+      const messages = [...session.messages];
+      if (messages[messages.length - 1]?.role === 'assistant') messages.pop();
+      const question = messages[messages.length - 1];
+      if (!question || question.role !== 'user') return;
+      messages.pop();
+
+      updateSession(currentSessionId, (s) => ({ ...s, messages }));
+      set({ error: null });
+      await get().sendMessage(question.content);
+    },
+  };
+});
+
+/** Messages of the open session (stable empty array when none). */
+export function useCurrentMessages(): ChatMessage[] {
+  return useChatStore(
+    (s) => s.sessions.find((session) => session.id === s.currentSessionId)?.messages ?? EMPTY
+  );
+}

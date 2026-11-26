@@ -32,6 +32,8 @@ import { LivingPlanInspector } from "./_components/living-plan-inspector";
 import { DemoTourCard } from "@/components/demo/demo-tour-card";
 import { applyDemoSampleEdit } from "@/components/demo/apply-sample-edit";
 import { showToast } from "@/components/shared/toast-provider";
+import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
+import { UserFacingError, aiErrorMessage, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { intlLocale, LOCALE_HEADER } from "@/lib/i18n/locale";
 import { AI_PREAMBLE_PATTERN, buildDocActionPrompt } from "@/lib/ai/doc-action-prompts";
@@ -332,7 +334,7 @@ export default function DocDetailPage() {
           break;
         case "tasks":
           if (!doc?.workspaceId) {
-            throw new Error(t("docs.detail.workspaceMissing"));
+            throw new UserFacingError(t("docs.detail.workspaceMissing"));
           }
 
           const workflowResponse = await fetch("/api/workflows", {
@@ -354,8 +356,9 @@ export default function DocDetailPage() {
           });
 
           if (!workflowResponse.ok) {
-            const errorBody = await workflowResponse.json().catch(() => null);
-            throw new Error(errorBody?.message || errorBody?.error || t("docs.detail.taskWorkflowStartFailed"));
+            throw new UserFacingError(
+              await aiErrorMessage(workflowResponse, t, locale, t("docs.detail.taskWorkflowStartFailed"))
+            );
           }
 
           const workflow = await workflowResponse.json();
@@ -377,7 +380,10 @@ export default function DocDetailPage() {
         }),
       });
 
-      if (!response.ok) throw new Error(t("docs.detail.aiRequestFailed"));
+      if (!response.ok) {
+        // Quota hits become "…resets at 14:05", never a raw error code.
+        throw new UserFacingError(await aiErrorMessage(response, t, locale, t("docs.detail.aiRequestFailed")));
+      }
 
       const rawResult = await response.text();
 
@@ -433,14 +439,17 @@ export default function DocDetailPage() {
       }
     } catch (err) {
       console.error("AI action failed:", err);
-      showToast.error(t("docs.detail.aiActionFailed"));
+      // Only our own localized messages (quota reset time etc.) reach the toast.
+      showToast.error(err instanceof UserFacingError ? err.message : t("docs.detail.aiActionFailed"));
       if (action === "tasks") {
         setTaskWorkflow(null);
+        setAiLoading(null);
       }
     } finally {
       if (action !== "tasks") {
         setAiLoading(null);
       }
+      notifyAiQuotaChanged();
     }
   };
 
@@ -794,6 +803,7 @@ export default function DocDetailPage() {
               )}
             </Button>
           </div>
+          <AiQuotaBadge kind="chat" className="hidden sm:inline-flex shrink-0" />
         </div>
       </div>
     </div>
