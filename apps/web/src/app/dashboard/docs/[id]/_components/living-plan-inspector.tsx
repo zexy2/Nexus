@@ -22,6 +22,10 @@ import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { aiErrorFromBody, formatAiError, notifyAiQuotaChanged } from "@/lib/ai/ai-errors";
 import { AiQuotaBadge } from "@/components/shared/ai-quota-badge";
+import {
+  LIVING_PLAN_ANALYSIS_STARTED_EVENT,
+  type LivingPlanAnalysisStartedDetail,
+} from "@/components/demo/demo-tour-card";
 
 type RequirementTask = {
   taskId: string;
@@ -194,6 +198,23 @@ export function LivingPlanInspector({
       .catch(() => setPlan(null))
       .finally(() => setLoading(false));
   }, [fetchImpactGraph, fetchPlan]);
+
+  // The demo guided tour can start the analysis from outside this panel;
+  // follow that run exactly as if the panel's own button had started it.
+  useEffect(() => {
+    const onStarted = (event: Event) => {
+      const detail = (event as CustomEvent<LivingPlanAnalysisStartedDetail>).detail;
+      if (!detail || detail.docId !== docId) return;
+      setAnalysis({
+        status: "running",
+        workflowId: detail.workflowId,
+        executionId: detail.executionId,
+        startedAt: Date.now(),
+      });
+    };
+    window.addEventListener(LIVING_PLAN_ANALYSIS_STARTED_EVENT, onStarted);
+    return () => window.removeEventListener(LIVING_PLAN_ANALYSIS_STARTED_EVENT, onStarted);
+  }, [docId]);
 
   useEffect(() => {
     if (analysis.status !== "running") return;
