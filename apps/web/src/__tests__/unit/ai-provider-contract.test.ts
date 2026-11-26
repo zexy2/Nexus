@@ -242,7 +242,7 @@ describe("Gemini contract (default provider)", () => {
     // Step 1: the tool schema is sent as Gemini function declarations.
     const declarations = first.body.tools?.[0]?.functionDeclarations;
     expect(declarations.map((d: { name: string }) => d.name).sort()).toEqual(
-      ["createDocument", "createTask", "searchWorkspace", "webSearch"]
+      ["createDocument", "createTask", "queryTasks", "searchWorkspace", "webSearch"]
     );
     const search = declarations.find((d: { name: string }) => d.name === "searchWorkspace");
     expect(search.description).toMatch(/workspace/i);
@@ -449,7 +449,7 @@ describe("OpenAI contract", () => {
     // Step 1: tools are sent as Responses API function tools.
     const tools = first.body.tools as Array<{ type: string; name: string; parameters: Record<string, unknown> }>;
     expect(tools.every((t) => t.type === "function")).toBe(true);
-    expect(tools.map((t) => t.name).sort()).toEqual(["createDocument", "createTask", "searchWorkspace", "webSearch"]);
+    expect(tools.map((t) => t.name).sort()).toEqual(["createDocument", "createTask", "queryTasks", "searchWorkspace", "webSearch"]);
     expect(tools.find((t) => t.name === "searchWorkspace")!.parameters).toMatchObject({
       type: "object",
       properties: { query: { type: "string" } },

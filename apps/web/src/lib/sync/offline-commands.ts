@@ -601,6 +601,7 @@ export function clearOfflineCommands(): Promise<void> {
   return commandQueue.reset();
 }
 
-// The sync watch is started by the components that need it (command-input),
-// each with a matching stop on unmount; there is no module-level listener
-// that could never be removed.
+// The sync watch is started by components that need it, each with a matching
+// stop on unmount; there is no module-level listener that could never be
+// removed. (The floating command box that used it was removed; any commands
+// still queued are counted and cleared on sign-out.)
