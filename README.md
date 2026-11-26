@@ -8,7 +8,7 @@ Project workspace that turns plan edits into task updates you approve before the
 
 [Live demo](https://nexus.zekiakgul.dev) · [Case study](https://zekiakgul.dev/work/nexus/) · [Release notes](https://github.com/zexy2/Nexus/releases)
 
-![Nexus Kanban board in the public demo (Turkish locale)](docs/images/nexus-board.png)
+![Nexus Kanban board in the public demo](docs/images/nexus-board.png)
 
 > **Status:** public demo on a single VPS. Signup is closed; "Try Demo" creates an isolated workspace with server-side quotas.
 
