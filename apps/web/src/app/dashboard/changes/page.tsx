@@ -26,6 +26,21 @@ import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { friendlyError } from "@/lib/friendly-error";
 import { plural } from "@/lib/i18n/plural";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import {
+  confidenceBand,
+  confidenceIsInformative,
+  isSimulatedProposal,
+  summarizeChangeSetOutcome,
+  type FailedProposal,
+} from "@/lib/change-review";
+
+function fillTemplate(template: string, values: Record<string, string | number>) {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) =>
+    key in values ? String(values[key]) : match
+  );
+}
+
+const PROVIDER_NAMES: Record<string, string> = { github: "GitHub", linear: "Linear" };
 
 type ChangeSetSummary = {
   id: string;
@@ -283,8 +298,59 @@ export default function ChangesPage() {
     [detail]
   );
 
+  const outcome = useMemo(
+    () => (detail && detail.status !== "pending" ? summarizeChangeSetOutcome(detail.proposals) : null),
+    [detail]
+  );
+
+  const providerName = useCallback(
+    (provider: string | null) =>
+      (provider && PROVIDER_NAMES[provider]) || provider || t("changeReview.providerFallback"),
+    [t]
+  );
+
+  const failureReason = useCallback((failure: FailedProposal) => {
+    const key = {
+      integration_missing: "changeReview.reasonIntegrationMissing",
+      permission: "changeReview.reasonPermission",
+      interrupted: "changeReview.reasonInterrupted",
+      provider_error: "changeReview.reasonProviderError",
+    }[failure.reason];
+    return fillTemplate(t(key), { provider: providerName(failure.provider) });
+  }, [providerName, t]);
+
+  const showConfidence = useMemo(
+    () => confidenceIsInformative((detail?.proposals || []).map((proposal) => proposal.confidence)),
+    [detail]
+  );
+
+  const resolutionNotes = useMemo(() => {
+    if (!outcome) return [] as string[];
+    const notes: string[] = [];
+    if (outcome.failed.length > 0 && outcome.unselected > 0) {
+      notes.push(fillTemplate(t("changeReview.unselectedNote"), { n: outcome.unselected }));
+    }
+    if (outcome.simulated > 0) {
+      notes.push(fillTemplate(t("changeReview.simulatedNote"), { n: outcome.simulated }));
+    }
+    return notes;
+  }, [outcome, t]);
+
   const resolutionCopy = useMemo(() => {
     if (!detail || detail.status === "pending") return null;
+    // A selected external write failed: say which one and why instead of
+    // blaming unselected proposals (the status alone cannot tell them apart).
+    if (
+      outcome &&
+      outcome.failed.length > 0 &&
+      (detail.status === "partially_applied" || detail.status === "external_failed")
+    ) {
+      return {
+        title: fillTemplate(t("changeReview.partialFailedTitle"), { n: outcome.failed.length }),
+        description: t("changeReview.partialFailedDesc"),
+        className: "border-amber-400/25 bg-amber-400/10 text-amber-900 dark:text-amber-100",
+      };
+    }
     if (detail.status === "applying" || detail.status === "running") {
       return {
         title: locale === "tr" ? "Değişiklikler uygulanıyor" : "Changes are being applied",
@@ -341,7 +407,7 @@ export default function ChangesPage() {
       description: t("changes.resolution.rejectedDesc"),
       className: "border-border bg-foreground/[0.04] text-foreground-secondary",
     };
-  }, [detail, locale, t]);
+  }, [detail, locale, outcome, t]);
 
   const toggleProposal = (id: string) => {
     setSelectedProposalIds((current) => {
@@ -558,11 +624,31 @@ export default function ChangesPage() {
                 </div>
 
                 {resolutionCopy && (
-                  <div className={cn("mt-6 border px-5 py-4", resolutionCopy.className)}>
+                  <div
+                    className={cn("mt-6 border px-5 py-4", resolutionCopy.className)}
+                    data-testid="change-set-resolution"
+                  >
                     <div className="text-sm font-semibold">{resolutionCopy.title}</div>
                     <p className="mt-1 max-w-3xl text-xs leading-5 opacity-75">
                       {resolutionCopy.description}
                     </p>
+                    {outcome && outcome.failed.length > 0 && detail.status !== "applied" && (
+                      <ul className="mt-3 space-y-2">
+                        {outcome.failed.map((failure) => (
+                          <li key={failure.id} className="text-xs leading-5">
+                            <span className="font-medium">{displayGeneratedCopy(failure.title)}</span>
+                            {" — "}
+                            {failureReason(failure)}
+                            {failure.detail && (
+                              <span className="block font-mono text-[11px] opacity-60">{failure.detail}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {resolutionNotes.map((note) => (
+                      <p key={note} className="mt-2 max-w-3xl text-xs leading-5 opacity-75">{note}</p>
+                    ))}
                   </div>
                 )}
 
@@ -632,6 +718,22 @@ export default function ChangesPage() {
                           <Badge variant="outline" className="border-border bg-foreground/5 text-muted-foreground">
                             {actionLabel(proposal.action)}
                           </Badge>
+                          {isSimulatedProposal(proposal) && (
+                            <Badge
+                              variant="outline"
+                              className="mt-2 border-cyan-400/30 bg-cyan-400/10 text-cyan-800 dark:text-cyan-200"
+                              title={fillTemplate(t("changeReview.simulatedHint"), {
+                                provider: providerName(
+                                  typeof proposal.metadata?.externalProvider === "string"
+                                    ? proposal.metadata.externalProvider
+                                    : null
+                                ),
+                              })}
+                              data-testid="proposal-simulated"
+                            >
+                              {t("changeReview.simulatedBadge")}
+                            </Badge>
+                          )}
                           {proposal.requirement?.stableKey && (
                             <div className="mt-2 font-mono text-xs text-cyan-700 dark:text-cyan-300">
                               {proposal.requirement.stableKey}
@@ -645,6 +747,17 @@ export default function ChangesPage() {
                           <p className="mt-1 text-sm leading-5 text-foreground-subtle">
                             {displayGeneratedCopy(proposal.rationale)}
                           </p>
+                          {isSimulatedProposal(proposal) && (
+                            <p className="mt-1 text-xs leading-5 text-cyan-800 dark:text-cyan-300">
+                              {fillTemplate(t("changeReview.simulatedHint"), {
+                                provider: providerName(
+                                  typeof proposal.metadata?.externalProvider === "string"
+                                    ? proposal.metadata.externalProvider
+                                    : null
+                                ),
+                              })}
+                            </p>
+                          )}
                           {proposal.task?.title && (
                             <p className="mt-2 text-xs text-foreground-faint">
                               {t("changes.currentTask")}: {displayGeneratedCopy(proposal.task.title)}
@@ -703,12 +816,16 @@ export default function ChangesPage() {
                           )}
                         </div>
                         <div className="text-right">
-                          <div className="font-mono text-xs text-foreground-subtle">
-                            {proposal.confidence}%
-                          </div>
-                          <div className="mt-1 text-[10px] uppercase tracking-wide text-foreground-faint">
-                            {t("changes.confidence")}
-                          </div>
+                          {showConfidence && (
+                            <>
+                              <div className="text-xs text-foreground-subtle" title={`${proposal.confidence}`}>
+                                {t(`changeReview.confidence${{ high: "High", medium: "Medium", low: "Low" }[confidenceBand(proposal.confidence)]}`)}
+                              </div>
+                              <div className="mt-1 text-[10px] uppercase tracking-wide text-foreground-faint">
+                                {t("changeReview.confidence")}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </label>
                     ))}

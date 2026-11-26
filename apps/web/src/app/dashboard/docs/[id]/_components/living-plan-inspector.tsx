@@ -21,6 +21,10 @@ import { cn } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import { localizeGeneratedCopy } from "@/lib/i18n/generated-copy";
 import { friendlyError } from "@/lib/friendly-error";
+import {
+  LIVING_PLAN_ANALYSIS_STARTED_EVENT,
+  type LivingPlanAnalysisStartedDetail,
+} from "@/components/demo/demo-tour-card";
 
 type RequirementTask = {
   taskId: string;
@@ -229,6 +233,23 @@ export function LivingPlanInspector({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- false positive: React Compiler treats the async body as synchronous; every setState in it runs after an await.
     void loadInitial();
   }, [loadInitial]);
+
+  // The demo guided tour can start the analysis from outside this panel;
+  // follow that run exactly as if the panel's own button had started it.
+  useEffect(() => {
+    const onStarted = (event: Event) => {
+      const detail = (event as CustomEvent<LivingPlanAnalysisStartedDetail>).detail;
+      if (!detail || detail.docId !== docId) return;
+      setAnalysis({
+        status: "running",
+        workflowId: detail.workflowId,
+        executionId: detail.executionId,
+        startedAt: Date.now(),
+      });
+    };
+    window.addEventListener(LIVING_PLAN_ANALYSIS_STARTED_EVENT, onStarted);
+    return () => window.removeEventListener(LIVING_PLAN_ANALYSIS_STARTED_EVENT, onStarted);
+  }, [docId]);
 
   useEffect(() => {
     if (analysis.status !== "running") return;
