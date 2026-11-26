@@ -27,8 +27,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import type { PartialBlock } from "@blocknote/core";
+import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import { LivingPlanInspector } from "./_components/living-plan-inspector";
+import { DemoTourCard } from "@/components/demo/demo-tour-card";
+import { applyDemoSampleEdit } from "@/components/demo/apply-sample-edit";
 import { showToast } from "@/components/shared/toast-provider";
 import { useT, useLocale } from "@/lib/i18n/provider";
 import { intlLocale, LOCALE_HEADER } from "@/lib/i18n/locale";
@@ -114,6 +116,16 @@ export default function DocDetailPage() {
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
   const [taskWorkflow, setTaskWorkflow] = useState<TaskWorkflowState | null>(null);
   const editorContentRef = useRef<BlockNoteContent>([]);
+  const liveEditorRef = useRef<BlockNoteEditor<any, any, any> | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [editorReady, setEditorReady] = useState(false);
+  const handleEditorReady = useCallback((editor: BlockNoteEditor<any, any, any>) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+    liveEditorRef.current = editor;
+    setEditorReady(true);
+  }, []);
+  const handleApplySampleEdit = useCallback(
+    () => (liveEditorRef.current ? applyDemoSampleEdit(liveEditorRef.current) : false),
+    []
+  );
   const materializeTimerRef = useRef<number | null>(null);
   const titleTimerRef = useRef<number | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
@@ -657,6 +669,13 @@ export default function DocDetailPage() {
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="grid min-h-full w-full lg:grid-cols-[minmax(0,1fr)_minmax(440px,28vw)] 2xl:grid-cols-[minmax(0,1fr)_minmax(520px,30vw)]">
           <div className="min-w-0 px-4 py-8 sm:px-8 lg:px-10 xl:px-14">
+            <DemoTourCard
+              variant="plan"
+              docId={doc.id}
+              onApplySampleEdit={handleApplySampleEdit}
+              sampleEditReady={editorReady}
+              savePending={isSaving}
+            />
             {session?.user ? (
               <CollaborativeEditorWrapper
                 key={`collab-${doc.id}`}
@@ -665,6 +684,7 @@ export default function DocDetailPage() {
                 userName={session.user.name || session.user.email?.split('@')[0] || t("docs.detail.anonymous")}
                 initialContent={editorInitialContent}
                 onChange={handleContentChange}
+                onEditorReady={handleEditorReady}
                 editable={true}
               />
             ) : (

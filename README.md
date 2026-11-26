@@ -1,10 +1,18 @@
 # Nexus
 
-Nexus is a portfolio-demo AI workflow workspace that keeps project plans and delivery work aligned.
+[![CI](https://github.com/zexy2/Nexus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zexy2/Nexus/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/zexy2/Nexus)](https://github.com/zexy2/Nexus/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Product promise:** Change the plan once. Nexus finds the impacted work, proposes updates, and changes the Kanban board only after human approval.
+Project workspace that turns plan edits into task updates you approve before they reach the board.
 
-The product direction is an AI change-control layer for GitHub + Linear workflows. It is not positioned as a full Jira, Linear, or Notion replacement. It is a focused public demo that proves one workflow end to end:
+[Live demo](https://nexus.zekiakgul.dev) · [Case study](https://zekiakgul.dev/work/nexus/) · [Release notes](https://github.com/zexy2/Nexus/releases)
+
+![Nexus Kanban board in the public demo (Turkish locale)](docs/images/nexus-board.png)
+
+> **Status:** public demo on a single VPS. Signup is closed; "Try Demo" creates an isolated workspace with server-side quotas.
+
+Change the plan once. Nexus finds the impacted work, proposes updates, and changes the Kanban board only after human approval. It is an AI change-control layer for GitHub and Linear workflows, not a Jira, Linear or Notion replacement, and it proves one workflow end to end:
 
 ```text
 Project idea -> Living Plan -> Requirements -> Impact graph -> Review proposals -> Approved work changes -> Coding-agent handoff -> Human review
@@ -12,9 +20,7 @@ Project idea -> Living Plan -> Requirements -> Impact graph -> Review proposals 
 
 ## Why It Exists
 
-ChatGPT can turn a prompt into a task list. That is not the hard part.
-
-The harder problem is what happens after the plan changes:
+Turning a prompt into a task list is easy. The harder problem is what happens after the plan changes:
 
 - Which requirements were added, changed, or removed?
 - Which existing tasks are now stale?
@@ -89,7 +95,7 @@ Nexus is built for a controlled public demo on a Docker VPS.
 - AI uses a server-managed Gemini key with daily quotas and rate limits.
 - If AI is disabled or the provider key is missing, endpoints return clear `503` unavailable states instead of mock output.
 - If quota is exceeded, endpoints return `429 RATE_LIMIT_EXCEEDED`.
-- The current deployment runs on an Oracle Free Tier VPS at [nexus.zekiakgul.dev](https://nexus.zekiakgul.dev) (the sslip.io URL remains a temporary fallback during domain migration).
+- The current deployment runs on an Oracle Free Tier VPS at [nexus.zekiakgul.dev](https://nexus.zekiakgul.dev).
 
 Do not commit real `.env.production`, API keys, demo passwords, or access codes.
 
@@ -194,7 +200,7 @@ Nexus is useful only if it proves these things:
 - Every workflow leaves an inspectable execution trail.
 - Coding agents receive a frozen plan/requirement contract; plan changes invalidate stale work before approval.
 
-If those guarantees are removed, Nexus becomes a thin ChatGPT wrapper. The current product direction is intentionally built around avoiding that.
+If those guarantees are removed, Nexus becomes a thin chat wrapper. The current product direction is intentionally built around avoiding that.
 
 ## Known Limits
 

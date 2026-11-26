@@ -15,11 +15,12 @@ type ProposalRow = {
   id: string;
   requirement_id: string | null;
   task_id: string | null;
-  action: "create_task" | "update_task" | "archive_task" | "relink_task";
+  action: "create_task" | "update_task" | "archive_task" | "relink_task" | "github_create_issue";
   title: string;
   description: string | null;
   priority: string | null;
   rationale: string;
+  metadata?: Record<string, unknown> | null;
 };
 
 const mockState = vi.hoisted(() => ({
@@ -33,6 +34,7 @@ const mockState = vi.hoisted(() => ({
     status: "pending",
   },
   insertedTaskId: "task-created",
+  integrations: [] as Array<{ id: string; metadata: Record<string, unknown> | null }>,
   end: vi.fn(),
   postgres: vi.fn(),
 }));
@@ -55,6 +57,14 @@ function makeSqlClient() {
         return [{ id: mockState.insertedTaskId }] as T;
       }
 
+      if (text.includes("FROM workspace_integrations")) {
+        return mockState.integrations as T;
+      }
+
+      if (text.includes("INSERT INTO external_write_operations")) {
+        return [{ id: "op-1" }] as T;
+      }
+
       return [] as T;
     },
     {
@@ -72,6 +82,7 @@ vi.mock("postgres", () => ({
 
 import {
   applyPlanChangeSet,
+  isDemoOnlyIntegration,
   externalErrorIsRetryable,
   externalWriteOperationNeedsWork,
   resolveExternalChangeSetStatus,
@@ -121,6 +132,7 @@ describe("applyPlanChangeSet", () => {
       status: "pending",
     };
     mockState.insertedTaskId = "task-created";
+    mockState.integrations = [];
     mockState.end.mockClear();
     mockState.postgres.mockClear();
     mockState.postgres.mockImplementation(() => makeSqlClient());
@@ -225,5 +237,63 @@ describe("applyPlanChangeSet", () => {
 
     const changeSetUpdate = mockState.calls.find((call) => call.text.includes("UPDATE change_sets"));
     expect(changeSetUpdate?.values).toContain("applied");
+  });
+  it("applies proposals against a demo-only integration as a simulated no-op", async () => {
+    mockState.integrations = [{ id: "int-demo", metadata: { seeded: true, demoOnly: true } }];
+    mockState.proposals = [
+      {
+        id: "cp-1",
+        requirement_id: "req-1",
+        task_id: null,
+        action: "github_create_issue",
+        title: "Create GitHub issue for REQ-006",
+        description: "body",
+        priority: null,
+        rationale: "Traceability",
+        metadata: { externalProvider: "github", integrationId: "int-demo", payload: { title: "x" } },
+      },
+    ];
+
+    const result = await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
+
+    expect(result).toEqual({ applied: 1, rejected: 0, createdTaskIds: [], externalOperationIds: [] });
+    expect(mockState.calls.some((call) => call.text.includes("INSERT INTO external_write_operations"))).toBe(false);
+    const simulatedUpdate = mockState.calls.find((call) =>
+      call.text.includes("UPDATE change_proposals") && call.text.includes("metadata = COALESCE")
+    );
+    expect(simulatedUpdate?.values.some((value) => typeof value === "string" && value.includes('"simulated":true'))).toBe(true);
+    const audit = mockState.calls.find((call) => call.values.includes("plan.github_create_issue.simulated"));
+    expect(audit).toBeTruthy();
+    const changeSetUpdate = mockState.calls.find((call) => call.text.includes("UPDATE change_sets"));
+    expect(changeSetUpdate?.values).toContain("applied");
+  });
+
+  it("still queues a real provider write for a regular integration", async () => {
+    mockState.integrations = [{ id: "int-real", metadata: {} }];
+    mockState.proposals = [
+      {
+        id: "cp-1",
+        requirement_id: "req-1",
+        task_id: null,
+        action: "github_create_issue",
+        title: "Create GitHub issue",
+        description: "body",
+        priority: null,
+        rationale: "Traceability",
+        metadata: { externalProvider: "github", integrationId: "int-real", payload: { title: "x" } },
+      },
+    ];
+
+    const result = await applyPlanChangeSet("cs-1", ["cp-1"], "user-1");
+
+    expect(result.externalOperationIds).toEqual(["op-1"]);
+    const changeSetUpdate = mockState.calls.find((call) => call.text.includes("UPDATE change_sets"));
+    expect(changeSetUpdate?.values).toContain("external_pending");
+  });
+
+  it("recognizes demo-only integration metadata", () => {
+    expect(isDemoOnlyIntegration({ demoOnly: true })).toBe(true);
+    expect(isDemoOnlyIntegration({ seeded: true })).toBe(false);
+    expect(isDemoOnlyIntegration(null)).toBe(false);
   });
 });
